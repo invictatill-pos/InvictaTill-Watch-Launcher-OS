@@ -43,7 +43,7 @@ class AppUpdateViewModel @Inject constructor(
             val fetched = AppUpdateManager.fetchManifest()
             _manifest.value = fetched
             if (fetched == null) {
-                if (!silent) _status.value = UpdateStatus.Error("Unable to reach update server.")
+                if (!silent) _status.value = UpdateStatus.Error(AppUpdateManager.lastError ?: "Unable to reach update server.")
                 return@launch
             }
 

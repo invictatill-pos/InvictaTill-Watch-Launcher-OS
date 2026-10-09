@@ -1,19 +1,23 @@
 package com.healthsync.phone.data.update
 
+import androidx.annotation.Keep
+import com.google.gson.annotations.SerializedName
 import java.io.File
 
+@Keep
 data class AppVersionInfo(
-    val versionCode: Int = 0,
-    val versionName: String = "",
-    val apkUrl: String = "",
-    val changelog: String = "",
-    val forceUpdate: Boolean = false,
-    val sha256: String = ""
+    @SerializedName("versionCode") val versionCode: Int = 0,
+    @SerializedName("versionName") val versionName: String = "",
+    @SerializedName("apkUrl") val apkUrl: String = "",
+    @SerializedName("changelog") val changelog: String = "",
+    @SerializedName("forceUpdate") val forceUpdate: Boolean = false,
+    @SerializedName("sha256") val sha256: String = ""
 )
 
+@Keep
 data class UpdateManifest(
-    val phone: AppVersionInfo = AppVersionInfo(),
-    val watch: AppVersionInfo = AppVersionInfo()
+    @SerializedName("phone") val phone: AppVersionInfo = AppVersionInfo(),
+    @SerializedName("watch") val watch: AppVersionInfo = AppVersionInfo()
 )
 
 sealed class UpdateStatus {

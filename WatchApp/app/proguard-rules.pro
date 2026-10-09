@@ -2,8 +2,10 @@
 -keepattributes Signature
 -keepattributes *Annotation*
 
-# Gson
+# Gson & Data Models
 -keep class com.healthsync.watch.data.** { *; }
+-keep class com.healthsync.watch.update.** { *; }
+-keepclassmembers class com.healthsync.watch.update.** { *; }
 -keep class com.healthsync.watch.service.WorkoutTrackingService$* { *; }
 -keep class com.google.gson.reflect.TypeToken { *; }
 -keep class * extends com.google.gson.reflect.TypeToken { *; }

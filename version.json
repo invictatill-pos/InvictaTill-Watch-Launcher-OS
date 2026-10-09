@@ -5,7 +5,7 @@
     "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/latest/download/HealthSync-Phone.apk",
     "changelog": "• In-App Auto Update System\n• Online Watch Face Store integration\n• Streamlined Casio Retro & Orbit dials",
     "forceUpdate": false,
-    "sha256": "7aea97b2a260e4983ecd1b71228dce7527b7b7816fd280b899961dc1d314f389"
+    "sha256": "9e2bbd441cc9d5d26b9dff70c2df6aacf8007b3d5c57f1748e511ae5fe43468d"
   },
   "watch": {
     "versionCode": 16,

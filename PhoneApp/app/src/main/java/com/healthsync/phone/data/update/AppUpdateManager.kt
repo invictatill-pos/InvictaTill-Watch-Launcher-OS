@@ -27,10 +27,14 @@ object AppUpdateManager {
     const val DEFAULT_MANIFEST_URL = "https://cdn.jsdelivr.net/gh/invictatill-pos/InvictaTill-Watch-Launcher-OS@main/version.json"
     const val FALLBACK_MANIFEST_URL = "https://raw.githubusercontent.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/main/version.json"
 
+    var lastError: String? = null
+        private set
+
     private val gson = Gson()
 
     /** Fetches remote version manifest from CDN or fallback GitHub URL */
     suspend fun fetchManifest(manifestUrl: String = DEFAULT_MANIFEST_URL): UpdateManifest? = withContext(Dispatchers.IO) {
+        lastError = null
         val candidates = listOf(
             manifestUrl,
             DEFAULT_MANIFEST_URL,
@@ -50,11 +54,48 @@ object AppUpdateManager {
 
                 if (connection.responseCode in 200..299) {
                     val json = connection.inputStream.bufferedReader().use { it.readText() }
-                    return@withContext gson.fromJson(json, UpdateManifest::class.java)
+                    
+                    // 1. Try Gson
+                    try {
+                        val parsed = gson.fromJson(json, UpdateManifest::class.java)
+                        if (parsed?.phone != null && parsed.phone.versionCode > 0) {
+                            return@withContext parsed
+                        }
+                    } catch (ge: Exception) {
+                        Log.w(TAG, "Gson parse error: ${ge.message}")
+                    }
+
+                    // 2. Android framework JSONObject parser (immune to R8 obfuscation)
+                    try {
+                        val root = org.json.JSONObject(json)
+                        val phoneObj = root.optJSONObject("phone")
+                        val watchObj = root.optJSONObject("watch")
+                        val phoneInfo = AppVersionInfo(
+                            versionCode = phoneObj?.optInt("versionCode", 0) ?: 0,
+                            versionName = phoneObj?.optString("versionName", "") ?: "",
+                            apkUrl = phoneObj?.optString("apkUrl", "") ?: "",
+                            changelog = phoneObj?.optString("changelog", "") ?: "",
+                            forceUpdate = phoneObj?.optBoolean("forceUpdate", false) ?: false,
+                            sha256 = phoneObj?.optString("sha256", "") ?: ""
+                        )
+                        val watchInfo = AppVersionInfo(
+                            versionCode = watchObj?.optInt("versionCode", 0) ?: 0,
+                            versionName = watchObj?.optString("versionName", "") ?: "",
+                            apkUrl = watchObj?.optString("apkUrl", "") ?: "",
+                            changelog = watchObj?.optString("changelog", "") ?: "",
+                            forceUpdate = watchObj?.optBoolean("forceUpdate", false) ?: false,
+                            sha256 = watchObj?.optString("sha256", "") ?: ""
+                        )
+                        return@withContext UpdateManifest(phone = phoneInfo, watch = watchInfo)
+                    } catch (je: Exception) {
+                        Log.w(TAG, "JSONObject parse error: ${je.message}")
+                    }
                 } else {
+                    lastError = "Server HTTP ${connection.responseCode} ($candidate)"
                     Log.w(TAG, "Failed to fetch from $candidate: HTTP ${connection.responseCode}")
                 }
             } catch (e: Exception) {
+                lastError = "${e.javaClass.simpleName}: ${e.message}"
                 Log.w(TAG, "Error fetching from $candidate: ${e.message}")
             }
         }

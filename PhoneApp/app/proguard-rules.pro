@@ -1,4 +1,6 @@
 -keep class com.healthsync.phone.data.model.** { *; }
+-keep class com.healthsync.phone.data.update.** { *; }
+-keepclassmembers class com.healthsync.phone.data.update.** { *; }
 -keepattributes Signature
 -keepattributes *Annotation*
 -keep class com.google.gson.reflect.TypeToken { *; }
