@@ -35,8 +35,11 @@ object AppUpdateManager {
     /** Fetches remote version manifest from CDN or fallback GitHub URL */
     suspend fun fetchManifest(manifestUrl: String = DEFAULT_MANIFEST_URL): UpdateManifest? = withContext(Dispatchers.IO) {
         lastError = null
+        val ts = System.currentTimeMillis()
         val candidates = listOf(
             manifestUrl,
+            "https://cdn.jsdelivr.net/gh/invictatill-pos/InvictaTill-Watch-Launcher-OS@latest/version.json?t=$ts",
+            "https://raw.githubusercontent.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/main/version.json?t=$ts",
             DEFAULT_MANIFEST_URL,
             FALLBACK_MANIFEST_URL
         ).distinct()
@@ -50,6 +53,8 @@ object AppUpdateManager {
                 connection.readTimeout = 8_000
                 connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Android; Mobile; rv:120.0) Gecko/120.0 Firefox/120.0")
                 connection.setRequestProperty("Accept", "application/json, text/plain, */*")
+                connection.setRequestProperty("Cache-Control", "no-cache, no-store, must-revalidate")
+                connection.setRequestProperty("Pragma", "no-cache")
                 connection.requestMethod = "GET"
 
                 if (connection.responseCode in 200..299) {

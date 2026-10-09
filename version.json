@@ -3,9 +3,9 @@
     "versionCode": 11,
     "versionName": "2.3.1",
     "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/latest/download/HealthSync-Phone.apk",
-    "changelog": "• Fixed first sync banner issue on dashboard\n• In-app updater optimization & R8 reflection rules\n• Chrono Ultra watch face companion sync",
+    "changelog": "• Fixed first sync banner issue on dashboard\n• In-app updater optimization & cache-busting\n• Chrono Ultra watch face companion sync",
     "forceUpdate": false,
-    "sha256": "1a6bc90f83bc0cf86f4417c9a3eefaef9b1c8d8e63efcffe43e783c8552ee385"
+    "sha256": "09279d5769717b00a01a34b3959853294a9d7e49b4a96afd88d64a7a0b0cc060"
   },
   "watch": {
     "versionCode": 17,
