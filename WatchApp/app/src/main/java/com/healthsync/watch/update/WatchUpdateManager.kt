@@ -173,16 +173,31 @@ object WatchUpdateManager {
     /** Checks online manifest if Watch has direct Wi-Fi internet access */
     fun checkForDirectUpdate(context: Context, onResult: (message: String) -> Unit) {
         scope.launch {
-            try {
-                val url = URL(DEFAULT_MANIFEST_URL)
-                val conn = url.openConnection() as HttpURLConnection
-                conn.connectTimeout = 8_000
-                conn.readTimeout = 8_000
-                conn.setRequestProperty("User-Agent", "HealthSync-Watch-App")
+            val candidates = listOf(
+                DEFAULT_MANIFEST_URL,
+                "https://cdn.jsdelivr.net/gh/invictatill-pos/InvictaTill-Watch-Launcher-OS@main/version.json"
+            ).distinct()
 
-                if (conn.responseCode in 200..299) {
-                    val json = conn.inputStream.bufferedReader().use { it.readText() }
-                    val root = gson.fromJson(json, Map::class.java)
+            var fetchedJson: String? = null
+            for (candidate in candidates) {
+                try {
+                    val url = URL(candidate)
+                    val conn = url.openConnection() as HttpURLConnection
+                    conn.instanceFollowRedirects = true
+                    conn.connectTimeout = 8_000
+                    conn.readTimeout = 8_000
+                    conn.setRequestProperty("User-Agent", "HealthSync-Watch-App")
+
+                    if (conn.responseCode in 200..299) {
+                        fetchedJson = conn.inputStream.bufferedReader().use { it.readText() }
+                        break
+                    }
+                } catch (_: Exception) {}
+            }
+
+            if (fetchedJson != null) {
+                try {
+                    val root = gson.fromJson(fetchedJson, Map::class.java)
                     @Suppress("UNCHECKED_CAST")
                     val watchInfo = root["watch"] as? Map<String, Any>
 
@@ -205,15 +220,14 @@ object WatchUpdateManager {
                             onResult("Watch is up to date (v${context.packageManager.getPackageInfo(context.packageName, 0).versionName})")
                         }
                     }
-                } else {
-                    withContext(Dispatchers.Main) {
-                        onResult("Direct check unavailable (HTTP ${conn.responseCode}). Updates sync via phone.")
-                    }
+                    return@launch
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing manifest: ${e.message}")
                 }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    onResult("No direct Wi-Fi connection. Updates are received via phone companion.")
-                }
+            }
+
+            withContext(Dispatchers.Main) {
+                onResult("No direct Wi-Fi connection. Updates are received via phone companion.")
             }
         }
     }

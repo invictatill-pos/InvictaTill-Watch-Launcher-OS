@@ -28,24 +28,32 @@ object AppUpdateManager {
 
     private val gson = Gson()
 
-    /** Fetches remote version manifest from GitHub or fallback URL */
+    /** Fetches remote version manifest from GitHub or fallback CDN */
     suspend fun fetchManifest(manifestUrl: String = DEFAULT_MANIFEST_URL): UpdateManifest? = withContext(Dispatchers.IO) {
-        try {
-            val url = URL(manifestUrl)
-            val connection = url.openConnection() as HttpURLConnection
-            connection.connectTimeout = 10_000
-            connection.readTimeout = 10_000
-            connection.setRequestProperty("User-Agent", "HealthSync-Phone-App")
-            connection.requestMethod = "GET"
+        val candidates = listOf(
+            manifestUrl,
+            "https://cdn.jsdelivr.net/gh/invictatill-pos/InvictaTill-Watch-Launcher-OS@main/version.json"
+        ).distinct()
 
-            if (connection.responseCode in 200..299) {
-                val json = connection.inputStream.bufferedReader().use { it.readText() }
-                return@withContext gson.fromJson(json, UpdateManifest::class.java)
-            } else {
-                Log.w(TAG, "Failed to fetch manifest: HTTP ${connection.responseCode}")
+        for (candidate in candidates) {
+            try {
+                val url = URL(candidate)
+                val connection = url.openConnection() as HttpURLConnection
+                connection.instanceFollowRedirects = true
+                connection.connectTimeout = 8_000
+                connection.readTimeout = 8_000
+                connection.setRequestProperty("User-Agent", "HealthSync-Phone-App")
+                connection.requestMethod = "GET"
+
+                if (connection.responseCode in 200..299) {
+                    val json = connection.inputStream.bufferedReader().use { it.readText() }
+                    return@withContext gson.fromJson(json, UpdateManifest::class.java)
+                } else {
+                    Log.w(TAG, "Failed to fetch from $candidate: HTTP ${connection.responseCode}")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error fetching from $candidate: ${e.message}")
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error fetching version manifest: ${e.message}")
         }
         null
     }
