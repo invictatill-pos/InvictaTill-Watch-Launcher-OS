@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">HealthSync</string>
+    <string name="notification_listener_label">Notification Sync to Watch</string>
+</resources>

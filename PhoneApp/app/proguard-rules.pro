@@ -1,0 +1,6 @@
+-keep class com.healthsync.phone.data.model.** { *; }
+-keepattributes Signature
+-keepattributes *Annotation*
+-keep class com.google.gson.reflect.TypeToken { *; }
+-keep class * extends com.google.gson.reflect.TypeToken { *; }
+-dontwarn com.github.mikephil.charting.**

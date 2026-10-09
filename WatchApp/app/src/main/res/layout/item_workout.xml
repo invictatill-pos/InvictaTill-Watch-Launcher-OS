@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Each workout row: [sport icon] [Name] [›] — premium dark pill card -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:paddingHorizontal="10dp"
+    android:paddingVertical="4dp">
+
+    <LinearLayout
+        android:id="@+id/btnWorkoutType"
+        android:layout_width="match_parent"
+        android:layout_height="54dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/workout_pill_bg"
+        android:paddingStart="10dp"
+        android:paddingEnd="12dp"
+        android:clickable="true"
+        android:focusable="true">
+
+        <!-- Sport icon circle -->
+        <TextView
+            android:id="@+id/tvWorkoutIcon"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:gravity="center"
+            android:text="🏃"
+            android:textSize="18sp"
+            android:background="@drawable/circle_button_bg"
+            android:backgroundTint="#FF9F0A" />
+
+        <!-- Name -->
+        <TextView
+            android:id="@+id/tvWorkoutName"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="Run"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:layout_marginStart="12dp" />
+
+        <!-- Chevron -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="›"
+            android:textColor="#2A3350"
+            android:textSize="24sp" />
+
+    </LinearLayout>
+
+</LinearLayout>

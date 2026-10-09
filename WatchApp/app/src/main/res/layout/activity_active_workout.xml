@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:background="#030806">
+    <com.healthsync.watch.ui.RoundScrollView android:id="@+id/layoutMain"
+        android:layout_width="match_parent" android:layout_height="match_parent">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="vertical" android:gravity="center" android:paddingStart="28dp" android:paddingEnd="28dp"
+            android:paddingTop="24dp" android:paddingBottom="28dp">
+            <TextView android:id="@+id/tvActivityType" style="@style/WatchLabel" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:gravity="center" android:text="Workout" android:textColor="#8CE7C8" android:textStyle="bold" android:textSize="14sp" />
+            <TextView android:id="@+id/tvDuration" style="@style/WatchValue" android:layout_width="match_parent"
+                android:layout_height="48dp" android:gravity="center" android:text="00:00" android:textSize="36sp"
+                android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="24sp" android:autoSizeMaxTextSize="36sp" />
+            <TextView android:id="@+id/tvWorkoutState" style="@style/WatchLabel" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:gravity="center" android:text="TRACKING" android:textColor="#8CE7C8" />
+            <TextView android:id="@+id/tvMainDistance" style="@style/WatchValue" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:gravity="center" android:text="0.00 km" android:layout_marginTop="10dp" />
+            <TextView android:id="@+id/tvGpsStatus" style="@style/WatchLabel" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:gravity="center" android:text="GPS searching • estimates active"
+                android:textSize="10sp" android:textColor="#FFBC6A" android:layout_marginTop="4dp" />
+            <Button android:id="@+id/btnWorkoutControls" style="@style/WatchAction" android:layout_width="match_parent"
+                android:layout_height="48dp" android:layout_marginTop="12dp" android:text="WORKOUT CONTROLS" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal"
+                android:gravity="center" android:layout_marginTop="14dp">
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical">
+                    <TextView android:id="@+id/tvLiveHr" style="@style/WatchValue" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="--" android:textColor="#FF8395" />
+                    <TextView android:id="@+id/tvLiveHrUnit" style="@style/WatchLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="♥ bpm" android:importantForAccessibility="no" />
+                </LinearLayout>
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical">
+                    <TextView android:id="@+id/tvLiveKcal" style="@style/WatchValue" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0" android:textColor="#FFBC6A" />
+                    <TextView style="@style/WatchLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="kcal est." />
+                </LinearLayout>
+            </LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal"
+                android:gravity="center" android:layout_marginTop="14dp">
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical">
+                    <TextView android:id="@+id/tvDistance" style="@style/WatchValue" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0" />
+                    <TextView style="@style/WatchLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="steps" />
+                </LinearLayout>
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical">
+                    <TextView android:id="@+id/tvMetric1" style="@style/WatchText" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:gravity="center" android:text="--" android:textStyle="bold" android:textSize="17sp" />
+                    <TextView android:id="@+id/tvMetric1Label" style="@style/WatchLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="PACE" />
+                </LinearLayout>
+            </LinearLayout>
+            <TextView android:id="@+id/tvMetric2" style="@style/WatchLabel" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:gravity="center" android:layout_marginTop="12dp" />
+            <TextView style="@style/WatchLabel" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:gravity="center" android:layout_marginTop="12dp" android:text="Back returns home while tracking" android:textSize="10sp" />
+        </LinearLayout>
+    </com.healthsync.watch.ui.RoundScrollView>
+    <LinearLayout android:id="@+id/layoutControls" android:layout_width="match_parent" android:layout_height="match_parent"
+        android:orientation="vertical" android:gravity="center" android:background="#F0030806" android:visibility="gone"
+        android:clickable="true" android:focusable="true" android:paddingStart="28dp" android:paddingEnd="28dp">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center"
+            android:orientation="horizontal">
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical">
+                <ImageButton android:id="@+id/btnEndWorkout" android:layout_width="52dp" android:layout_height="52dp"
+                    android:background="@drawable/circle_button_bg" android:backgroundTint="#CC4058"
+                    android:src="@android:drawable/ic_menu_close_clear_cancel" app:tint="#FFFFFF" android:contentDescription="Finish workout" />
+                <TextView style="@style/WatchLabel" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="FINISH" android:layout_marginTop="8dp" android:textColor="#FF8395" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical">
+                <ImageButton android:id="@+id/btnPauseResumeWorkout" android:layout_width="52dp" android:layout_height="52dp"
+                    android:background="@drawable/circle_button_bg" android:backgroundTint="#8CE7C8"
+                    android:src="@android:drawable/ic_media_pause" app:tint="#06110B" android:contentDescription="Pause workout" />
+                <TextView android:id="@+id/tvPauseLabel" style="@style/WatchLabel" android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" android:text="PAUSE" android:layout_marginTop="8dp" android:textColor="#8CE7C8" />
+            </LinearLayout>
+        </LinearLayout>
+        <Button android:id="@+id/btnCloseControls" style="@style/WatchAction" android:layout_width="match_parent" android:layout_height="48dp"
+            android:layout_marginTop="14dp" android:text="BACK TO STATS" android:textColor="#C8DDD2" android:backgroundTint="#12201A" />
+    </LinearLayout>
+</FrameLayout>

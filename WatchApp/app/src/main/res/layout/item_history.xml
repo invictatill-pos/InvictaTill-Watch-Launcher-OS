@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent"
+    android:layout_height="wrap_content" android:minHeight="100dp" android:orientation="horizontal"
+    android:gravity="center_vertical" android:paddingStart="26dp" android:paddingEnd="26dp" android:paddingTop="7dp" android:paddingBottom="7dp"
+    android:clickable="true" android:focusable="true" android:foreground="?attr/selectableItemBackground">
+    <View android:id="@+id/accentBar" android:layout_width="3dp" android:layout_height="60dp" android:background="#8CE7C8" android:layout_marginEnd="8dp" />
+    <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+        android:orientation="vertical" android:background="@drawable/watch_card_bg" android:padding="10dp">
+        <TextView android:id="@+id/tvHistoryType" style="@style/WatchText" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:text="Workout" android:textSize="14sp" android:textStyle="bold" />
+        <TextView android:id="@+id/tvHistoryDate" style="@style/WatchLabel" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:layout_marginTop="4dp" android:textSize="10sp" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="6dp">
+            <TextView android:id="@+id/tvHistoryDuration" style="@style/WatchText" android:layout_width="0dp" android:layout_weight="1"
+                android:layout_height="wrap_content" android:text="0:00" android:textColor="#8CE7C8" android:textStyle="bold" android:textSize="12sp" />
+            <TextView android:id="@+id/tvHistoryMetric" style="@style/WatchLabel" android:layout_width="0dp" android:layout_weight="1"
+                android:layout_height="wrap_content" android:text="0 steps" android:gravity="end" android:textSize="11sp" />
+        </LinearLayout>
+        <TextView android:id="@+id/tvHistoryKcal" style="@style/WatchLabel" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="0 kcal est." android:textColor="#FFBC6A" android:textSize="10sp" />
+    </LinearLayout>
+</LinearLayout>

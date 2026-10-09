@@ -1,0 +1,11 @@
+<resources>
+    <style name="Theme.WatchApp" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="android:windowBackground">#060810</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">#060810</item>
+        <item name="colorPrimary">#00E5FF</item>
+        <item name="colorPrimaryVariant">#7C4DFF</item>
+        <item name="colorAccent">#30D158</item>
+    </style>
+</resources>

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.healthsync.watch.ui.RoundScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:background="#030806">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical"
+        android:gravity="center_horizontal" android:paddingStart="28dp" android:paddingEnd="28dp" android:paddingTop="28dp" android:paddingBottom="28dp">
+        <TextView style="@style/WatchText" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Workout complete" android:gravity="center" android:textStyle="bold" android:textSize="17sp" />
+        <TextView android:id="@+id/tvSummaryType" style="@style/WatchValue" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Workout" android:gravity="center" android:textColor="#8CE7C8" android:layout_marginTop="8dp" />
+        <TextView android:id="@+id/tvSummaryDate" style="@style/WatchLabel" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:gravity="center" android:layout_marginTop="5dp" />
+        <TextView android:id="@+id/tvSummaryStatus" style="@style/WatchLabel" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Session details" android:gravity="center" android:textColor="#8CE7C8" android:layout_marginTop="8dp" android:layout_marginBottom="14dp" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical"
+            android:background="@drawable/watch_card_bg" android:padding="12dp" android:layout_marginBottom="7dp">
+            <TextView style="@style/WatchLabel" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Duration" />
+            <TextView android:id="@+id/tvStatDuration" style="@style/WatchValue" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="--:--" android:textColor="#EEF7F1" android:layout_marginTop="5dp" />
+        </LinearLayout>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical"
+            android:background="@drawable/watch_card_bg" android:padding="12dp" android:layout_marginBottom="7dp">
+            <TextView android:id="@+id/tvStatStepsLabel" style="@style/WatchLabel" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Steps" />
+            <TextView android:id="@+id/tvSummaryStats" style="@style/WatchValue" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="0" android:textColor="#8CE7C8" android:layout_marginTop="5dp" />
+        </LinearLayout>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical"
+            android:background="@drawable/watch_card_bg" android:padding="12dp" android:layout_marginBottom="7dp">
+            <TextView style="@style/WatchLabel" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Average heart rate" />
+            <TextView android:id="@+id/tvStatHr" style="@style/WatchValue" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="-- bpm" android:textColor="#FF8395" android:layout_marginTop="5dp" />
+        </LinearLayout>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical"
+            android:background="@drawable/watch_card_bg" android:padding="12dp" android:layout_marginBottom="7dp">
+            <TextView style="@style/WatchLabel" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Estimated calories" />
+            <TextView android:id="@+id/tvStatCal" style="@style/WatchValue" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="0 kcal" android:textColor="#FFBC6A" android:layout_marginTop="5dp" />
+        </LinearLayout>
+        <TextView android:id="@+id/tvSummaryPrimary" style="@style/WatchText" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:gravity="center" android:textSize="14sp" android:layout_marginTop="8dp" android:layout_marginBottom="12dp" />
+        <Button android:id="@+id/btnSaveSummary" style="@style/WatchAction" android:layout_width="match_parent" android:layout_height="48dp" android:text="DONE" />
+    </LinearLayout>
+</com.healthsync.watch.ui.RoundScrollView>

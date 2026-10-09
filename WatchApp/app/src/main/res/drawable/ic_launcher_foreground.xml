@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Outer bezel ring (circle at 54,54 radius 38) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#00E5FF"
+        android:strokeWidth="4"
+        android:pathData="M54,54 m-38,0 a38,38 0 1,0 76,0 a38,38 0 1,0 -76,0" />
+
+    <!-- Inner face fill (circle at 54,54 radius 32) -->
+    <path
+        android:fillColor="#13132A"
+        android:pathData="M54,54 m-32,0 a32,32 0 1,0 64,0 a32,32 0 1,0 -64,0" />
+
+    <!-- Heart rate arc (red top half) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FF5252"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M28,54 A26,26 0 0,1 80,54" />
+
+    <!-- Steps arc (orange bottom half smaller) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFAB40"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M36,67 A20,20 0 0,0 72,67" />
+
+    <!-- Hour hand: M 54,54 L 54,38 -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M54,54 L54,38" />
+
+    <!-- Minute hand: M 54,54 L 68,54 -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#CCCCCC"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M54,54 L68,54" />
+
+    <!-- Second hand: M 54,54 L 54,72 -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FF5252"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:pathData="M54,54 L54,72" />
+
+    <!-- Center dot (filled circle at 54,54 radius 3.5) -->
+    <path
+        android:fillColor="#FF5252"
+        android:pathData="M54,54 m-3.5,0 a3.5,3.5 0 1,0 7,0 a3.5,3.5 0 1,0 -7,0" />
+
+</vector>

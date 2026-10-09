@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.healthsync.watch.ui.RoundScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/workoutScroll"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:background="#030806" android:fillViewport="true"
+    android:paddingStart="32dp" android:paddingEnd="32dp" android:clipToPadding="true"
+    android:scrollbars="vertical" android:scrollbarStyle="insideOverlay"
+    android:fadeScrollbars="false" android:scrollbarSize="2dp">
+    <LinearLayout android:id="@+id/workoutList"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:gravity="center_horizontal"
+        android:paddingTop="40dp" android:paddingBottom="40dp">
+        <TextView style="@style/WatchText" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Choose workout" android:textSize="17sp" android:textStyle="bold" android:gravity="center" />
+        <TextView style="@style/WatchLabel" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Swipe up for all 8 ↓" android:gravity="center"
+            android:layout_marginTop="5dp" android:layout_marginBottom="10dp" />
+        <Button android:id="@+id/btnSportWalk" style="@style/WatchAction"
+            android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginBottom="6dp"
+            android:text="1  Walk" android:textAllCaps="false" android:maxLines="1"
+            android:paddingStart="10dp" android:paddingEnd="10dp" android:gravity="center"
+            android:textColor="#8CE7C8" android:backgroundTint="#14231C" />
+        <Button android:id="@+id/btnSportRun" style="@style/WatchAction"
+            android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginBottom="6dp"
+            android:text="2  Run" android:textAllCaps="false" android:maxLines="1"
+            android:paddingStart="10dp" android:paddingEnd="10dp" android:gravity="center"
+            android:textColor="#FFBC6A" android:backgroundTint="#14231C" />
+        <Button android:id="@+id/btnSportCycling" style="@style/WatchAction"
+            android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginBottom="6dp"
+            android:text="3  Cycling" android:textAllCaps="false" android:maxLines="1"
+            android:paddingStart="10dp" android:paddingEnd="10dp" android:gravity="center"
+            android:textColor="#9FC3FF" android:backgroundTint="#14231C" />
+        <Button android:id="@+id/btnSportBasketball" style="@style/WatchAction"
+            android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginBottom="6dp"
+            android:text="4  Basketball" android:textAllCaps="false" android:maxLines="1"
+            android:paddingStart="10dp" android:paddingEnd="10dp" android:gravity="center"
+            android:textColor="#FFAE8A" android:backgroundTint="#14231C" />
+        <Button android:id="@+id/btnSportStrength" style="@style/WatchAction"
+            android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginBottom="6dp"
+            android:text="5  Home workout" android:textAllCaps="false" android:maxLines="1"
+            android:paddingStart="10dp" android:paddingEnd="10dp" android:gravity="center"
+            android:textColor="#C3B0FF" android:backgroundTint="#14231C" />
+        <Button android:id="@+id/btnSportBadminton" style="@style/WatchAction"
+            android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginBottom="6dp"
+            android:text="6  Badminton" android:textAllCaps="false" android:maxLines="1"
+            android:paddingStart="10dp" android:paddingEnd="10dp" android:gravity="center"
+            android:textColor="#86D9E9" android:backgroundTint="#14231C" />
+        <Button android:id="@+id/btnSportCricket" style="@style/WatchAction"
+            android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginBottom="6dp"
+            android:text="7  Cricket" android:textAllCaps="false" android:maxLines="1"
+            android:paddingStart="10dp" android:paddingEnd="10dp" android:gravity="center"
+            android:textColor="#DBE98E" android:backgroundTint="#14231C" />
+        <Button android:id="@+id/btnSportYoga" style="@style/WatchAction"
+            android:layout_width="match_parent" android:layout_height="48dp"
+            android:text="8  Yoga" android:textAllCaps="false" android:maxLines="1"
+            android:paddingStart="10dp" android:paddingEnd="10dp" android:gravity="center"
+            android:textColor="#ECAAE9" android:backgroundTint="#14231C" />
+    </LinearLayout>
+</com.healthsync.watch.ui.RoundScrollView>

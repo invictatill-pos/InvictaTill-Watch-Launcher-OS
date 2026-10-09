@@ -1,0 +1,18 @@
+{
+  "phone": {
+    "versionCode": 10,
+    "versionName": "2.3.0",
+    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/latest/download/HealthSync-Phone.apk",
+    "changelog": "• In-App Auto Update System\n• Online Watch Face Store integration\n• Streamlined Casio Retro & Orbit dials",
+    "forceUpdate": false,
+    "sha256": "d05528b76b93450632d05b910dad4d45946da0b1e7a471c8a51059391c876a25"
+  },
+  "watch": {
+    "versionCode": 16,
+    "versionName": "2.4.0",
+    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/latest/download/HealthSync-Watch.apk",
+    "changelog": "• Lightweight Casio F-91W & Orbit pre-installed faces\n• Dynamic Watch Face runtime\n• Bluetooth companion OTA update support",
+    "forceUpdate": false,
+    "sha256": "edfab1c7cbac0f63634b607d5b4e61aeb8eb57f80286435f931fd32f90f56f76"
+  }
+}

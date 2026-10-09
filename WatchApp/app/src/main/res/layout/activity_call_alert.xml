@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.healthsync.watch.ui.RoundScrollView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:background="#030806">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical"
+        android:gravity="center" android:paddingStart="28dp" android:paddingEnd="28dp" android:paddingTop="28dp" android:paddingBottom="28dp">
+        <TextView android:id="@+id/tvCallState" style="@style/WatchLabel" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Incoming phone call" android:textColor="#8CE7C8" android:gravity="center" />
+        <TextView android:id="@+id/tvCallerName" style="@style/WatchValue" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Caller" android:gravity="center" android:layout_marginTop="10dp" android:textSize="20sp" />
+        <TextView android:id="@+id/tvCallerNumber" style="@style/WatchLabel" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:gravity="center" android:layout_marginTop="5dp" />
+        <TextView android:id="@+id/tvCallAudioHint" style="@style/WatchLabel" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:gravity="center" android:layout_marginTop="6dp" android:textSize="10sp" />
+        <androidx.cardview.widget.CardView android:id="@+id/btnAnswer" android:layout_width="match_parent" android:layout_height="48dp"
+            android:layout_marginTop="16dp" android:clickable="true" android:focusable="true" android:contentDescription="Answer call on phone"
+            app:cardCornerRadius="24dp" app:cardBackgroundColor="#8CE7C8">
+            <TextView style="@style/WatchText" android:layout_width="match_parent" android:layout_height="match_parent"
+                android:text="ANSWER" android:gravity="center" android:textColor="#06110B" android:textSize="12sp" android:textStyle="bold" />
+        </androidx.cardview.widget.CardView>
+        <androidx.cardview.widget.CardView android:id="@+id/btnDecline" android:layout_width="match_parent" android:layout_height="48dp"
+            android:layout_marginTop="7dp" android:clickable="true" android:focusable="true" android:contentDescription="Decline phone call"
+            app:cardCornerRadius="24dp" app:cardBackgroundColor="#32131C">
+            <TextView style="@style/WatchText" android:layout_width="match_parent" android:layout_height="match_parent"
+                android:text="DECLINE" android:gravity="center" android:textColor="#FF8395" android:textSize="12sp" android:textStyle="bold" />
+        </androidx.cardview.widget.CardView>
+    </LinearLayout>
+</com.healthsync.watch.ui.RoundScrollView>

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.healthsync.watch.ui.RoundScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:background="#030806">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical"
+        android:gravity="center_horizontal" android:paddingStart="28dp" android:paddingEnd="28dp" android:paddingTop="24dp" android:paddingBottom="28dp">
+        <TextView android:id="@+id/tvActivityType" style="@style/WatchLabel" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="STRENGTH" android:gravity="center" android:textColor="#C3B0FF" android:textStyle="bold" />
+        <TextView android:id="@+id/tvSetInfo" style="@style/WatchLabel" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="SET 1" android:gravity="center" android:layout_marginTop="7dp" />
+        <TextView android:id="@+id/tvReps" style="@style/WatchValue" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="0" android:gravity="center" android:textSize="52sp" android:textColor="#C3B0FF" />
+        <TextView android:id="@+id/tvTotalReps" style="@style/WatchLabel" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="0 total reps" android:gravity="center" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal"
+            android:gravity="center" android:layout_marginTop="10dp">
+            <Button android:id="@+id/btnRemoveRep" style="@style/WatchAction" android:layout_width="0dp" android:layout_weight="1"
+                android:layout_height="48dp" android:text="−" android:textSize="22sp" android:textColor="#C3B0FF" android:backgroundTint="#221B34"
+                android:contentDescription="Remove one rep" android:layout_marginEnd="6dp" />
+            <Button android:id="@+id/btnAddRep" style="@style/WatchAction" android:layout_width="0dp" android:layout_weight="1"
+                android:layout_height="48dp" android:text="+" android:textSize="22sp" android:textColor="#C3B0FF" android:backgroundTint="#221B34"
+                android:contentDescription="Add one rep" android:layout_marginStart="6dp" />
+        </LinearLayout>
+        <TextView android:id="@+id/tvRepHint" style="@style/WatchLabel" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Motion counts reps. Use + / − to correct." android:gravity="center" android:textSize="10sp" android:layout_marginTop="8dp" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal"
+            android:gravity="center" android:layout_marginTop="14dp">
+            <TextView android:id="@+id/tvLiveHr" style="@style/WatchLabel" android:layout_width="0dp" android:layout_weight="1"
+                android:layout_height="wrap_content" android:text="♥ -- bpm" android:gravity="center" android:textColor="#FF8395" />
+            <TextView android:id="@+id/tvRestTimer" style="@style/WatchText" android:layout_width="0dp" android:layout_weight="1"
+                android:layout_height="wrap_content" android:text="Active" android:gravity="center" android:textSize="18sp" android:textColor="#8CE7C8" />
+        </LinearLayout>
+        <Button android:id="@+id/btnRest" style="@style/WatchAction" android:layout_width="match_parent" android:layout_height="48dp"
+            android:text="REST 60 SEC" android:layout_marginTop="14dp" android:backgroundTint="#C3B0FF" />
+        <Button android:id="@+id/btnStopWorkout" style="@style/WatchAction" android:layout_width="match_parent" android:layout_height="48dp"
+            android:text="FINISH WORKOUT" android:layout_marginTop="7dp" android:textColor="#FF8395" android:backgroundTint="#32131C" />
+    </LinearLayout>
+</com.healthsync.watch.ui.RoundScrollView>
