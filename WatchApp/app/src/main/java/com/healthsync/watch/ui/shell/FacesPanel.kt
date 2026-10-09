@@ -19,7 +19,7 @@ import com.healthsync.watch.data.WatchPreferences
 import com.healthsync.watch.service.BluetoothClientService
 import com.healthsync.watch.service.SensorCollectorService
 import com.healthsync.watch.service.WorkoutTrackingService
-import com.healthsync.watch.ui.CasioWatchFaceView
+import com.healthsync.watch.ui.ChronoWatchFaceView
 import com.healthsync.watch.ui.RoundScrollView
 import com.healthsync.watch.ui.WatchFaceCatalog
 import com.healthsync.watch.ui.WatchOptionsActivity
@@ -57,7 +57,7 @@ class FacesPanel(private val activity: AppCompatActivity, private val onClose: (
             val style = entry.id
             val preview: View? = when (style) {
                 "orbit" -> OrbitWatchFaceView(activity).apply { setStyle("orbit") }
-                "classic" -> CasioWatchFaceView(activity)
+                "chrono", "classic" -> ChronoWatchFaceView(activity)
                 else -> null
             }
             if (preview != null) {
@@ -135,11 +135,11 @@ class FacesPanel(private val activity: AppCompatActivity, private val onClose: (
                 preview.updateTime(time)
                 preview.setData(steps, prefs.stepGoal, heart.bpm, battery, linked, 0, WorkoutTrackingService.isActive)
             }
-            is CasioWatchFaceView -> {
+            is ChronoWatchFaceView -> {
                 preview.setHeartRateTime(heart.capturedAt)
                 preview.setHeartRateUnverified(heart.sensorReading)
                 preview.updateTime(time)
-                preview.setHealthData(heart.bpm, steps, prefs.stepGoal, 0, 0f)
+                preview.setHealthData(heart.bpm, steps, prefs.stepGoal, 0.0, 0.0)
                 preview.setBluetoothConnected(linked)
                 preview.setBatteryLevel(battery)
             }

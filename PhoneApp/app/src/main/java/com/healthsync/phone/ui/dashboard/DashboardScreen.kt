@@ -197,7 +197,7 @@ fun DashboardScreen(
             item { HealthCard { Text(message, color = StatusError, fontSize = 13.sp); TextButton(onClick = viewModel::refreshData) { Text("Retry", color = AccentCyan) } } }
         }
 
-        if (!uiState.isLoading && uiState.latestHeartRate == null && uiState.todaySteps == null && uiState.recentWorkouts.isEmpty()) {
+        if (!connState.isConnected && !uiState.isLoading && uiState.latestHeartRate == null && uiState.todaySteps == null && uiState.recentWorkouts.isEmpty()) {
             item {
                 HealthCard {
                     SectionTitle("Your first sync", "Connect your watch to get started")

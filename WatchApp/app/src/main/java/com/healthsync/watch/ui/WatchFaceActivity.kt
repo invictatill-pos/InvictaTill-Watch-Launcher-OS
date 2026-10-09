@@ -67,7 +67,7 @@ class WatchFaceActivity : AppCompatActivity() {
         const val EXTRA_PANEL = "watch_shell_panel"
     }
 
-    private lateinit var casioWatchFaceView: CasioWatchFaceView
+    private lateinit var chronoWatchFaceView: ChronoWatchFaceView
     private lateinit var circularWatchFaceView: CircularWatchFaceView
     private lateinit var orbitFace: OrbitWatchFaceView
     private lateinit var shellDock: LinearLayout
@@ -191,7 +191,7 @@ class WatchFaceActivity : AppCompatActivity() {
         setContentView(R.layout.activity_watch_face)
         setWatchFullscreen()
 
-        casioWatchFaceView = findViewById(R.id.casioWatchFaceView)
+        chronoWatchFaceView = findViewById(R.id.chronoWatchFaceView)
         circularWatchFaceView = findViewById(R.id.circularWatchFaceView)
         orbitFace = findViewById(R.id.orbitWatchFace)
         shellDock = findViewById(R.id.shellDock)
@@ -224,15 +224,15 @@ class WatchFaceActivity : AppCompatActivity() {
             }
         }
 
-        // Configure Casio watchface interactive buttons
-        casioWatchFaceView.onModeClick = {
-            val next = if (preferences.watchFaceStyle == "classic") "orbit" else "classic"
+        // Configure Chrono watchface interactive buttons
+        chronoWatchFaceView.onModeClick = {
+            val next = if (preferences.watchFaceStyle == "chrono" || preferences.watchFaceStyle == "classic") "orbit" else "chrono"
             preferences.watchFaceStyle = next
             updateWatchFaceVisibility()
-            Toast.makeText(this, if (next == "orbit") "Orbit Face" else "Casio Face", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, if (next == "orbit") "Orbit Face" else "Chrono Ultra Face", Toast.LENGTH_SHORT).show()
         }
-        casioWatchFaceView.onStartWorkoutClick = { launchWorkout() }
-        casioWatchFaceView.onHistoryClick = {
+        chronoWatchFaceView.onStartWorkoutClick = { launchWorkout() }
+        chronoWatchFaceView.onHistoryClick = {
             startActivity(Intent(this, WatchHistoryActivity::class.java))
         }
 
@@ -319,7 +319,7 @@ class WatchFaceActivity : AppCompatActivity() {
         else wristWake.stop()
         circularWatchFaceView.setAmbientMode(ambient)
         orbitFace.setAmbient(ambient)
-        casioWatchFaceView.setAmbientMode(ambient)
+        chronoWatchFaceView.setAmbientMode(ambient)
         window.attributes = window.attributes.apply {
             screenBrightness = if (ambient) preferences.aodBrightness else interactiveBrightness
         }
@@ -578,7 +578,7 @@ class WatchFaceActivity : AppCompatActivity() {
     }
     override fun onUserInteraction() {
         super.onUserInteraction()
-        if (::casioWatchFaceView.isInitialized && !wakeGestureInProgress) {
+        if (::chronoWatchFaceView.isInitialized && !wakeGestureInProgress) {
             if (isAmbient) setAmbientDisplay(false)
             scheduleAmbient()
         }
@@ -587,7 +587,7 @@ class WatchFaceActivity : AppCompatActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         windowFocused = hasFocus
-        if (!::casioWatchFaceView.isInitialized) return
+        if (!::chronoWatchFaceView.isInitialized) return
         // Android's first immersive-mode hint temporarily takes focus without pausing this
         // activity. Keep the dim clock through that overlay; onPause restores the full UI
         // when the user actually leaves. Reassert the display policy when focus returns.
@@ -613,12 +613,12 @@ class WatchFaceActivity : AppCompatActivity() {
         orbitFace.setAodStyle(preferences.aodStyle)
         circularWatchFaceView.setAodStyle(if (preferences.aodStyle == "face")
             WatchFaceCatalog.ambientStyleForFace(style) else preferences.aodStyle)
-        casioWatchFaceView.setAodStyle(preferences.aodStyle)
+        chronoWatchFaceView.setAodStyle(preferences.aodStyle)
         circularWatchFaceView.visibility = View.GONE
         orbitFace.visibility = if ((!isAmbient && style == "orbit") || (isAmbient && style == "orbit")) View.VISIBLE else View.GONE
-        casioWatchFaceView.visibility = if ((!isAmbient && style == "classic") || (isAmbient && style == "classic")) View.VISIBLE else View.GONE
+        chronoWatchFaceView.visibility = if (style == "chrono" || style == "classic") View.VISIBLE else View.GONE
         shellDock.visibility = if (clockShortcuts && !isAmbient && surface == null) View.VISIBLE else View.GONE
-        val wallpaper = preferences.wallpaperBackdropEnabled && !isAmbient && surface == null && style != "classic"
+        val wallpaper = preferences.wallpaperBackdropEnabled && !isAmbient && surface == null && style != "classic" && style != "chrono"
         if (wallpaper) window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
         else window.clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
         window.setBackgroundDrawable(ColorDrawable(if (wallpaper) Color.TRANSPARENT else Color.BLACK))
@@ -640,7 +640,7 @@ class WatchFaceActivity : AppCompatActivity() {
 
         circularWatchFaceView.updateTime(nowCal)
         orbitFace.updateTime(nowCal)
-        if (casioWatchFaceView.visibility == View.VISIBLE || isAmbient) casioWatchFaceView.updateTime(nowCal)
+        if (chronoWatchFaceView.visibility == View.VISIBLE || isAmbient) chronoWatchFaceView.updateTime(nowCal)
 
         val heart = SensorCollectorService.watchFaceHeartRate(nowCal.timeInMillis)
         val bpm = heart.bpm
@@ -648,8 +648,8 @@ class WatchFaceActivity : AppCompatActivity() {
         orbitFace.setHeartRateUnverified(heart.sensorReading)
         circularWatchFaceView.setHeartRateTime(heart.capturedAt)
         circularWatchFaceView.setHeartRateUnverified(heart.sensorReading)
-        casioWatchFaceView.setHeartRateTime(heart.capturedAt)
-        casioWatchFaceView.setHeartRateUnverified(heart.sensorReading)
+        chronoWatchFaceView.setHeartRateTime(heart.capturedAt)
+        chronoWatchFaceView.setHeartRateUnverified(heart.sensorReading)
         val steps = SensorCollectorService.latestSteps.coerceAtLeast(0)
         val stepGoal = preferences.stepGoal.coerceAtLeast(1)
         val connected = BluetoothClientService.isConnected
@@ -672,10 +672,10 @@ class WatchFaceActivity : AppCompatActivity() {
         circularWatchFaceView.setBluetoothConnected(connected)
         circularWatchFaceView.setBatteryLevel(battery)
 
-        // Update Casio Watch Face (AOD & Interactive)
-        casioWatchFaceView.setHealthData(bpm, steps, stepGoal, dailyCalories, dailyDistanceKm)
-        casioWatchFaceView.setBluetoothConnected(connected)
-        casioWatchFaceView.setBatteryLevel(battery)
+        // Update Chrono Ultra Watch Face (AOD & Interactive)
+        chronoWatchFaceView.setHealthData(bpm, steps, stepGoal, dailyCalories, dailyDistanceKm)
+        chronoWatchFaceView.setBluetoothConnected(connected)
+        chronoWatchFaceView.setBatteryLevel(battery)
 
         val today = nowCal.get(Calendar.DAY_OF_YEAR)
         if (today != displayedDay) {
@@ -698,11 +698,11 @@ class WatchFaceActivity : AppCompatActivity() {
             dailyCalories = sessions.sumOf { it.calories }.toInt()
 
             val heart = SensorCollectorService.watchFaceHeartRate()
-            casioWatchFaceView.setHeartRateTime(heart.capturedAt)
-            casioWatchFaceView.setHeartRateUnverified(heart.sensorReading)
+            chronoWatchFaceView.setHeartRateTime(heart.capturedAt)
+            chronoWatchFaceView.setHeartRateUnverified(heart.sensorReading)
             circularWatchFaceView.setHeartRateTime(heart.capturedAt)
             circularWatchFaceView.setHeartRateUnverified(heart.sensorReading)
-            casioWatchFaceView.setHealthData(heart.bpm,
+            chronoWatchFaceView.setHealthData(heart.bpm,
                 SensorCollectorService.latestSteps.coerceAtLeast(0),
                 preferences.stepGoal.coerceAtLeast(1),
                 dailyCalories, dailyDistanceKm)
@@ -806,7 +806,7 @@ class WatchFaceActivity : AppCompatActivity() {
         handler.removeCallbacks(enterAmbient)
         setAmbientDisplay(false)
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        casioWatchFaceView.stopIlluminator()
+        chronoWatchFaceView.stopIlluminator()
         runCatching { unregisterReceiver(receiver) }
         super.onPause()
     }

@@ -279,7 +279,7 @@ class WatchOptionsActivity : AppCompatActivity() {
             setOnCheckedChangeListener { _, enabled -> preferences.clockShortcutsEnabled = enabled }
         }
         content.addView(shortcuts, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(9) })
-        label("Hide the bottom clock buttons for a clean dial. Full Analog, Roman, Pure Digital and Casio Pure always hide them. Swipe up for Apps, left for Notifications, or hold the clock for face settings. Settings is also in Apps.")
+        label("Hide the bottom clock buttons for a clean dial. Chrono Ultra and full dials always hide them. Swipe up for Apps, left for Notifications, or hold the clock for face settings. Settings is also in Apps.")
         val aod = Switch(this).apply {
             text = "Always-on display"
             textSize = 15f

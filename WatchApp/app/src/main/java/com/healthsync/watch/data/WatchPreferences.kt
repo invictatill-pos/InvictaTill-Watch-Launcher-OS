@@ -128,10 +128,6 @@ class WatchPreferences(context: Context) {
         get() = prefs.getBoolean("wallpaper_backdrop", false)
         set(v) { prefs.edit().putBoolean("wallpaper_backdrop", v).apply() }
 
-    /** Whether the Classic Casio watchface is active in interactive mode */
-    var useCasioFace: Boolean
-        get() = prefs.getBoolean("use_casio_face", true)
-        set(v) { prefs.edit().putBoolean("use_casio_face", v).apply() }
 
     /** Faces rendered in the unified watch shell. */
     var watchFaceStyle: String

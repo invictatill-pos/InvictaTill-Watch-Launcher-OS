@@ -10,6 +10,7 @@ class WatchFaceCatalogTest {
         assertEquals(2, WatchFaceCatalog.styles.size)
         assertEquals(WatchFaceCatalog.styles.size, WatchFaceCatalog.styles.toSet().size)
         assertTrue(WatchFaceCatalog.isNative("orbit"))
+        assertTrue(WatchFaceCatalog.isNative("chrono"))
         assertTrue(WatchFaceCatalog.isNative("classic"))
         assertFalse(WatchFaceCatalog.isNative("unknown"))
         assertEquals("orbit", WatchFaceCatalog.entry("unknown").id)
@@ -22,7 +23,8 @@ class WatchFaceCatalogTest {
             assertTrue(ambient in WatchFaceCatalog.ambientStyles)
             assertFalse(ambient == "face")
         }
-        assertEquals("retro", WatchFaceCatalog.ambientStyleForFace("classic"))
+        assertEquals("chrono_dim", WatchFaceCatalog.ambientStyleForFace("chrono"))
+        assertEquals("chrono_dim", WatchFaceCatalog.ambientStyleForFace("classic"))
         assertEquals("digital", WatchFaceCatalog.ambientStyleForFace("orbit"))
     }
 

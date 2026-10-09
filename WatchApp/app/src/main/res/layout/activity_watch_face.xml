@@ -2,9 +2,9 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/watchFaceRoot"
     android:layout_width="match_parent" android:layout_height="match_parent" android:background="#000000">
 
-    <!-- Pre-installed Casio Digital Watch Face & Always-On Display View -->
-    <com.healthsync.watch.ui.CasioWatchFaceView
-        android:id="@+id/casioWatchFaceView"
+    <!-- Pre-installed Chrono Ultra Modern Chronograph Watch Face -->
+    <com.healthsync.watch.ui.ChronoWatchFaceView
+        android:id="@+id/chronoWatchFaceView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:visibility="gone" />
