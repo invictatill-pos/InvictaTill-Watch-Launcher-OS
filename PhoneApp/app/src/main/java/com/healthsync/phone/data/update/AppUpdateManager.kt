@@ -24,15 +24,17 @@ import java.security.MessageDigest
 
 object AppUpdateManager {
     private const val TAG = "AppUpdateManager"
-    const val DEFAULT_MANIFEST_URL = "https://raw.githubusercontent.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/main/version.json"
+    const val DEFAULT_MANIFEST_URL = "https://cdn.jsdelivr.net/gh/invictatill-pos/InvictaTill-Watch-Launcher-OS@main/version.json"
+    const val FALLBACK_MANIFEST_URL = "https://raw.githubusercontent.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/main/version.json"
 
     private val gson = Gson()
 
-    /** Fetches remote version manifest from GitHub or fallback CDN */
+    /** Fetches remote version manifest from CDN or fallback GitHub URL */
     suspend fun fetchManifest(manifestUrl: String = DEFAULT_MANIFEST_URL): UpdateManifest? = withContext(Dispatchers.IO) {
         val candidates = listOf(
             manifestUrl,
-            "https://cdn.jsdelivr.net/gh/invictatill-pos/InvictaTill-Watch-Launcher-OS@main/version.json"
+            DEFAULT_MANIFEST_URL,
+            FALLBACK_MANIFEST_URL
         ).distinct()
 
         for (candidate in candidates) {
@@ -42,7 +44,8 @@ object AppUpdateManager {
                 connection.instanceFollowRedirects = true
                 connection.connectTimeout = 8_000
                 connection.readTimeout = 8_000
-                connection.setRequestProperty("User-Agent", "HealthSync-Phone-App")
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Android; Mobile; rv:120.0) Gecko/120.0 Firefox/120.0")
+                connection.setRequestProperty("Accept", "application/json, text/plain, */*")
                 connection.requestMethod = "GET"
 
                 if (connection.responseCode in 200..299) {

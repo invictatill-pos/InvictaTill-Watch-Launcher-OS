@@ -38,7 +38,8 @@ object WatchUpdateManager {
     private const val TAG = "WatchUpdateManager"
     private const val CHANNEL_ID = "ota_update_channel"
     private const val NOTIF_ID = 3001
-    const val DEFAULT_MANIFEST_URL = "https://raw.githubusercontent.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/main/version.json"
+    const val DEFAULT_MANIFEST_URL = "https://cdn.jsdelivr.net/gh/invictatill-pos/InvictaTill-Watch-Launcher-OS@main/version.json"
+    const val FALLBACK_MANIFEST_URL = "https://raw.githubusercontent.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/main/version.json"
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val gson = Gson()
