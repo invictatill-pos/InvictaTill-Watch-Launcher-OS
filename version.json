@@ -5,7 +5,7 @@
     "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/latest/download/HealthSync-Phone.apk",
     "changelog": "• Phase 4 Online Watch Face Studio & Store with curated dials\n• Supercharged OTA Bluetooth streaming engine with backpressure flow control\n• Real-time duplex watch update progress and device info telemetry",
     "forceUpdate": false,
-    "sha256": "0944dfc4f3da2537489159a0e3d878874283d051f23286c99fa7b88b6430b146"
+    "sha256": "7fcff3e62172bffe7d5f3c0fe075f41a595d608d611165dfffdc47d429a7de3f"
   },
   "watch": {
     "versionCode": 19,

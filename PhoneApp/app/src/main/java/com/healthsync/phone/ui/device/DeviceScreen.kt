@@ -67,7 +67,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.healthsync.phone.data.PhonePreferences
 import com.healthsync.phone.data.model.ConnectionInfo
+import com.healthsync.phone.service.BluetoothSyncService
 import com.healthsync.phone.ui.theme.AccentBlue
 import com.healthsync.phone.ui.theme.AccentCyan
 import com.healthsync.phone.ui.theme.BgCard
@@ -171,7 +173,10 @@ fun DeviceScreen(
                             Icon(Icons.Default.Watch, null, tint = AccentCyan, modifier = Modifier.size(18.dp))
                             Text("Watch Firmware & Launcher", color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
-                        Text("Kolabee U8 Ultra is connected. Keep the watch launcher up to date via Bluetooth OTA.", color = TextDim, fontSize = 12.sp)
+                        val liveWatchVersion by BluetoothSyncService.connectedWatchVersionName.collectAsState()
+                        val watchVersion = liveWatchVersion ?: remember { PhonePreferences(context).lastKnownWatchVersion }
+                        val displayWatchVersion = if (watchVersion.startsWith("v", ignoreCase = true)) watchVersion else "v$watchVersion"
+                        Text("Kolabee U8 Ultra · Firmware $displayWatchVersion is connected. Keep the watch launcher up to date via Bluetooth OTA.", color = TextDim, fontSize = 12.sp)
                         Surface(
                             onClick = { updateViewModel.checkWatchUpdateManually() },
                             modifier = Modifier.fillMaxWidth().height(40.dp),

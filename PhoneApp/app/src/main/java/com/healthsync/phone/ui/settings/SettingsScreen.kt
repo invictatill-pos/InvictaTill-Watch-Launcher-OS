@@ -336,9 +336,12 @@ fun SettingsScreen(
                 val updateStatus by updateViewModel.status.collectAsState()
                 SettingsCard("Software Updates", Icons.Default.SystemUpdate) {
                     val phoneVersion = remember { try { context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "Unknown" } catch (_: Exception) { "Unknown" } }
+                    val liveWatchVersion by BluetoothSyncService.connectedWatchVersionName.collectAsState()
+                    val watchVersion = liveWatchVersion ?: remember { PhonePreferences(context).lastKnownWatchVersion }
+                    val displayWatchVersion = if (watchVersion.startsWith("v", ignoreCase = true)) watchVersion else "v$watchVersion"
                     AboutRow("Phone App", "v$phoneVersion")
                     HorizontalDivider(color = BorderSubtle)
-                    AboutRow("Watch Companion", "v2.4.0 (Kolabee U8)")
+                    AboutRow("Watch Companion", "$displayWatchVersion (Kolabee U8)")
                     HorizontalDivider(color = BorderSubtle)
 
                     Spacer(Modifier.height(8.dp))

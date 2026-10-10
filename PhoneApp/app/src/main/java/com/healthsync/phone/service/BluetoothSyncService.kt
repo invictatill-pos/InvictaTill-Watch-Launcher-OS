@@ -246,6 +246,8 @@ class BluetoothSyncService : android.app.Service() {
     override fun onCreate() {
         super.onCreate()
         activeInstance = this
+        _connectedWatchVersionName.value = preferences.lastKnownWatchVersion
+        _connectedWatchVersionCode.value = preferences.lastKnownWatchVersionCode
         remoteControls = PhoneRemoteControls(this) { state ->
             sendRaw(SyncMessage(MessageType.PHONE_CONTROL_STATE, payload = gson.toJson(state)))
         }
@@ -579,6 +581,8 @@ class BluetoothSyncService : android.app.Service() {
                         val info = gson.fromJson(msg.payload, DeviceInfoPayload::class.java)
                         _connectedWatchVersionCode.value = info.versionCode
                         _connectedWatchVersionName.value = info.versionName
+                        preferences.lastKnownWatchVersion = info.versionName
+                        preferences.lastKnownWatchVersionCode = info.versionCode
                         Log.i(TAG, "Connected Watch Info: ${info.model} v${info.versionName} (build ${info.versionCode})")
                     } catch (e: Exception) { Log.w(TAG, "Error parsing DEVICE_INFO: ${e.message}") }
                 }
@@ -645,8 +649,8 @@ class BluetoothSyncService : android.app.Service() {
     private fun updateState(state: ConnectionInfo) {
         val newConnection = state.isConnected && !_connectionState.value.isConnected
         if (!state.isConnected) {
-            _connectedWatchVersionCode.value = null
-            _connectedWatchVersionName.value = null
+            _connectedWatchVersionCode.value = preferences.lastKnownWatchVersionCode
+            _connectedWatchVersionName.value = preferences.lastKnownWatchVersion
             _otaProgress.value = null
         }
         _heartRateFeedback.update {

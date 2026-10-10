@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.healthsync.phone.data.PhonePreferences
 import com.healthsync.phone.data.update.AppUpdateManager
 import com.healthsync.phone.data.update.AppVersionInfo
 import com.healthsync.phone.data.update.UpdateManifest
@@ -63,7 +64,7 @@ class AppUpdateViewModel @Inject constructor(
             }
 
             // 2. Check Watch App update if phone is current
-            val currentWatchCode = BluetoothSyncService.connectedWatchVersionCode.value ?: 18
+            val currentWatchCode = BluetoothSyncService.connectedWatchVersionCode.value ?: PhonePreferences(context).lastKnownWatchVersionCode
             if (fetched.watch.versionCode > currentWatchCode) {
                 _dialogUpdateInfo.value = fetched.watch
                 _isWatchUpdate.value = true
@@ -92,7 +93,8 @@ class AppUpdateViewModel @Inject constructor(
                 return@launch
             }
 
-            val currentWatchCode = BluetoothSyncService.connectedWatchVersionCode.value ?: 18
+            val context = getApplication<Application>()
+            val currentWatchCode = BluetoothSyncService.connectedWatchVersionCode.value ?: PhonePreferences(context).lastKnownWatchVersionCode
             if (fetched.watch.versionCode > currentWatchCode) {
                 _dialogUpdateInfo.value = fetched.watch
                 _isWatchUpdate.value = true
