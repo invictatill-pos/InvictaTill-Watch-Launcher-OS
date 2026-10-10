@@ -44,8 +44,16 @@ enum class MessageType {
     OTA_COMPLETE,
     OTA_PROGRESS,
     WATCH_FACE_INSTALL,
-    WATCH_FACE_ACK
+    WATCH_FACE_ACK,
+    DEVICE_INFO
 }
+
+data class DeviceInfoPayload(
+    val versionName: String,
+    val versionCode: Int,
+    val model: String = "Kolabee U8 Ultra",
+    val batteryPercent: Int = -1
+)
 
 data class WatchFaceInstallPayload(
     val id: String,
@@ -71,7 +79,9 @@ data class OtaStartPayload(
 data class OtaChunkPayload(
     val chunkIndex: Int,
     val totalChunks: Int,
-    val dataBase64: String
+    val dataBase64: String,
+    val offset: Long = 0L,
+    val chunkSize: Int = 8192
 )
 
 data class OtaCompletePayload(

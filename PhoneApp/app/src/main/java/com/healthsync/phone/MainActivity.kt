@@ -117,6 +117,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     object Notifications : Screen("notifications", "Alerts", Icons.Default.Notifications)
     object Device : Screen("device", "Device", Icons.Default.Watch)
     object Settings : Screen("settings", "Settings", Icons.Default.Settings)
+    object WatchFaces : Screen("watch_faces", "Faces", Icons.Default.Palette)
 }
 
 val bottomScreens = listOf(Screen.Dashboard, Screen.Workouts, Screen.Notifications, Screen.Device, Screen.Settings)
@@ -236,7 +237,15 @@ fun MainAppContent(onRequestPermissions: () -> Unit = {}) {
                 }
             }
             composable(Screen.Notifications.route) { NotificationsScreen() }
-            composable(Screen.Device.route) { DeviceScreen(onRequestPermissions = onRequestPermissions) }
+            composable(Screen.Device.route) {
+                DeviceScreen(
+                    onRequestPermissions = onRequestPermissions,
+                    onOpenWatchFaceStore = { navController.navigate(Screen.WatchFaces.route) }
+                )
+            }
+            composable(Screen.WatchFaces.route) {
+                com.healthsync.phone.ui.watchface.WatchFaceStoreScreen(onBack = { navController.popBackStack() })
+            }
             composable(Screen.Settings.route) { SettingsScreen(onRequestPermissions = onRequestPermissions) }
         }
     }

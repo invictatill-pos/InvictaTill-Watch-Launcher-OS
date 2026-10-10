@@ -191,43 +191,61 @@ object AppUpdateManager {
         if (!apkFile.exists() || apkFile.length() == 0L) return@withContext false
         val bytes = apkFile.readBytes()
         val sha256 = calculateSha256(bytes)
-        val chunkSize = 12 * 1024 // 12 KB chunks for smooth RFCOMM throughput
+        val chunkSize = 8 * 1024 // 8 KB chunks for smooth, reliable RFCOMM throughput
         val totalChunks = (bytes.size + chunkSize - 1) / chunkSize
+
+        Log.i(TAG, "Starting Watch OTA: $versionName (build $versionCode), ${bytes.size} bytes across $totalChunks chunks (SHA-256: $sha256)")
 
         // 1. Send OTA_START
         val startPayload = OtaStartPayload(versionName, versionCode, bytes.size.toLong(), totalChunks, sha256)
-        if (!BluetoothSyncService.sendDirectSyncMessage(SyncMessage(MessageType.OTA_START, payload = gson.toJson(startPayload)))) {
+        val started = BluetoothSyncService.sendStreamingSyncMessage(
+            SyncMessage(MessageType.OTA_START, payload = gson.toJson(startPayload))
+        )
+        if (!started) {
             Log.w(TAG, "Bluetooth not connected; unable to start OTA")
             return@withContext false
         }
-        delay(250)
+        delay(300)
 
-        // 2. Stream OTA chunks
+        // 2. Stream OTA chunks with suspending backpressure
         for (i in 0 until totalChunks) {
             val start = i * chunkSize
             val end = minOf(start + chunkSize, bytes.size)
             val chunkBytes = bytes.copyOfRange(start, end)
             val base64 = Base64.encodeToString(chunkBytes, Base64.NO_WRAP)
-            val chunkPayload = OtaChunkPayload(i, totalChunks, base64)
+            val chunkPayload = OtaChunkPayload(
+                chunkIndex = i,
+                totalChunks = totalChunks,
+                dataBase64 = base64,
+                offset = start.toLong(),
+                chunkSize = chunkSize
+            )
 
-            val sent = BluetoothSyncService.sendDirectSyncMessage(
+            val sent = BluetoothSyncService.sendStreamingSyncMessage(
                 SyncMessage(MessageType.OTA_CHUNK, payload = gson.toJson(chunkPayload))
             )
             if (!sent) {
-                Log.e(TAG, "Lost connection during chunk $i of $totalChunks")
+                Log.e(TAG, "Bluetooth transmission failed at chunk $i of $totalChunks")
                 return@withContext false
             }
 
             val pct = ((i + 1) * 100) / totalChunks
             onProgress(pct, i + 1, totalChunks)
-            delay(35) // Bounded rate to keep Bluetooth buffers clean
+
+            // Pacing: micro-delay every 4 chunks to keep socket buffers balanced
+            if (i % 4 == 0) {
+                delay(15)
+            }
         }
 
         // 3. Send OTA_COMPLETE
+        delay(200)
         val completePayload = OtaCompletePayload(true, sha256)
-        BluetoothSyncService.sendDirectSyncMessage(SyncMessage(MessageType.OTA_COMPLETE, payload = gson.toJson(completePayload)))
-        Log.i(TAG, "Watch OTA streaming completed successfully: $totalChunks chunks")
-        true
+        val finished = BluetoothSyncService.sendStreamingSyncMessage(
+            SyncMessage(MessageType.OTA_COMPLETE, payload = gson.toJson(completePayload))
+        )
+        Log.i(TAG, "Watch OTA streaming completed: $totalChunks chunks delivered (finishSignal=$finished)")
+        finished
     }
 
     private fun calculateSha256(bytes: ByteArray): String {

@@ -1,18 +1,18 @@
 {
   "phone": {
-    "versionCode": 12,
-    "versionName": "2.3.2",
+    "versionCode": 13,
+    "versionName": "2.3.3",
     "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/latest/download/HealthSync-Phone.apk",
-    "changelog": "• Dynamic Watch Face Engine (.hswf) integration\n• 1:1 Jetpack Compose Canvas watch face previewer\n• Bluetooth companion watch face installer",
+    "changelog": "• Phase 4 Online Watch Face Studio & Store with curated dials\n• Supercharged OTA Bluetooth streaming engine with backpressure flow control\n• Real-time duplex watch update progress and device info telemetry",
     "forceUpdate": false,
-    "sha256": "dc808db1ddd81cf3d11670fab40c8d480ad925447736d04ab3fe3357d844cace"
+    "sha256": "0944dfc4f3da2537489159a0e3d878874283d051f23286c99fa7b88b6430b146"
   },
   "watch": {
-    "versionCode": 18,
-    "versionName": "2.4.2",
+    "versionCode": 19,
+    "versionName": "2.4.3",
     "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/latest/download/HealthSync-Watch.apk",
-    "changelog": "• Phase 3 Dynamic Watch Face Engine (.hswf)\n• 60 FPS hardware Canvas renderer with real-time complications\n• Starter showcase dials: Neon Cyberpunk & Bauhaus Minimal",
+    "changelog": "• Supercharged OTA Bluetooth receiver with RandomAccessFile offset assembly\n• Live duplex progress reporting (OTA_PROGRESS) back to companion\n• Real-time device telemetry and autonomous Wi-Fi fallback update",
     "forceUpdate": false,
-    "sha256": "60bd592a958538c668fd7611285c9199e13de349173a2cfe3414afd7ff20c0db"
+    "sha256": "a9a24c96eecc55c34877dd91e9e7251854e08ff22726b93ffdffe404810d195a"
   }
 }

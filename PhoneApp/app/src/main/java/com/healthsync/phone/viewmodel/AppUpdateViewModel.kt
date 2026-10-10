@@ -63,7 +63,7 @@ class AppUpdateViewModel @Inject constructor(
             }
 
             // 2. Check Watch App update if phone is current
-            val currentWatchCode = 16 // baseline Kolabee watch firmware
+            val currentWatchCode = BluetoothSyncService.connectedWatchVersionCode.value ?: 18
             if (fetched.watch.versionCode > currentWatchCode) {
                 _dialogUpdateInfo.value = fetched.watch
                 _isWatchUpdate.value = true
@@ -78,6 +78,29 @@ class AppUpdateViewModel @Inject constructor(
                 _status.value = UpdateStatus.UpToDate
             } else {
                 _status.value = UpdateStatus.Idle
+            }
+        }
+    }
+
+    fun checkWatchUpdateManually() {
+        viewModelScope.launch {
+            _status.value = UpdateStatus.Checking
+            val fetched = AppUpdateManager.fetchManifest()
+            _manifest.value = fetched
+            if (fetched == null) {
+                _status.value = UpdateStatus.Error(AppUpdateManager.lastError ?: "Unable to reach update server.")
+                return@launch
+            }
+
+            val currentWatchCode = BluetoothSyncService.connectedWatchVersionCode.value ?: 18
+            if (fetched.watch.versionCode > currentWatchCode) {
+                _dialogUpdateInfo.value = fetched.watch
+                _isWatchUpdate.value = true
+                _status.value = UpdateStatus.UpdateAvailable(fetched.watch, isWatch = true)
+                _showDialog.value = true
+            } else {
+                val vName = BluetoothSyncService.connectedWatchVersionName.value ?: "v${fetched.watch.versionName}"
+                _status.value = UpdateStatus.UpToDate
             }
         }
     }

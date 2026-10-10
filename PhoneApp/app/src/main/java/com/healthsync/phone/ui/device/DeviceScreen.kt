@@ -85,7 +85,8 @@ import com.healthsync.phone.ui.theme.TextWhite
 fun DeviceScreen(
     viewModel: ConnectionViewModel = hiltViewModel(),
     updateViewModel: com.healthsync.phone.viewmodel.AppUpdateViewModel = hiltViewModel(),
-    onRequestPermissions: () -> Unit = {}
+    onRequestPermissions: () -> Unit = {},
+    onOpenWatchFaceStore: () -> Unit = {}
 ) {
     val state by viewModel.connectionState.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
@@ -172,7 +173,7 @@ fun DeviceScreen(
                         }
                         Text("Kolabee U8 Ultra is connected. Keep the watch launcher up to date via Bluetooth OTA.", color = TextDim, fontSize = 12.sp)
                         Surface(
-                            onClick = { updateViewModel.checkForUpdates(silent = false) },
+                            onClick = { updateViewModel.checkWatchUpdateManually() },
                             modifier = Modifier.fillMaxWidth().height(40.dp),
                             shape = RoundedCornerShape(10.dp),
                             color = AccentCyan.copy(alpha = 0.12f)
@@ -181,6 +182,35 @@ fun DeviceScreen(
                                 Icon(Icons.Default.SystemUpdate, null, tint = AccentCyan, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text("Check for Watch Updates", color = AccentCyan, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    color = BgCard,
+                    border = BorderStroke(1.dp, BorderSubtle)
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Default.Watch, null, tint = AccentCyan, modifier = Modifier.size(18.dp))
+                            Text("Watch Face Studio & Store", color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Text("Explore luxury, cyberpunk, sport, and minimalist dials. Live interactive preview and 1-tap beam to watch.", color = TextDim, fontSize = 12.sp)
+                        Surface(
+                            onClick = onOpenWatchFaceStore,
+                            modifier = Modifier.fillMaxWidth().height(42.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            color = AccentCyan
+                        ) {
+                            Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                                Icon(Icons.Default.Watch, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Open Watch Face Studio", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }

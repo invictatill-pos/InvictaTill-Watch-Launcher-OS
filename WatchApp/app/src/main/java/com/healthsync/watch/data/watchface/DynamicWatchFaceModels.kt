@@ -168,5 +168,7 @@ data class AodConfig(
     @SerializedName("hideSecondsHand") val hideSecondsHand: Boolean = true,
     @SerializedName("hideBackground") val hideBackground: Boolean = true,
     @SerializedName("hideMinorTicks") val hideMinorTicks: Boolean = true,
-    @SerializedName("maxBrightnessFactor") val maxBrightnessFactor: Float = 0.6f
+    @SerializedName("maxBrightnessFactor") val maxBrightnessFactor: Float = 0.6f,
+    @SerializedName("monochromeHex") val monochromeHex: String? = null,
+    @SerializedName("hideComplications") val hideComplications: Boolean = false
 )

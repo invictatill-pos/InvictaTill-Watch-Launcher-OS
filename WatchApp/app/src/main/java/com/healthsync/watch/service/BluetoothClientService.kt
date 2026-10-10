@@ -204,6 +204,25 @@ class BluetoothClientService : Service() {
 
                 // PING to confirm channel works
                 sendRawMsg(SyncMessage(MessageType.PING, payload = "{}"), gson)
+
+                // Send Watch Device Info (version, build, model) to Phone Companion
+                try {
+                    val pInfo = packageManager.getPackageInfo(packageName, 0)
+                    val vCode = if (Build.VERSION.SDK_INT >= 28) pInfo.longVersionCode.toInt() else @Suppress("DEPRECATION") pInfo.versionCode
+                    val devInfo = DeviceInfoPayload(
+                        versionName = pInfo.versionName ?: "2.4.3",
+                        versionCode = vCode,
+                        model = "Kolabee U8 Ultra",
+                        batteryPercent = try {
+                            val bm = getSystemService(Context.BATTERY_SERVICE) as? android.os.BatteryManager
+                            bm?.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
+                        } catch (_: Exception) { -1 }
+                    )
+                    sendRawMsg(SyncMessage(MessageType.DEVICE_INFO, payload = gson.toJson(devInfo)), gson)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to send DEVICE_INFO: ${e.message}")
+                }
+
                 syncSensorIntervals(applicationContext)
 
                 // Replay the genuine last sample with its collection timestamp and

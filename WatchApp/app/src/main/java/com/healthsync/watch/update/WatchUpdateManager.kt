@@ -45,9 +45,9 @@ object WatchUpdateManager {
     private val gson = Gson()
 
     private var activeOutputFile: File? = null
-    private var fileOutputStream: FileOutputStream? = null
+    private var randomAccessFile: java.io.RandomAccessFile? = null
+    private val receivedChunkIndices = java.util.Collections.synchronizedSet(mutableSetOf<Int>())
     private var expectedChunks: Int = 0
-    private var receivedChunks: Int = 0
     private var expectedSha256: String = ""
     private var targetVersionName: String = ""
 
@@ -67,12 +67,12 @@ object WatchUpdateManager {
         Log.i(TAG, "OTA transfer started: version ${payload.versionName} (${payload.fileSize} bytes, ${payload.totalChunks} chunks)")
         ensureChannel(context)
 
-        // Close any stale stream
-        try { fileOutputStream?.close() } catch (_: Exception) {}
-        fileOutputStream = null
+        // Close any stale file
+        try { randomAccessFile?.close() } catch (_: Exception) {}
+        randomAccessFile = null
+        receivedChunkIndices.clear()
 
         expectedChunks = payload.totalChunks
-        receivedChunks = 0
         expectedSha256 = payload.sha256
         targetVersionName = payload.versionName
 
@@ -82,7 +82,11 @@ object WatchUpdateManager {
             if (target.exists()) target.delete()
 
             activeOutputFile = target
-            fileOutputStream = FileOutputStream(target)
+            val raf = java.io.RandomAccessFile(target, "rw")
+            if (payload.fileSize > 0) {
+                raf.setLength(payload.fileSize)
+            }
+            randomAccessFile = raf
 
             updateProgressNotification(context, "Receiving update from phone…", 0, expectedChunks)
         } catch (e: Exception) {
@@ -90,22 +94,29 @@ object WatchUpdateManager {
         }
     }
 
-    /** Called when an individual 12KB chunk arrives via Bluetooth */
+    /** Called when an individual chunk arrives via Bluetooth (idempotent & offset-aware) */
     @Synchronized
     fun onOtaChunk(context: Context, payload: OtaChunkPayload) {
-        val stream = fileOutputStream ?: return
+        val raf = randomAccessFile ?: return
         try {
             val bytes = Base64.decode(payload.dataBase64, Base64.NO_WRAP)
-            stream.write(bytes)
-            receivedChunks++
+            val chunkSize = if (payload.chunkSize > 0) payload.chunkSize else 8192
+            val writeOffset = if (payload.offset > 0L) payload.offset else (payload.chunkIndex.toLong() * chunkSize)
 
+            synchronized(raf) {
+                raf.seek(writeOffset)
+                raf.write(bytes)
+            }
+            receivedChunkIndices.add(payload.chunkIndex)
+
+            val count = receivedChunkIndices.size
             val total = if (expectedChunks > 0) expectedChunks else payload.totalChunks
-            val pct = if (total > 0) ((receivedChunks * 100) / total).coerceIn(0, 100) else 0
+            val pct = if (total > 0) ((count * 100) / total).coerceIn(0, 100) else 0
 
-            // Update watch UI and phone duplex progress periodically
-            if (receivedChunks % 10 == 0 || receivedChunks == total) {
-                updateProgressNotification(context, "Receiving update: $pct%", receivedChunks, total)
-                val progressPayload = OtaProgressPayload(receivedChunks, total, pct)
+            // Update watch UI and duplex phone progress every 5 chunks or when complete
+            if (count % 5 == 0 || count == total) {
+                updateProgressNotification(context, "Receiving update: $pct%", count, total)
+                val progressPayload = OtaProgressPayload(count, total, pct)
                 BluetoothClientService.sendRawMsg(
                     SyncMessage(MessageType.OTA_PROGRESS, payload = gson.toJson(progressPayload)),
                     gson
@@ -119,14 +130,13 @@ object WatchUpdateManager {
     /** Called when transmission completes */
     @Synchronized
     fun onOtaComplete(context: Context, payload: OtaCompletePayload) {
-        Log.i(TAG, "OTA transfer complete signal received")
+        Log.i(TAG, "OTA transfer complete signal received (${receivedChunkIndices.size} chunks recorded)")
         try {
-            fileOutputStream?.flush()
-            fileOutputStream?.close()
+            randomAccessFile?.close()
         } catch (e: Exception) {
-            Log.w(TAG, "Error closing OTA stream: ${e.message}")
+            Log.w(TAG, "Error closing OTA file: ${e.message}")
         }
-        fileOutputStream = null
+        randomAccessFile = null
 
         val file = activeOutputFile
         if (file == null || !file.exists() || file.length() == 0L) {

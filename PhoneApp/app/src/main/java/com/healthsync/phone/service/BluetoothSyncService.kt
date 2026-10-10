@@ -76,6 +76,19 @@ class BluetoothSyncService : android.app.Service() {
         private val _heartRateFeedback = MutableStateFlow<HeartRateFeedback?>(null)
         val heartRateFeedback: StateFlow<HeartRateFeedback?> = _heartRateFeedback.asStateFlow()
 
+        // ── Watch metadata & OTA tracking ────────────────────────────────────
+        private val _connectedWatchVersionCode = MutableStateFlow<Int?>(null)
+        val connectedWatchVersionCode: StateFlow<Int?> = _connectedWatchVersionCode.asStateFlow()
+
+        private val _connectedWatchVersionName = MutableStateFlow<String?>(null)
+        val connectedWatchVersionName: StateFlow<String?> = _connectedWatchVersionName.asStateFlow()
+
+        private val _otaProgress = MutableStateFlow<OtaProgressPayload?>(null)
+        val otaProgress: StateFlow<OtaProgressPayload?> = _otaProgress.asStateFlow()
+
+        private val _watchFaceAck = MutableStateFlow<WatchFaceAckPayload?>(null)
+        val watchFaceAck: StateFlow<WatchFaceAckPayload?> = _watchFaceAck.asStateFlow()
+
         // ── Writer for outgoing messages ──────────────────────────────────────
         @Volatile private var sharedWriter: PrintWriter? = null
         @Volatile private var activeInstance: BluetoothSyncService? = null
@@ -84,12 +97,23 @@ class BluetoothSyncService : android.app.Service() {
             return activeInstance?.sendRaw(msg) ?: false
         }
 
-        fun sendWatchFaceToWatch(payload: WatchFaceInstallPayload): Boolean {
+        suspend fun sendStreamingSyncMessage(msg: SyncMessage): Boolean {
+            val inst = activeInstance ?: return false
+            val writer = sharedWriter ?: return false
+            return try {
+                inst.sendStreamingMessage(writer, msg)
+                true
+            } catch (e: Exception) {
+                false
+            }
+        }
+
+        suspend fun sendWatchFaceToWatch(payload: WatchFaceInstallPayload): Boolean {
             val msg = SyncMessage(
                 type = MessageType.WATCH_FACE_INSTALL,
                 payload = Gson().toJson(payload)
             )
-            return sendDirectSyncMessage(msg)
+            return sendStreamingSyncMessage(msg)
         }
 
         // ── Public helpers ────────────────────────────────────────────────────
@@ -205,7 +229,11 @@ class BluetoothSyncService : android.app.Service() {
     private var serverJob: Job? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private data class OutgoingFrame(val writer: PrintWriter, val message: SyncMessage)
-    private val outbound = Channel<OutgoingFrame>(128)
+    private val outbound = Channel<OutgoingFrame>(256)
+
+    internal suspend fun sendStreamingMessage(writer: PrintWriter, message: SyncMessage) {
+        outbound.send(OutgoingFrame(writer, message))
+    }
     private val preferences by lazy { PhonePreferences(this) }
     private data class CachedReply(val signature: String, val result: ReplyResultPayload)
     private val replyResults = object : LinkedHashMap<Long, CachedReply>(64, 0.75f, true) {
@@ -546,6 +574,28 @@ class BluetoothSyncService : android.app.Service() {
                     Log.d(TAG, "Received CALL_ACTION from watch: ${callAction.action}")
                     handleCallAction(callAction)
                 }
+                MessageType.DEVICE_INFO -> {
+                    try {
+                        val info = gson.fromJson(msg.payload, DeviceInfoPayload::class.java)
+                        _connectedWatchVersionCode.value = info.versionCode
+                        _connectedWatchVersionName.value = info.versionName
+                        Log.i(TAG, "Connected Watch Info: ${info.model} v${info.versionName} (build ${info.versionCode})")
+                    } catch (e: Exception) { Log.w(TAG, "Error parsing DEVICE_INFO: ${e.message}") }
+                }
+                MessageType.OTA_PROGRESS -> {
+                    try {
+                        val prog = gson.fromJson(msg.payload, OtaProgressPayload::class.java)
+                        _otaProgress.value = prog
+                        Log.d(TAG, "Watch confirmed OTA progress: chunk ${prog.receivedChunks}/${prog.totalChunks} (${prog.percent}%)")
+                    } catch (e: Exception) { Log.w(TAG, "Error parsing OTA_PROGRESS: ${e.message}") }
+                }
+                MessageType.WATCH_FACE_ACK -> {
+                    try {
+                        val ack = gson.fromJson(msg.payload, WatchFaceAckPayload::class.java)
+                        _watchFaceAck.value = ack
+                        Log.i(TAG, "Watch Face ACK received: ${ack.id} - ${ack.message} (success=${ack.success})")
+                    } catch (e: Exception) { Log.w(TAG, "Error parsing WATCH_FACE_ACK: ${e.message}") }
+                }
                 // Phone Telecom callbacks are the authority for call state.
                 MessageType.PING         -> sendRaw(SyncMessage(MessageType.ACK, payload = "{}"))
                 else -> Unit
@@ -594,6 +644,11 @@ class BluetoothSyncService : android.app.Service() {
 
     private fun updateState(state: ConnectionInfo) {
         val newConnection = state.isConnected && !_connectionState.value.isConnected
+        if (!state.isConnected) {
+            _connectedWatchVersionCode.value = null
+            _connectedWatchVersionName.value = null
+            _otaProgress.value = null
+        }
         _heartRateFeedback.update {
             if (newConnection) null else currentHeartRateFeedback(it, state.isConnected, System.currentTimeMillis())
         }
