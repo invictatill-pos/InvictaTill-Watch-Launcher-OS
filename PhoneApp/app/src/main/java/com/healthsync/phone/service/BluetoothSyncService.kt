@@ -67,6 +67,7 @@ class BluetoothSyncService : android.app.Service() {
         const val ACTION_RECONNECT         = "com.healthsync.phone.RECONNECT"
         const val ACTION_FORCE_MEASURE_HR  = "com.healthsync.phone.FORCE_MEASURE_HR"
         const val ACTION_FORCE_MEASURE_SPO2 = "com.healthsync.phone.FORCE_MEASURE_SPO2"
+        const val ACTION_SEND_WATCH_FACE   = "com.healthsync.phone.SEND_WATCH_FACE"
         const val EXTRA_PAYLOAD            = "payload"
 
         // ── Live connection state (observed by UI) ────────────────────────────
@@ -81,6 +82,14 @@ class BluetoothSyncService : android.app.Service() {
 
         fun sendDirectSyncMessage(msg: SyncMessage): Boolean {
             return activeInstance?.sendRaw(msg) ?: false
+        }
+
+        fun sendWatchFaceToWatch(payload: WatchFaceInstallPayload): Boolean {
+            val msg = SyncMessage(
+                type = MessageType.WATCH_FACE_INSTALL,
+                payload = Gson().toJson(payload)
+            )
+            return sendDirectSyncMessage(msg)
         }
 
         // ── Public helpers ────────────────────────────────────────────────────

@@ -68,6 +68,7 @@ class WatchFaceActivity : AppCompatActivity() {
     }
 
     private lateinit var chronoWatchFaceView: ChronoWatchFaceView
+    private lateinit var dynamicWatchFaceView: DynamicWatchFaceView
     private lateinit var circularWatchFaceView: CircularWatchFaceView
     private lateinit var orbitFace: OrbitWatchFaceView
     private lateinit var shellDock: LinearLayout
@@ -176,6 +177,7 @@ class WatchFaceActivity : AppCompatActivity() {
             }
             if (intent.action == "com.healthsync.watch.WORKOUT_SAVED") refreshDailyTotals()
             if (intent.action == NotificationInboxStore.ACTION_CHANGED) refreshUnread()
+            if (intent.action == "com.healthsync.watch.ACTION_FACE_CHANGED") updateWatchFaceVisibility()
             // Sensor events must not turn the minute-only dim clock into a continuous redraw loop.
             if (!isAmbient && surface == null) updateLiveData()
         }
@@ -192,6 +194,7 @@ class WatchFaceActivity : AppCompatActivity() {
         setWatchFullscreen()
 
         chronoWatchFaceView = findViewById(R.id.chronoWatchFaceView)
+        dynamicWatchFaceView = findViewById(R.id.dynamicWatchFaceView)
         circularWatchFaceView = findViewById(R.id.circularWatchFaceView)
         orbitFace = findViewById(R.id.orbitWatchFace)
         shellDock = findViewById(R.id.shellDock)
@@ -320,6 +323,7 @@ class WatchFaceActivity : AppCompatActivity() {
         circularWatchFaceView.setAmbientMode(ambient)
         orbitFace.setAmbient(ambient)
         chronoWatchFaceView.setAmbientMode(ambient)
+        dynamicWatchFaceView.setAmbientMode(ambient)
         window.attributes = window.attributes.apply {
             screenBrightness = if (ambient) preferences.aodBrightness else interactiveBrightness
         }
@@ -614,11 +618,26 @@ class WatchFaceActivity : AppCompatActivity() {
         circularWatchFaceView.setAodStyle(if (preferences.aodStyle == "face")
             WatchFaceCatalog.ambientStyleForFace(style) else preferences.aodStyle)
         chronoWatchFaceView.setAodStyle(preferences.aodStyle)
+        dynamicWatchFaceView.setAodStyle(preferences.aodStyle)
         circularWatchFaceView.visibility = View.GONE
+
+        val isDynamic = style.startsWith("dynamic_")
+        if (isDynamic) {
+            val pkg = com.healthsync.watch.data.watchface.DynamicFaceStore.getInstance(this).getFace(style)
+            if (pkg != null) {
+                dynamicWatchFaceView.loadFace(pkg)
+                dynamicWatchFaceView.visibility = View.VISIBLE
+            } else {
+                dynamicWatchFaceView.visibility = View.GONE
+            }
+        } else {
+            dynamicWatchFaceView.visibility = View.GONE
+        }
+
         orbitFace.visibility = if ((!isAmbient && style == "orbit") || (isAmbient && style == "orbit")) View.VISIBLE else View.GONE
         chronoWatchFaceView.visibility = if (style == "chrono" || style == "classic") View.VISIBLE else View.GONE
         shellDock.visibility = if (clockShortcuts && !isAmbient && surface == null) View.VISIBLE else View.GONE
-        val wallpaper = preferences.wallpaperBackdropEnabled && !isAmbient && surface == null && style != "classic" && style != "chrono"
+        val wallpaper = preferences.wallpaperBackdropEnabled && !isAmbient && surface == null && style != "classic" && style != "chrono" && !isDynamic
         if (wallpaper) window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
         else window.clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
         window.setBackgroundDrawable(ColorDrawable(if (wallpaper) Color.TRANSPARENT else Color.BLACK))
@@ -641,6 +660,7 @@ class WatchFaceActivity : AppCompatActivity() {
         circularWatchFaceView.updateTime(nowCal)
         orbitFace.updateTime(nowCal)
         if (chronoWatchFaceView.visibility == View.VISIBLE || isAmbient) chronoWatchFaceView.updateTime(nowCal)
+        if (dynamicWatchFaceView.visibility == View.VISIBLE || isAmbient) dynamicWatchFaceView.updateTime(nowCal)
 
         val heart = SensorCollectorService.watchFaceHeartRate(nowCal.timeInMillis)
         val bpm = heart.bpm
@@ -650,6 +670,8 @@ class WatchFaceActivity : AppCompatActivity() {
         circularWatchFaceView.setHeartRateUnverified(heart.sensorReading)
         chronoWatchFaceView.setHeartRateTime(heart.capturedAt)
         chronoWatchFaceView.setHeartRateUnverified(heart.sensorReading)
+        dynamicWatchFaceView.setHeartRateTime(heart.capturedAt)
+        dynamicWatchFaceView.setHeartRateUnverified(heart.sensorReading)
         val steps = SensorCollectorService.latestSteps.coerceAtLeast(0)
         val stepGoal = preferences.stepGoal.coerceAtLeast(1)
         val connected = BluetoothClientService.isConnected
@@ -677,6 +699,11 @@ class WatchFaceActivity : AppCompatActivity() {
         chronoWatchFaceView.setBluetoothConnected(connected)
         chronoWatchFaceView.setBatteryLevel(battery)
 
+        // Update Dynamic Watch Face (.hswf)
+        dynamicWatchFaceView.setHealthData(bpm, steps, stepGoal, dailyCalories, dailyDistanceKm)
+        dynamicWatchFaceView.setBluetoothConnected(connected)
+        dynamicWatchFaceView.setBatteryLevel(battery)
+
         val today = nowCal.get(Calendar.DAY_OF_YEAR)
         if (today != displayedDay) {
             displayedDay = today
@@ -700,9 +727,15 @@ class WatchFaceActivity : AppCompatActivity() {
             val heart = SensorCollectorService.watchFaceHeartRate()
             chronoWatchFaceView.setHeartRateTime(heart.capturedAt)
             chronoWatchFaceView.setHeartRateUnverified(heart.sensorReading)
+            dynamicWatchFaceView.setHeartRateTime(heart.capturedAt)
+            dynamicWatchFaceView.setHeartRateUnverified(heart.sensorReading)
             circularWatchFaceView.setHeartRateTime(heart.capturedAt)
             circularWatchFaceView.setHeartRateUnverified(heart.sensorReading)
             chronoWatchFaceView.setHealthData(heart.bpm,
+                SensorCollectorService.latestSteps.coerceAtLeast(0),
+                preferences.stepGoal.coerceAtLeast(1),
+                dailyCalories, dailyDistanceKm)
+            dynamicWatchFaceView.setHealthData(heart.bpm,
                 SensorCollectorService.latestSteps.coerceAtLeast(0),
                 preferences.stepGoal.coerceAtLeast(1),
                 dailyCalories, dailyDistanceKm)
@@ -770,6 +803,7 @@ class WatchFaceActivity : AppCompatActivity() {
             addAction(Intent.ACTION_TIME_CHANGED)
             addAction(Intent.ACTION_TIMEZONE_CHANGED)
             addAction(NotificationInboxStore.ACTION_CHANGED)
+            addAction("com.healthsync.watch.ACTION_FACE_CHANGED")
         }, ContextCompat.RECEIVER_NOT_EXPORTED)
 
         setAmbientDisplay(false)
@@ -807,6 +841,7 @@ class WatchFaceActivity : AppCompatActivity() {
         setAmbientDisplay(false)
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         chronoWatchFaceView.stopIlluminator()
+        dynamicWatchFaceView.stopIlluminator()
         runCatching { unregisterReceiver(receiver) }
         super.onPause()
     }

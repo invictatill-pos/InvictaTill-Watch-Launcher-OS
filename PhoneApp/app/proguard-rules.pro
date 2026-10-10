@@ -1,5 +1,6 @@
 -keep class com.healthsync.phone.data.model.** { *; }
 -keep class com.healthsync.phone.data.update.** { *; }
+-keep class com.healthsync.phone.data.watchface.** { *; }
 -keepclassmembers class com.healthsync.phone.data.update.** { *; }
 -keepattributes Signature
 -keepattributes *Annotation*

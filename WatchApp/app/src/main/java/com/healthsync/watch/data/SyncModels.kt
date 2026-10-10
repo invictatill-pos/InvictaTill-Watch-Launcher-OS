@@ -31,8 +31,23 @@ enum class MessageType {
     OTA_START,
     OTA_CHUNK,
     OTA_COMPLETE,
-    OTA_PROGRESS
+    OTA_PROGRESS,
+    WATCH_FACE_INSTALL,
+    WATCH_FACE_ACK
 }
+
+data class WatchFaceInstallPayload(
+    val id: String,
+    val name: String,
+    val jsonContent: String,
+    val setActive: Boolean = true
+)
+
+data class WatchFaceAckPayload(
+    val id: String,
+    val success: Boolean,
+    val message: String = ""
+)
 
 data class OtaStartPayload(
     val versionName: String,

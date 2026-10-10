@@ -1,18 +1,18 @@
 {
   "phone": {
-    "versionCode": 11,
-    "versionName": "2.3.1",
+    "versionCode": 12,
+    "versionName": "2.3.2",
     "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/latest/download/HealthSync-Phone.apk",
-    "changelog": "• Fixed first sync banner issue on dashboard\n• In-app updater optimization & cache-busting\n• Chrono Ultra watch face companion sync",
+    "changelog": "• Dynamic Watch Face Engine (.hswf) integration\n• 1:1 Jetpack Compose Canvas watch face previewer\n• Bluetooth companion watch face installer",
     "forceUpdate": false,
-    "sha256": "09279d5769717b00a01a34b3959853294a9d7e49b4a96afd88d64a7a0b0cc060"
+    "sha256": "dc808db1ddd81cf3d11670fab40c8d480ad925447736d04ab3fe3357d844cace"
   },
   "watch": {
-    "versionCode": 17,
-    "versionName": "2.4.1",
+    "versionCode": 18,
+    "versionName": "2.4.2",
     "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/latest/download/HealthSync-Watch.apk",
-    "changelog": "• New Chrono Ultra luxury sports chronograph watch face with live subdials\n• Minimal luminous AOD ambient mode\n• Streamlined dial rendering engine",
+    "changelog": "• Phase 3 Dynamic Watch Face Engine (.hswf)\n• 60 FPS hardware Canvas renderer with real-time complications\n• Starter showcase dials: Neon Cyberpunk & Bauhaus Minimal",
     "forceUpdate": false,
-    "sha256": "a5466b46644e0467201b9673ffe890f22087850ce2302df360bf3afbd41991de"
+    "sha256": "60bd592a958538c668fd7611285c9199e13de349173a2cfe3414afd7ff20c0db"
   }
 }

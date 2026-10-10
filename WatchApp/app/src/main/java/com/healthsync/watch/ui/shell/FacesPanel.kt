@@ -50,14 +50,21 @@ class FacesPanel(private val activity: AppCompatActivity, private val onClose: (
     }
 
     init {
+        val allEntries = WatchFaceCatalog.allEntries(activity)
         label("Watch faces", 23f)
-        label("${WatchFaceCatalog.entries.size} faces · ${WatchFaceCatalog.ambientEntries.size} dim styles", 11f)
+        label("${allEntries.size} faces · ${WatchFaceCatalog.ambientEntries.size} dim styles", 11f)
 
-        for (entry in WatchFaceCatalog.entries) {
+        for (entry in allEntries) {
             val style = entry.id
-            val preview: View? = when (style) {
-                "orbit" -> OrbitWatchFaceView(activity).apply { setStyle("orbit") }
-                "chrono", "classic" -> ChronoWatchFaceView(activity)
+            val preview: View? = when {
+                style == "orbit" -> OrbitWatchFaceView(activity).apply { setStyle("orbit") }
+                style == "chrono" || style == "classic" -> ChronoWatchFaceView(activity)
+                style.startsWith("dynamic_") -> {
+                    val pkg = com.healthsync.watch.data.watchface.DynamicFaceStore.getInstance(activity).getFace(style)
+                    if (pkg != null) {
+                        com.healthsync.watch.ui.DynamicWatchFaceView(activity).apply { loadFace(pkg) }
+                    } else null
+                }
                 else -> null
             }
             if (preview != null) {
@@ -136,6 +143,14 @@ class FacesPanel(private val activity: AppCompatActivity, private val onClose: (
                 preview.setData(steps, prefs.stepGoal, heart.bpm, battery, linked, 0, WorkoutTrackingService.isActive)
             }
             is ChronoWatchFaceView -> {
+                preview.setHeartRateTime(heart.capturedAt)
+                preview.setHeartRateUnverified(heart.sensorReading)
+                preview.updateTime(time)
+                preview.setHealthData(heart.bpm, steps, prefs.stepGoal, 0.0, 0.0)
+                preview.setBluetoothConnected(linked)
+                preview.setBatteryLevel(battery)
+            }
+            is com.healthsync.watch.ui.DynamicWatchFaceView -> {
                 preview.setHeartRateTime(heart.capturedAt)
                 preview.setHeartRateUnverified(heart.sensorReading)
                 preview.updateTime(time)

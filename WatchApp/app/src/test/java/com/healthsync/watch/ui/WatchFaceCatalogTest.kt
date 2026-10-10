@@ -41,4 +41,10 @@ class WatchFaceCatalogTest {
             assertTrue(WatchFaceCatalog.showsClockShortcuts(style, enabled = true))
         }
     }
+
+    @Test fun dynamicFacesAreRecognized() {
+        assertTrue(WatchFaceCatalog.isDynamic("dynamic_neon_cyberpunk"))
+        assertFalse(WatchFaceCatalog.isDynamic("orbit"))
+        assertFalse(WatchFaceCatalog.isDynamic("chrono"))
+    }
 }

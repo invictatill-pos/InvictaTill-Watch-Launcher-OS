@@ -132,8 +132,8 @@ class WatchPreferences(context: Context) {
     /** Faces rendered in the unified watch shell. */
     var watchFaceStyle: String
         get() = prefs.getString("watch_face_style", "orbit")
-            ?.takeIf { it in FACE_STYLES } ?: "orbit"
-        set(v) { if (v in FACE_STYLES) prefs.edit().putString("watch_face_style", v).apply() }
+            ?.takeIf { it in FACE_STYLES || it.startsWith("dynamic_") } ?: "orbit"
+        set(v) { if (v in FACE_STYLES || v.startsWith("dynamic_")) prefs.edit().putString("watch_face_style", v).apply() }
 
     fun upgradeToWatchShell() {
         if (!prefs.getBoolean("watch_shell_v2", false)) {

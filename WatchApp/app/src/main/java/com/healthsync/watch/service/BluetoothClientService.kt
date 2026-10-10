@@ -333,6 +333,24 @@ class BluetoothClientService : Service() {
                     val payload = msg.parsePayload<OtaCompletePayload>(gson)
                     com.healthsync.watch.update.WatchUpdateManager.onOtaComplete(applicationContext, payload)
                 }
+                MessageType.WATCH_FACE_INSTALL -> {
+                    try {
+                        val payload = msg.parsePayload<WatchFaceInstallPayload>(gson)
+                        val pkg = gson.fromJson(payload.jsonContent, com.healthsync.watch.data.watchface.HswfPackage::class.java)
+                        val saved = com.healthsync.watch.data.watchface.DynamicFaceStore.getInstance(applicationContext).saveFace(pkg)
+                        if (saved && payload.setActive) {
+                            com.healthsync.watch.data.WatchPreferences(applicationContext).watchFaceStyle = "dynamic_${pkg.id}"
+                            sendBroadcast(Intent("com.healthsync.watch.ACTION_FACE_CHANGED").setPackage(packageName))
+                        }
+                        sendRawMsg(SyncMessage(
+                            type = MessageType.WATCH_FACE_ACK,
+                            payload = gson.toJson(WatchFaceAckPayload(id = payload.id, success = saved, message = if (saved) "Installed" else "Save failed"))
+                        ), gson)
+                        Log.d(TAG, "Dynamic watch face received and saved: ${payload.name} (${payload.id})")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error installing watch face: ${e.message}", e)
+                    }
+                }
                 MessageType.ACK  -> Log.d(TAG, "ACK received")
                 MessageType.PING -> sendRawMsg(SyncMessage(MessageType.ACK, payload = "{}"), gson)
                 else -> Unit

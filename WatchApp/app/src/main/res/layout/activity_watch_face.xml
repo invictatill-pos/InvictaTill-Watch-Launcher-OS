@@ -9,6 +9,13 @@
         android:layout_height="match_parent"
         android:visibility="gone" />
 
+    <!-- Dynamic Downloadable Watch Face Engine View (.hswf) -->
+    <com.healthsync.watch.ui.DynamicWatchFaceView
+        android:id="@+id/dynamicWatchFaceView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
     <!-- Fallback Ambient Display View -->
     <com.healthsync.watch.ui.CircularWatchFaceView android:id="@+id/circularWatchFaceView"
         android:layout_width="match_parent" android:layout_height="match_parent"
