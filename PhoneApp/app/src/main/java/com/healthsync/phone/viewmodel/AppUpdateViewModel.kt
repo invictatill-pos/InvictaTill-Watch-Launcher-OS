@@ -119,29 +119,35 @@ class AppUpdateViewModel @Inject constructor(
         }
     }
 
-    fun updatePhone() {
+    fun updatePhone(context: Context? = null) {
         val info = _phoneUpdateInfo.value ?: _manifest.value?.phone ?: return
         _dialogUpdateInfo.value = info
         _isWatchUpdate.value = false
         _status.value = UpdateStatus.UpdateAvailable(info, isWatch = false)
         _showDialog.value = true
+        val targetContext = context ?: getApplication<Application>()
+        startUpdate(targetContext)
     }
 
-    fun updateWatch() {
+    fun updateWatch(context: Context? = null) {
         val info = _watchUpdateInfo.value ?: _manifest.value?.watch ?: return
         _dialogUpdateInfo.value = info
         _isWatchUpdate.value = true
         _status.value = UpdateStatus.UpdateAvailable(info, isWatch = true)
         _showDialog.value = true
+        val targetContext = context ?: getApplication<Application>()
+        startUpdate(targetContext)
     }
 
-    fun forcePushWatchUpdate() {
+    fun forcePushWatchUpdate(context: Context? = null) {
+        val targetContext = context ?: getApplication<Application>()
         val info = _manifest.value?.watch
         if (info != null) {
             _dialogUpdateInfo.value = info
             _isWatchUpdate.value = true
             _status.value = UpdateStatus.UpdateAvailable(info, isWatch = true)
             _showDialog.value = true
+            startUpdate(targetContext)
         } else {
             viewModelScope.launch {
                 _status.value = UpdateStatus.Checking
@@ -152,6 +158,7 @@ class AppUpdateViewModel @Inject constructor(
                     _isWatchUpdate.value = true
                     _status.value = UpdateStatus.UpdateAvailable(fetched.watch, isWatch = true)
                     _showDialog.value = true
+                    startUpdate(targetContext)
                 } else {
                     _status.value = UpdateStatus.Error("Unable to fetch watch update package.")
                 }
@@ -166,9 +173,17 @@ class AppUpdateViewModel @Inject constructor(
         _showDialog.value = true
     }
 
-    fun startUpdate(context: Context) {
-        val info = _dialogUpdateInfo.value ?: return
+    fun startUpdate(context: Context? = null) {
+        val targetContext = context ?: getApplication<Application>()
+        val info = _dialogUpdateInfo.value ?: _phoneUpdateInfo.value ?: _watchUpdateInfo.value ?: _manifest.value?.let { if (_isWatchUpdate.value) it.watch else it.phone } ?: return
+        _dialogUpdateInfo.value = info
         val isWatch = _isWatchUpdate.value
+
+        // Prevent redundant parallel downloads
+        val current = _status.value
+        if (current is UpdateStatus.Downloading || current is UpdateStatus.TransferringToWatch) {
+            return
+        }
 
         viewModelScope.launch {
             if (isWatch) {
@@ -178,12 +193,12 @@ class AppUpdateViewModel @Inject constructor(
                 }
 
                 _status.value = UpdateStatus.Downloading(0, 0, 0)
-                val file = AppUpdateManager.downloadApk(context, info.apkUrl, "watch-update-${info.versionName}.apk") { pct, dl, total ->
+                val file = AppUpdateManager.downloadApk(targetContext, info.apkUrl, "watch-update-${info.versionName}.apk") { pct, dl, total ->
                     _status.value = UpdateStatus.Downloading(pct, dl, total)
                 }
 
                 if (file == null) {
-                    _status.value = UpdateStatus.Error("Failed to download watch update package.")
+                    _status.value = UpdateStatus.Error(AppUpdateManager.lastError ?: "Failed to download watch update package.")
                     return@launch
                 }
 
@@ -196,26 +211,26 @@ class AppUpdateViewModel @Inject constructor(
                     _showDialog.value = false
                     _status.value = UpdateStatus.Idle
                 } else {
-                    _status.value = UpdateStatus.Error("Bluetooth transmission interrupted.")
+                    _status.value = UpdateStatus.Error(AppUpdateManager.lastError ?: "Bluetooth transmission interrupted.")
                 }
             } else {
                 _status.value = UpdateStatus.Downloading(0, 0, 0)
-                val file = AppUpdateManager.downloadApk(context, info.apkUrl, "phone-update-${info.versionName}.apk") { pct, dl, total ->
+                val file = AppUpdateManager.downloadApk(targetContext, info.apkUrl, "phone-update-${info.versionName}.apk") { pct, dl, total ->
                     _status.value = UpdateStatus.Downloading(pct, dl, total)
                 }
 
                 if (file == null) {
-                    _status.value = UpdateStatus.Error("Failed to download phone update package.")
+                    _status.value = UpdateStatus.Error(AppUpdateManager.lastError ?: "Failed to download phone update package.")
                     return@launch
                 }
 
                 _status.value = UpdateStatus.ReadyToInstall(file)
-                val launched = AppUpdateManager.installApk(context, file)
+                val launched = AppUpdateManager.installApk(targetContext, file)
                 if (launched) {
                     _showDialog.value = false
                     _status.value = UpdateStatus.Idle
                 } else {
-                    _status.value = UpdateStatus.Error("Could not launch package installer.")
+                    _status.value = UpdateStatus.Error("Could not launch package installer. Please check Unknown Sources permission.")
                 }
             }
         }

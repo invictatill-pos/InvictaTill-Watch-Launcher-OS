@@ -179,7 +179,7 @@ fun DeviceScreen(
                         val watchUpdateInfo by updateViewModel.watchUpdateInfo.collectAsState()
                         Surface(
                             onClick = {
-                                if (watchUpdateInfo != null) updateViewModel.updateWatch()
+                                if (watchUpdateInfo != null) updateViewModel.updateWatch(context)
                                 else updateViewModel.checkWatchUpdateManually()
                             },
                             modifier = Modifier.fillMaxWidth().height(40.dp),

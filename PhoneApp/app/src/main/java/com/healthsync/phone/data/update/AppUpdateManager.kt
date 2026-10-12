@@ -213,6 +213,18 @@ object AppUpdateManager {
     /** Triggers the Android native PackageInstaller dialog using FileProvider */
     fun installApk(context: Context, apkFile: File): Boolean {
         return try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                if (!context.packageManager.canRequestPackageInstalls()) {
+                    try {
+                        val manageIntent = Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                            data = android.net.Uri.parse("package:${context.packageName}")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(manageIntent)
+                    } catch (_: Exception) { }
+                }
+            }
+
             val authority = "${context.packageName}.fileprovider"
             val uri = FileProvider.getUriForFile(context, authority, apkFile)
             val intent = Intent(Intent.ACTION_VIEW).apply {
@@ -223,6 +235,7 @@ object AppUpdateManager {
             context.startActivity(intent)
             true
         } catch (e: Exception) {
+            lastError = e.message
             Log.e(TAG, "Failed to launch installer intent: ${e.message}", e)
             false
         }

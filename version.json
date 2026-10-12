@@ -3,9 +3,9 @@
     "versionCode": 16,
     "versionName": "2.4.0",
     "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/latest/download/HealthSync-Phone.apk",
-    "changelog": "• Watch Face Creator Studio: Frame simulator (Titanium Ultra, Steel, Matte Black), interactive live ticking & sensor test bench, dark photo tinting, hand styles & complication designs\n• 50+ Curated Watch Faces in Online Store across Luxury, Sports, Cyberpunk, Retro, Minimal, and Art\n• 5 Native Interactive Watch Faces: Orbit Pro, Chrono Ultra, Retro Illuminator, Cyberpunk HUD, and Bauhaus Minimal\n• Bottom navigation bar integrated with dedicated Faces Studio tab and home quick-launch banner",
+    "changelog": "• Watch Face Creator Studio: Frame simulator (Titanium Ultra, Steel, Matte Black), interactive live ticking & sensor test bench, dark photo tinting, hand styles & complication designs\n• 50+ Curated Watch Faces in Online Store across Luxury, Sports, Cyberpunk, Retro, Minimal, and Art\n• 5 Native Interactive Watch Faces: Orbit Pro, Chrono Ultra, Retro Illuminator, Cyberpunk HUD, and Bauhaus Minimal\n• Instant 1-tap update execution and shared ViewModel state across Settings and Device screens",
     "forceUpdate": false,
-    "sha256": "87e1196cfdda42e9921a8abb821712fa5818686776565f9086a93a4094045c66"
+    "sha256": "64a4a2bc9ebab7214dfabfae4a66efba7f4ed6ec09f738dd6fb75e2c60f1da7f"
   },
   "watch": {
     "versionCode": 22,

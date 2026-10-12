@@ -244,13 +244,19 @@ fun MainAppContent(onRequestPermissions: () -> Unit = {}) {
             composable(Screen.Device.route) {
                 DeviceScreen(
                     onRequestPermissions = onRequestPermissions,
-                    onOpenWatchFaceStore = { navController.navigate(Screen.WatchFaces.route) }
+                    onOpenWatchFaceStore = { navController.navigate(Screen.WatchFaces.route) },
+                    updateViewModel = updateViewModel
                 )
             }
             composable(Screen.WatchFaces.route) {
                 com.healthsync.phone.ui.watchface.WatchFaceStoreScreen(onBack = { navController.popBackStack() })
             }
-            composable(Screen.Settings.route) { SettingsScreen(onRequestPermissions = onRequestPermissions) }
+            composable(Screen.Settings.route) {
+                SettingsScreen(
+                    onRequestPermissions = onRequestPermissions,
+                    updateViewModel = updateViewModel
+                )
+            }
         }
     }
 }

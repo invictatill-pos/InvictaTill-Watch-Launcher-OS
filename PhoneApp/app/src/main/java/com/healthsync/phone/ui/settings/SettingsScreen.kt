@@ -377,7 +377,7 @@ fun SettingsScreen(
                         }
                         if (phoneUpdateInfo != null) {
                             Button(
-                                onClick = { updateViewModel.updatePhone() },
+                                onClick = { updateViewModel.updatePhone(context) },
                                 colors = ButtonDefaults.buttonColors(containerColor = AccentCyan),
                                 shape = RoundedCornerShape(8.dp),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
@@ -415,7 +415,7 @@ fun SettingsScreen(
                         }
                         if (watchUpdateInfo != null) {
                             Button(
-                                onClick = { updateViewModel.updateWatch() },
+                                onClick = { updateViewModel.updateWatch(context) },
                                 colors = ButtonDefaults.buttonColors(containerColor = AccentCyan),
                                 shape = RoundedCornerShape(8.dp),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
@@ -438,7 +438,7 @@ fun SettingsScreen(
                                     }
                                 }
                                 TextButton(
-                                    onClick = { updateViewModel.forcePushWatchUpdate() },
+                                    onClick = { updateViewModel.forcePushWatchUpdate(context) },
                                     contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
                                 ) {
                                     Text("Re-send", color = AccentCyan, fontSize = 11.sp)
@@ -491,6 +491,18 @@ fun SettingsScreen(
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium
                                 )
+                            }
+                        }
+                        is com.healthsync.phone.data.update.UpdateStatus.ReadyToInstall -> {
+                            Button(
+                                onClick = { updateViewModel.startUpdate(context) },
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = AccentCyan),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Default.SystemUpdate, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Install Downloaded Update", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                         is com.healthsync.phone.data.update.UpdateStatus.Error -> {

@@ -204,6 +204,17 @@ fun AppUpdateDialog(
                             Text("Retry Update")
                         }
                     }
+                    is UpdateStatus.ReadyToInstall -> {
+                        Button(
+                            onClick = onStartUpdate,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Icon(Icons.Default.SystemUpdate, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Install Update Now", fontWeight = FontWeight.SemiBold)
+                        }
+                    }
                     else -> {
                         Button(
                             onClick = onStartUpdate,
