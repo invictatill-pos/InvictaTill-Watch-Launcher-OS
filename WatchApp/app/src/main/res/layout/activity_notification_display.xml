@@ -10,7 +10,7 @@
                 android:orientation="vertical" android:layout_marginStart="8dp">
                 <TextView android:id="@+id/tvAppLabel" style="@style/WatchLabel" android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:text="App" android:textColor="#8CE7C8" android:textStyle="bold" />
-                <TextView android:id="@+id/tvNotifTime" style="@style/WatchLabel" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:textSize="10sp" />
+                <TextView android:id="@+id/tvNotifTime" style="@style/WatchLabel" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:textSize="12sp" />
             </LinearLayout>
         </LinearLayout>
         <TextView android:id="@+id/tvNotifTitle" style="@style/WatchText" android:layout_width="match_parent" android:layout_height="wrap_content"

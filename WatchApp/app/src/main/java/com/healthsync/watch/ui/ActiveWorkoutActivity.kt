@@ -58,6 +58,7 @@ class ActiveWorkoutActivity : AppCompatActivity() {
     private var ending = false
     private var durationMs = 0L
     private var distanceM = 0f
+    private var distanceSource = "UNKNOWN"
     private var calories = 0.0
     private var steps = 0
     private var metric1 = ""
@@ -93,10 +94,11 @@ class ActiveWorkoutActivity : AppCompatActivity() {
             if (intent.action != WorkoutTrackingService.ACTION_UPDATE || ending) return
             paused = intent.getBooleanExtra(WorkoutTrackingService.EXTRA_IS_PAUSED, paused)
             durationMs = intent.getLongExtra(WorkoutTrackingService.EXTRA_DURATION, durationMs).coerceAtLeast(0)
-            distanceM = intent.getFloatExtra(WorkoutTrackingService.EXTRA_DISTANCE, distanceM).coerceAtLeast(0f)
+            distanceM = intent.getFloatExtra(WorkoutTrackingService.EXTRA_DISTANCE, distanceM).takeIf { it.isFinite() && it >= 0f } ?: 0f
+            distanceSource = intent.getStringExtra(WorkoutTrackingService.EXTRA_DISTANCE_SOURCE) ?: distanceSource
             metric1 = intent.getStringExtra(WorkoutTrackingService.EXTRA_METRIC_1) ?: metric1
             metric2 = intent.getStringExtra(WorkoutTrackingService.EXTRA_METRIC_2) ?: metric2
-            calories = intent.getDoubleExtra("calories", calories).coerceAtLeast(0.0)
+            calories = intent.getDoubleExtra("calories", calories).takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
             steps = intent.getIntExtra("steps", steps).coerceAtLeast(0)
             heartRate = intent.getIntExtra("bpm", SensorCollectorService.freshBpm())
             workoutStartMs = WorkoutTrackingService.activeStartTime.takeIf { it > 0 } ?: workoutStartMs
@@ -129,6 +131,10 @@ class ActiveWorkoutActivity : AppCompatActivity() {
         layoutControls = findViewById(R.id.layoutControls)
         btnPauseResumeWorkout = findViewById(R.id.btnPauseResumeWorkout)
         btnWorkoutControls = findViewById(R.id.btnWorkoutControls)
+        findViewById<View>(R.id.btnWorkoutHome).setOnClickListener {
+            startActivity(Intent(this,WatchFaceActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+            finish()
+        }
 
         activityType = if (WorkoutTrackingService.isActive) WorkoutTrackingService.activeActivityType
             else intent.getStringExtra(WorkoutTrackingService.EXTRA_ACTIVITY_TYPE) ?: "Walk"
@@ -205,9 +211,11 @@ class ActiveWorkoutActivity : AppCompatActivity() {
         val sec = durationMs / 1000
         tvDuration.text = if (sec >= 3600) String.format(Locale.getDefault(), "%d:%02d:%02d", sec / 3600, sec / 60 % 60, sec % 60)
             else String.format(Locale.getDefault(), "%02d:%02d", sec / 60, sec % 60)
-        tvMainDistance.text = String.format(Locale.getDefault(), "%.2f km", distanceM / 1000f)
+        tvMainDistance.text = WorkoutMeasurementLabels.distanceValue(distanceM, distanceSource)
+        tvMainDistance.contentDescription = "${tvMainDistance.text}. ${WorkoutMeasurementLabels.distanceSource(distanceSource)}"
         tvDistance.text = steps.toString()
         tvLiveKcal.text = String.format(Locale.getDefault(), "%.0f", calories)
+        tvLiveKcal.contentDescription = "${tvLiveKcal.text} estimated kilocalories"
         tvMetric1.text = metric1.ifBlank { "--" }
         tvMetric2.text = metric2
         updateCurrentHeartRate()
@@ -223,18 +231,16 @@ class ActiveWorkoutActivity : AppCompatActivity() {
 
     private fun updateCurrentHeartRate() {
         val nowMs = System.currentTimeMillis()
-        val reading = SensorCollectorService.watchFaceHeartRate(nowMs)
-        tvLiveHr.text = if (reading.bpm > 0) reading.bpm.toString() else "--"
-        val unit = if (reading.bpm > 0) HeartRatePolicy.complicationUnit(reading.capturedAt, nowMs) else "BPM"
-        tvLiveHrUnit.text = if (unit == "BPM") "♥ bpm" else "♥ $unit"
-        tvLiveHr.contentDescription = if (reading.bpm > 0) {
-            "${reading.bpm} beats per minute${if (reading.sensorReading) ", sensor reading" else ""}. " +
-                HeartRatePolicy.ageLabel(reading.capturedAt, nowMs)
+        val bpm = SensorCollectorService.freshBpm(nowMs)
+        tvLiveHr.text = if (bpm > 0) bpm.toString() else "--"
+        tvLiveHrUnit.text = "♥ bpm"
+        tvLiveHr.contentDescription = if (bpm > 0) {
+            "$bpm beats per minute. " + HeartRatePolicy.ageLabel(SensorCollectorService.latestBpmTimeMs, nowMs)
         } else "Heart rate unavailable"
         // Run uses cadence here; badminton uses a recorded session peak. Other
         // activities use this secondary line for the same current HR display.
         if (activityType.lowercase(Locale.ROOT) !in listOf("run", "running", "badminton")) {
-            tvMetric2.text = if (reading.bpm > 0) "${reading.bpm} $unit" else "-- BPM"
+            tvMetric2.text = if (bpm > 0) "$bpm BPM" else "-- BPM"
             tvMetric2.contentDescription = tvLiveHr.contentDescription
         }
     }
@@ -264,6 +270,7 @@ class ActiveWorkoutActivity : AppCompatActivity() {
         }
         val fixed = state == WorkoutLocationState.GPS_FIX || state == WorkoutLocationState.LOCATION_FIX
         tvGpsStatus.setTextColor(if (fixed) 0xFF8CE7C8.toInt() else 0xFFFFBC6A.toInt())
+        tvGpsStatus.text = "${tvGpsStatus.text}\n${WorkoutMeasurementLabels.distanceSource(distanceSource)}"
         tvGpsStatus.contentDescription = tvGpsStatus.text.toString()
     }
 
@@ -326,9 +333,10 @@ class ActiveWorkoutActivity : AppCompatActivity() {
             putExtra(WorkoutTrackingService.EXTRA_ACTIVITY_TYPE, activityType)
             putExtra("summary_duration_ms", durationMs)
             putExtra("summary_distance_m", distanceM)
+            putExtra("summary_distance_source", distanceSource)
             putExtra("summary_metric1", metric1)
             putExtra("summary_metric2", metric2)
-            putExtra("summary_hr", heartRate)
+            putExtra("summary_hr", 0) // Await the recorded session's average rather than relabeling a current sample.
             putExtra("summary_calories", calories)
             putExtra("summary_steps", steps)
             putExtra("summary_start_ms", workoutStartMs)

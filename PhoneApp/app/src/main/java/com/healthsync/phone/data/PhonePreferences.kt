@@ -105,16 +105,19 @@ class PhonePreferences(context: Context) {
         get() = prefs.getFloat("user_weight_kg", 70f).toDouble().coerceIn(30.0, 250.0)
         set(v) { if (v.isFinite()) prefs.edit().putFloat("user_weight_kg", v.coerceIn(30.0, 250.0).toFloat()).apply() }
 
+    val hasUserWeight: Boolean get() = prefs.contains("user_weight_kg")
+    val hasUserHeight: Boolean get() = prefs.contains("user_height_cm")
+
     var userHeightCm: Int
         get() = prefs.getInt("user_height_cm", 170).coerceIn(100, 230)
         set(v) { prefs.edit().putInt("user_height_cm", v.coerceIn(100, 230)).apply() }
 
     var lastKnownWatchVersion: String
-        get() = prefs.getString("last_known_watch_version", "2.5.0") ?: "2.5.0"
+        get() = prefs.getString("last_known_watch_version", "Unknown") ?: "Unknown"
         set(v) { prefs.edit().putString("last_known_watch_version", v).apply() }
 
     var lastKnownWatchVersionCode: Int
-        get() = prefs.getInt("last_known_watch_version_code", 22)
+        get() = prefs.getInt("last_known_watch_version_code", 0)
         set(v) { prefs.edit().putInt("last_known_watch_version_code", v).apply() }
 
     private fun validInterval(value: Long) = if (value == -1L) value else value.coerceIn(30_000L, 3_600_000L)

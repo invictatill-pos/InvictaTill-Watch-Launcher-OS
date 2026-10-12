@@ -8,6 +8,7 @@ import android.util.AttributeSet
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
+import com.healthsync.watch.sensor.HeartRatePolicy
 import java.util.Calendar
 import java.util.Locale
 import kotlin.math.cos
@@ -39,15 +40,15 @@ class BauhausWatchFaceView @JvmOverloads constructor(
     private var is24Hour = true
 
     // Health & Device State
-    private var heartRate = 72
+    private var heartRate = 0
     private var heartMeasuredAt = 0L
     private var heartRateUnverified = false
-    private var steps = 6200
+    private var steps = -1
     private var stepGoal = 10000
-    private var calories = 340.0
-    private var distanceKm = 4.2
-    private var isBluetoothConnected = true
-    private var batteryLevel = 88
+    private var calories = 0.0
+    private var distanceKm = 0.0
+    private var isBluetoothConnected = false
+    private var batteryLevel = -1
 
     // Ambient / AOD
     private var isAmbient = false
@@ -60,6 +61,12 @@ class BauhausWatchFaceView @JvmOverloads constructor(
     private var touchDownX = 0f
     private var touchDownY = 0f
     private var touchDownTime = 0L
+
+    init {
+        isClickable=true
+        isFocusable=true
+        contentDescription="Bauhaus clock. Activate to show or hide glance details."
+    }
 
     // Paints
     private val dialPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -135,7 +142,7 @@ class BauhausWatchFaceView @JvmOverloads constructor(
     }
 
     fun setBatteryLevel(level: Int) {
-        batteryLevel = level.coerceIn(0, 100)
+        batteryLevel = level.takeIf { it in 0..100 } ?: -1
         if (!isAmbient) invalidate()
     }
 
@@ -153,15 +160,20 @@ class BauhausWatchFaceView @JvmOverloads constructor(
                 val dy = Math.abs(event.y - touchDownY)
                 val duration = SystemClock.uptimeMillis() - touchDownTime
                 if (dx < 20f && dy < 20f && duration < 350) {
-                    // Tap toggles glance complications
-                    showGlanceComplications = !showGlanceComplications
-                    performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                    invalidate()
-                    return true
+                    return performClick()
                 }
             }
         }
         return super.onTouchEvent(event)
+    }
+
+    override fun performClick():Boolean {
+        super.performClick()
+        if(isAmbient) return false
+        showGlanceComplications=!showGlanceComplications
+        performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+        invalidate()
+        return true
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -247,15 +259,16 @@ class BauhausWatchFaceView @JvmOverloads constructor(
             // Top: Battery %
             textPaint.textSize = 9.5f * density
             textPaint.color = if (batteryLevel > 20) silverColor else Color.parseColor("#EF4444")
-            canvas.drawText("BAT $batteryLevel%", cx, cy - 44f * density, textPaint)
+            canvas.drawText(if (batteryLevel >= 0) "BAT $batteryLevel%" else "BAT --", cx, cy - 44f * density, textPaint)
 
             // Bottom: Steps
             textPaint.color = Color.parseColor("#38BDF8")
-            canvas.drawText(String.format(Locale.getDefault(), "%,d STEPS", steps), cx, cy + 54f * density, textPaint)
+            canvas.drawText(StepDisplayLabels.display(String.format(Locale.getDefault(),"%,d",steps),steps)+" STEPS", cx, cy + 54f * density, textPaint)
 
             // Left: Heart Rate
             textPaint.color = Color.parseColor("#F43F5E")
-            val hrStr = if (heartRate > 0) "♥ $heartRate" else "♥ --"
+            val hrUnit = HeartRatePolicy.complicationUnit(heartMeasuredAt, System.currentTimeMillis())
+            val hrStr = if (heartRate > 0) "♥ $heartRate${if (hrUnit == "BPM") "" else " $hrUnit"}" else "♥ --"
             canvas.drawText(hrStr, cx - radius * 0.55f, cy + 3.5f * density, textPaint)
 
             // Brand Header

@@ -21,7 +21,7 @@ import kotlin.math.sin
  *
  * Features:
  * - Holographic HUD dial with glowing battery and step arcs
- * - Animated ECG pulse wave heart-rate complication
+ * - Captured heart-rate complication
  * - Large digital font with seconds gauge
  * - Interactive tap to cycle through 4 Cyberpunk neon color palettes:
  *   Cyber Cyan, Neon Magenta, Matrix Green, Solar Amber
@@ -43,15 +43,15 @@ class NeonHudWatchFaceView @JvmOverloads constructor(
     private var is24Hour = true
 
     // Health & Device State
-    private var heartRate = 72
+    private var heartRate = 0
     private var heartMeasuredAt = 0L
     private var heartRateUnverified = false
-    private var steps = 5420
+    private var steps = -1
     private var stepGoal = 10000
-    private var calories = 312.0
-    private var distanceKm = 3.8
-    private var isBluetoothConnected = true
-    private var batteryLevel = 84
+    private var calories = -1.0
+    private var distanceKm = -1.0
+    private var isBluetoothConnected = false
+    private var batteryLevel = -1
 
     // Ambient / AOD
     private var isAmbient = false
@@ -81,18 +81,18 @@ class NeonHudWatchFaceView @JvmOverloads constructor(
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
     }
-    private val ecgPath = Path()
-    private val ecgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
-        strokeJoin = Paint.Join.ROUND
-    }
     private val arcBounds = RectF()
 
     // Touch
     private var touchDownX = 0f
     private var touchDownY = 0f
     private var touchDownTime = 0L
+
+    init {
+        isClickable=true
+        isFocusable=true
+        contentDescription="Neon clock. Activate to change the color palette."
+    }
 
     fun updateTime(cal: Calendar) {
         hour = if (is24Hour) cal.get(Calendar.HOUR_OF_DAY) else {
@@ -157,7 +157,7 @@ class NeonHudWatchFaceView @JvmOverloads constructor(
     }
 
     fun setBatteryLevel(level: Int) {
-        batteryLevel = level.coerceIn(0, 100)
+        batteryLevel = level.takeIf { it in 0..100 } ?: -1
         if (!isAmbient) invalidate()
     }
 
@@ -175,15 +175,20 @@ class NeonHudWatchFaceView @JvmOverloads constructor(
                 val dy = Math.abs(event.y - touchDownY)
                 val duration = SystemClock.uptimeMillis() - touchDownTime
                 if (dx < 20f && dy < 20f && duration < 350) {
-                    // Tap to cycle neon palette
-                    currentThemeIndex = (currentThemeIndex + 1) % neonThemes.size
-                    performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                    invalidate()
-                    return true
+                    return performClick()
                 }
             }
         }
         return super.onTouchEvent(event)
+    }
+
+    override fun performClick():Boolean {
+        super.performClick()
+        if(isAmbient) return false
+        currentThemeIndex=(currentThemeIndex+1)%neonThemes.size
+        performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+        invalidate()
+        return true
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -231,7 +236,7 @@ class NeonHudWatchFaceView @JvmOverloads constructor(
         textPaint.textSize = 9f * density
         textPaint.color = primaryColor
         textPaint.textAlign = Paint.Align.LEFT
-        canvas.drawText("BAT $batteryLevel%", cx - arcRadius * 0.92f, cy - arcRadius * 0.35f, textPaint)
+        canvas.drawText(if (batteryLevel >= 0) "BAT $batteryLevel%" else "BAT --", cx - arcRadius * 0.92f, cy - arcRadius * 0.35f, textPaint)
 
         // 3. Step Goal Arc (Top-Right 315° to 45°)
         arcPaint.color = dimColor
@@ -243,7 +248,7 @@ class NeonHudWatchFaceView @JvmOverloads constructor(
 
         // Steps Label
         textPaint.textAlign = Paint.Align.RIGHT
-        canvas.drawText(String.format(Locale.getDefault(), "STP %05d", steps), cx + arcRadius * 0.92f, cy - arcRadius * 0.35f, textPaint)
+        canvas.drawText("STP "+StepDisplayLabels.display(String.format(Locale.getDefault(),"%05d",steps),steps), cx + arcRadius * 0.92f, cy - arcRadius * 0.35f, textPaint)
 
         // 4. Central Cyber Grid Header
         textPaint.textAlign = Paint.Align.CENTER
@@ -268,34 +273,19 @@ class NeonHudWatchFaceView @JvmOverloads constructor(
         textPaint.color = primaryColor
         canvas.drawText(String.format(Locale.getDefault(), ":%02d SEC", second), cx, cy + 30f * density, textPaint)
 
-        // 6. ECG Heart Rate Pulse Wave
-        val ecgY = cy + 54f * density
-        val ecgW = cx * 0.75f
-        ecgPath.reset()
-        ecgPath.moveTo(cx - ecgW, ecgY)
-        ecgPath.lineTo(cx - ecgW * 0.45f, ecgY)
-        ecgPath.lineTo(cx - ecgW * 0.35f, ecgY - 6f * density)
-        ecgPath.lineTo(cx - ecgW * 0.25f, ecgY + 8f * density)
-        ecgPath.lineTo(cx - ecgW * 0.15f, ecgY - 14f * density) // QRS peak
-        ecgPath.lineTo(cx - ecgW * 0.05f, ecgY + 12f * density)
-        ecgPath.lineTo(cx + ecgW * 0.05f, ecgY)
-        ecgPath.lineTo(cx + ecgW, ecgY)
-
-        ecgPaint.color = if (heartRate > 0) Color.parseColor("#FF0055") else dimColor
-        ecgPaint.strokeWidth = 2f * density
-        canvas.drawPath(ecgPath, ecgPaint)
-
         // Heart Rate Readout
         textPaint.textSize = 11f * density
         textPaint.color = if (heartRate > 0) Color.parseColor("#FF3366") else dimColor
-        val hrText = if (heartRate > 0) "♥ $heartRate BPM" else "♥ -- BPM"
+        val hrText = if (heartRate > 0) "♥ $heartRate ${HeartRatePolicy.complicationUnit(heartMeasuredAt, System.currentTimeMillis())}" else "♥ -- BPM"
         canvas.drawText(hrText, cx, cy + 74f * density, textPaint)
 
         // 7. Bottom Health Metric Strip (Calories & Distance)
         textPaint.textSize = 9.5f * density
         textPaint.color = primaryColor
         textPaint.textAlign = Paint.Align.CENTER
-        canvas.drawText(String.format(Locale.getDefault(), "%.0f KCAL  |  %.1f KM", calories, distanceKm), cx, cy + 92f * density, textPaint)
+        val calorieLabel=if(calories>=0.0) String.format(Locale.getDefault(),"%.0f",calories) else "—"
+        val distanceLabel=if(distanceKm>=0.0) String.format(Locale.getDefault(),"%.1f",distanceKm) else "—"
+        canvas.drawText("$calorieLabel KCAL EST | $distanceLabel KM EST", cx, cy + 92f * density, textPaint)
     }
 
     private fun drawAodMode(canvas: Canvas, cx: Float, cy: Float, density: Float) {
@@ -307,6 +297,6 @@ class NeonHudWatchFaceView @JvmOverloads constructor(
 
         textPaint.textSize = 11f * density
         textPaint.color = Color.parseColor("#475569")
-        canvas.drawText("$dayOfWeekStr $dayOfMonth · BAT $batteryLevel%", cx, cy + 28f * density, textPaint)
+        canvas.drawText("$dayOfWeekStr $dayOfMonth · ${if (batteryLevel >= 0) "BAT $batteryLevel%" else "BAT --"}", cx, cy + 28f * density, textPaint)
     }
 }

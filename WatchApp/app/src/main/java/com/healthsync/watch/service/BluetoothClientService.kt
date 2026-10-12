@@ -319,8 +319,20 @@ class BluetoothClientService : Service() {
                     // Old/replayed phone settings must not undo a newer watch interval choice.
                     SensorIntervalPolicy.parseSettings(msg.payload)?.let(prefs::applySensorIntervals)
                     if (settings.stepGoal > 0) prefs.stepGoal = settings.stepGoal
-                    if (settings.userWeightKg in 30.0..250.0) prefs.userWeightKg = settings.userWeightKg
-                    if (settings.userHeightCm in 100..230) prefs.userHeightCm = settings.userHeightCm
+                    val profilePrefs = getSharedPreferences("watch_sync_prefs", Context.MODE_PRIVATE)
+                    // Untouched phone calculation defaults must not erase values entered on the watch.
+                    if (settings.userWeightKg in 30.0..250.0 &&
+                        (settings.userWeightConfigured || !profilePrefs.getBoolean("profile_weight_configured", false))) {
+                        prefs.userWeightKg = settings.userWeightKg
+                        profilePrefs.edit()
+                            .putBoolean("profile_weight_configured", settings.userWeightConfigured).apply()
+                    }
+                    if (settings.userHeightCm in 100..230 &&
+                        (settings.userHeightConfigured || !profilePrefs.getBoolean("profile_height_configured", false))) {
+                        prefs.userHeightCm = settings.userHeightCm
+                        profilePrefs.edit()
+                            .putBoolean("profile_height_configured", settings.userHeightConfigured).apply()
+                    }
                     SensorCollectorService.notifySettingsUpdated(applicationContext)
                     syncSensorIntervals(applicationContext)
                     broadcastStatus(this, isConnected)
@@ -356,6 +368,7 @@ class BluetoothClientService : Service() {
                     try {
                         val payload = msg.parsePayload<WatchFaceInstallPayload>(gson)
                         val pkg = gson.fromJson(payload.jsonContent, com.healthsync.watch.data.watchface.HswfPackage::class.java)
+                        require(pkg.id == payload.id) { "Watch face identity did not match the request" }
                         val saved = com.healthsync.watch.data.watchface.DynamicFaceStore.getInstance(applicationContext).saveFace(pkg)
                         if (saved && payload.setActive) {
                             com.healthsync.watch.data.WatchPreferences(applicationContext).watchFaceStyle = "dynamic_${pkg.id}"
@@ -363,7 +376,7 @@ class BluetoothClientService : Service() {
                         }
                         sendRawMsg(SyncMessage(
                             type = MessageType.WATCH_FACE_ACK,
-                            payload = gson.toJson(WatchFaceAckPayload(id = payload.id, success = saved, message = if (saved) "Installed" else "Save failed"))
+                            payload = gson.toJson(WatchFaceAckPayload(id = payload.id, success = saved, message = if (saved) "Installed" else "Save failed", requestId = payload.requestId.orEmpty()))
                         ), gson)
                         Log.d(TAG, "Dynamic watch face received and saved: ${payload.name} (${payload.id})")
                     } catch (e: Exception) {

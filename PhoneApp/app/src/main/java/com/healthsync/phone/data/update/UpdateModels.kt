@@ -28,5 +28,6 @@ sealed class UpdateStatus {
     data class Downloading(val percent: Int, val bytesDownloaded: Long, val totalBytes: Long) : UpdateStatus()
     data class ReadyToInstall(val apkFile: File) : UpdateStatus()
     data class TransferringToWatch(val percent: Int, val currentChunk: Int, val totalChunks: Int) : UpdateStatus()
+    data class WatchInstallRequired(val verified: Boolean) : UpdateStatus()
     data class Error(val message: String) : UpdateStatus()
 }

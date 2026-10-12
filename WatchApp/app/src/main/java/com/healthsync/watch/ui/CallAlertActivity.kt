@@ -15,6 +15,7 @@ import android.app.NotificationManager
 import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
+import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.healthsync.watch.R
@@ -57,6 +58,9 @@ class CallAlertActivity : AppCompatActivity() {
             window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
         }
         setContentView(R.layout.activity_call_alert)
+        val display=resources.displayMetrics
+        findViewById<LinearLayout>(R.id.callAlertContent).setPadding((display.widthPixels*.14f).toInt(),
+            (display.heightPixels*.16f).toInt(),(display.widthPixels*.14f).toInt(),(display.heightPixels*.16f).toInt())
         ContextCompat.registerReceiver(this, receiver, IntentFilter(WatchCallBridge.ACTION_CHANGED), ContextCompat.RECEIVER_NOT_EXPORTED)
         findViewById<View>(R.id.btnAnswer).setOnClickListener { WatchCallBridge.send("ANSWER"); render() }
         findViewById<View>(R.id.btnDecline).setOnClickListener { WatchCallBridge.send("REJECT"); render() }
@@ -74,6 +78,7 @@ class CallAlertActivity : AppCompatActivity() {
             !call.canAnswer -> call.statusText.ifBlank { "Enable watch call controls in the phone app" }
             else -> "Incoming phone call"
         }
+        findViewById<TextView>(R.id.tvCallState).setTextColor(if(state.error!=null) 0xFFFF8395.toInt() else WatchVisualStyle.ACCENT)
         findViewById<TextView>(R.id.tvCallAudioHint).text = when {
             !call.canAnswer -> "Call controls need phone setup. Caller alerts remain available."
             call.bluetoothAudioAvailable -> "Watch call audio available after answering"

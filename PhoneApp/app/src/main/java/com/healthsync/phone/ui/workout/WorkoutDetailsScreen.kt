@@ -26,9 +26,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import com.healthsync.phone.data.HeartRateZones
-import com.healthsync.phone.data.HeartRateZone
-import com.healthsync.phone.data.HeartRateZoneAnalysis
 import kotlin.math.roundToInt
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -77,7 +74,10 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.healthsync.phone.data.model.LatLngPoint
 import com.healthsync.phone.data.model.WorkoutEntity
+import com.healthsync.phone.data.model.HeartRateEntity
+import com.healthsync.phone.ui.charts.HeartRateLineChart
 import com.healthsync.phone.data.SyncValidation
+import com.healthsync.phone.data.distanceSourceLabel
 import com.healthsync.phone.ui.theme.AccentCyan
 import com.healthsync.phone.ui.theme.AccentPurple
 import com.healthsync.phone.ui.theme.BgCard
@@ -103,7 +103,7 @@ import kotlin.math.cos
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WorkoutDetailsScreen(workout: WorkoutEntity, onBack: () -> Unit) {
+fun WorkoutDetailsScreen(workout: WorkoutEntity, heartRates: List<HeartRateEntity> = emptyList(), onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val route: List<LatLngPoint> = remember(workout.routeJson, workout.startTime, workout.endTime) { try {
@@ -117,7 +117,7 @@ fun WorkoutDetailsScreen(workout: WorkoutEntity, onBack: () -> Unit) {
             val success = withContext(Dispatchers.IO) {
                 runCatching { context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(workoutGpx(workout, route)) } ?: error("Unable to open file") }.isSuccess
             }
-            Toast.makeText(context, if (success) "GPS route saved" else "Could not save route. Try another location.", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, if (success) "Location route saved" else "Could not save route. Try another location.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -143,7 +143,7 @@ fun WorkoutDetailsScreen(workout: WorkoutEntity, onBack: () -> Unit) {
                 },
                 actions = {
                     if (route.size > 1) IconButton(onClick = { exportLauncher.launch("HealthSync-route-${workout.startTime}.gpx") }) {
-                        Icon(Icons.Default.FileDownload, "Save GPS route as GPX", tint = AccentCyan)
+                        Icon(Icons.Default.FileDownload, "Save location route as GPX", tint = AccentCyan)
                     }
                     IconButton(onClick = {
                         try {
@@ -163,7 +163,7 @@ fun WorkoutDetailsScreen(workout: WorkoutEntity, onBack: () -> Unit) {
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(start = 18.dp, end = 18.dp, bottom = 34.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
                 DetailHeader(
@@ -203,7 +203,7 @@ fun WorkoutDetailsScreen(workout: WorkoutEntity, onBack: () -> Unit) {
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    DetailStatCard(Modifier.weight(1f), Icons.Default.LocalFireDepartment, MetricCalories, "Calories", "${workout.calories.toInt()} kcal")
+                    DetailStatCard(Modifier.weight(1f), Icons.Default.LocalFireDepartment, MetricCalories, "Est. calories", "${workout.calories.toInt()} kcal")
                     DetailStatCard(
                         Modifier.weight(1f),
                         if (isRunOrWalk) Icons.Default.DirectionsWalk else Icons.Default.FitnessCenter,
@@ -216,17 +216,19 @@ fun WorkoutDetailsScreen(workout: WorkoutEntity, onBack: () -> Unit) {
                         }
                     )
                 }
+                if (isRunOrWalk) Text("Recorded steps may include motion estimates. The step source is unavailable for saved sessions.", color = TextDim, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 8.dp))
             }
 
             item {
                 PerformanceCard(workout = workout)
             }
 
-            if (workout.avgHeartRate > 0) {
-                item {
-                    HeartRateZoneCard(workout = workout)
-                }
+            item {
+                Text(distanceSourceLabel(workout.distanceSource), color = TextDim, fontSize = 12.sp)
+                Text("Calories are estimated from activity time and profile values.", color = TextDim, fontSize = 12.sp)
             }
+
+            item { CapturedHeartRateCard(heartRates) }
 
             if (isRunOrWalk) {
                 item {
@@ -243,7 +245,7 @@ fun WorkoutDetailsScreen(workout: WorkoutEntity, onBack: () -> Unit) {
 
 @Composable
 private fun DetailHeader(title: String, dateLine: String, icon: ImageVector, accent: Color) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Box(
             modifier = Modifier.size(56.dp).clip(RoundedCornerShape(18.dp)).background(accent.copy(alpha = 0.12f)).border(1.dp, accent.copy(alpha = 0.25f), RoundedCornerShape(18.dp)),
             contentAlignment = Alignment.Center
@@ -251,7 +253,7 @@ private fun DetailHeader(title: String, dateLine: String, icon: ImageVector, acc
             Icon(icon, null, tint = accent, modifier = Modifier.size(28.dp))
         }
         Column(Modifier.weight(1f)) {
-            Text(title, color = TextWhite, fontSize = 24.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(title, color = TextWhite, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(dateLine, color = TextDim, fontSize = 12.sp)
         }
     }
@@ -270,9 +272,9 @@ private fun HeroMetricCard(accent: Color, mainValue: String, mainLabel: String, 
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            Text(mainValue, color = accent, fontSize = 58.sp, fontWeight = FontWeight.Black, lineHeight = 62.sp, maxLines = 1)
+            Text(mainValue, color = accent, fontSize = 58.sp, fontWeight = FontWeight.Bold, lineHeight = 62.sp, maxLines = 1)
             Text(mainLabel, color = TextSecondary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            Text(footnote, color = accent, fontSize = 13.sp, fontWeight = FontWeight.Black)
+            Text(footnote, color = accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -287,7 +289,7 @@ private fun PerformanceCard(workout: WorkoutEntity) {
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text("Session Metrics", color = TextWhite, fontWeight = FontWeight.Black, fontSize = 18.sp)
+            Text("Session Metrics", color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Spacer(Modifier.height(14.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 PerfMetric("Cal/min", if (seconds > 0) "%.1f".format(workout.calories * 60.0 / seconds) else "—", AccentCyan)
@@ -299,156 +301,25 @@ private fun PerformanceCard(workout: WorkoutEntity) {
 }
 
 @Composable
-private fun HeartRateZoneCard(workout: WorkoutEntity) {
-    val durationMins = if (workout.durationSeconds > 0) {
-        workout.durationSeconds / 60
-    } else {
-        ((workout.endTime - workout.startTime) / 60_000L).toInt().coerceAtLeast(1)
-    }
-
-    val analysis = remember(workout.avgHeartRate, durationMins) {
-        HeartRateZones.analyzeFromSamples(
-            maxHr = HeartRateZones.calculateMaxHr(30),
-            samples = emptyList(),
-            fallbackAvgBpm = workout.avgHeartRate,
-            fallbackDurationMinutes = durationMins
-        )
-    }
-
-    Card(
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = BgCard),
-        border = BorderStroke(1.dp, BorderSubtle),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
+private fun CapturedHeartRateCard(heartRates: List<HeartRateEntity>) {
+    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = BgCard), border = BorderStroke(1.dp, BorderSubtle)) {
         Column(Modifier.padding(16.dp)) {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.Favorite, null, tint = MetricHeart, modifier = Modifier.size(20.dp))
-                    Text("Heart Rate Zones", color = TextWhite, fontWeight = FontWeight.Black, fontSize = 18.sp)
-                }
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MetricHeart.copy(alpha = 0.12f)
-                ) {
-                    Text(
-                        text = "Max ${analysis.maxHr} bpm",
-                        color = MetricHeart,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
+            Text("Captured heart rate", color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Spacer(Modifier.height(10.dp))
+            if (heartRates.isEmpty()) {
+                Text("No individual heart-rate samples are saved for this session. A recorded average alone cannot show a peak or time in heart-rate zones.", color = TextDim, fontSize = 12.sp, lineHeight = 17.sp)
+            } else {
+                Text("${heartRates.size} readings during this session · ${heartRates.minOf { it.bpm }}–${heartRates.maxOf { it.bpm }} bpm", color = MetricHeart, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                HeartRateLineChart(heartRates, Modifier.fillMaxWidth().height(160.dp))
+                Text("Dots are captured sensor samples. Gaps have no measurements. Samples older than 30 days may have been removed from phone history.", color = TextDim, fontSize = 11.sp)
             }
-
-            Spacer(Modifier.height(14.dp))
-
-            // Multi-segment horizontal stacked progress bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(10.dp)
-                    .clip(RoundedCornerShape(5.dp))
-                    .background(Color(0xFF263238))
-            ) {
-                analysis.zones.forEach { zone ->
-                    if (zone.percentage > 0.005f) {
-                        Box(
-                            modifier = Modifier
-                                .weight(zone.percentage.coerceAtLeast(0.01f))
-                                .fillMaxHeight()
-                                .background(Color(zone.colorHex))
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(14.dp))
-
-            // Zone breakdown rows
-            analysis.zones.forEach { zone ->
-                ZoneRow(zone = zone)
-                Spacer(Modifier.height(8.dp))
-            }
-
-            // Training Effect Insight
-            Spacer(Modifier.height(4.dp))
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                color = BgCardHover
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(Icons.Default.AutoAwesome, null, tint = AccentCyan, modifier = Modifier.size(16.dp))
-                    Text(
-                        text = analysis.trainingEffect,
-                        color = TextWhite,
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ZoneRow(zone: HeartRateZone) {
-    val pctInt = (zone.percentage * 100).roundToInt()
-    Row(
-        Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(
-                Modifier
-                    .size(10.dp)
-                    .clip(CircleShape)
-                    .background(Color(zone.colorHex))
-            )
-            Column {
-                Text(
-                    text = "Z${zone.zoneNumber} · ${zone.name}",
-                    color = TextWhite,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "${zone.minBpm}–${zone.maxBpm} bpm",
-                    color = TextDim,
-                    fontSize = 11.sp
-                )
-            }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                text = "${zone.minutes} min",
-                color = TextSecondary,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Text(
-                text = "$pctInt%",
-                color = TextWhite,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Black
-            )
         }
     }
 }
 
 @Composable
 private fun RouteCard(route: List<LatLngPoint>, workout: WorkoutEntity, accent: Color) {
-    val splits = remember(route) { calculateSplits(route) }
+    val splits = remember(route) { calculateCapturedSplits(route) }
 
     Card(
         shape = RoundedCornerShape(24.dp),
@@ -464,7 +335,7 @@ private fun RouteCard(route: List<LatLngPoint>, workout: WorkoutEntity, accent: 
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Default.Route, null, tint = accent, modifier = Modifier.size(20.dp))
-                    Text("Pace-Gradient GPS Route", color = TextWhite, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                    Text("Recorded location route", color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 }
                 if (route.size > 1) {
                     Surface(
@@ -472,7 +343,7 @@ private fun RouteCard(route: List<LatLngPoint>, workout: WorkoutEntity, accent: 
                         color = accent.copy(alpha = 0.12f)
                     ) {
                         Text(
-                            text = "${route.size} GPS points",
+                            text = "${route.size} location points",
                             color = accent,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -502,9 +373,9 @@ private fun RouteCard(route: List<LatLngPoint>, workout: WorkoutEntity, accent: 
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    PaceLegendDot("Fast Pace", Color(0xFF00E676))
+                    PaceLegendDot("Faster", Color(0xFF00E676))
                     PaceLegendDot("Steady", Color(0xFFFFD600))
-                    PaceLegendDot("Slow / Incline", Color(0xFFFF5252))
+                    PaceLegendDot("Slower", Color(0xFFFF5252))
                 }
 
                 // Km Split chips if workout recorded splits
@@ -534,7 +405,7 @@ private fun RouteCard(route: List<LatLngPoint>, workout: WorkoutEntity, accent: 
                                         text = String.format(Locale.getDefault(), "%d:%02d /km", mins, secs),
                                         color = TextWhite,
                                         fontSize = 11.sp,
-                                        fontWeight = FontWeight.Black
+                                        fontWeight = FontWeight.Bold
                                     )
                                 }
                             }
@@ -552,7 +423,7 @@ private fun RouteCard(route: List<LatLngPoint>, workout: WorkoutEntity, accent: 
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Default.LocationOff, null, tint = TextDim, modifier = Modifier.size(30.dp))
-                        Text("No GPS route recorded", color = TextDim, fontSize = 12.sp)
+                        Text("No location route recorded", color = TextDim, fontSize = 12.sp)
                     }
                 }
             }
@@ -586,7 +457,7 @@ private fun InsightCard(workout: WorkoutEntity, minutes: Int) {
                 Box(Modifier.size(30.dp).clip(CircleShape).background(AccentCyan.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
                     Icon(Icons.Default.AutoAwesome, null, tint = AccentCyan, modifier = Modifier.size(17.dp))
                 }
-                Text("Session Note", color = AccentCyan, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                Text("Session Note", color = AccentCyan, fontWeight = FontWeight.Bold, fontSize = 18.sp)
             }
             Spacer(Modifier.height(10.dp))
             Text(generateAdvancedAdvice(workout), color = TextWhite, fontSize = 14.sp, lineHeight = 20.sp)
@@ -602,7 +473,7 @@ private fun InsightCard(workout: WorkoutEntity, minutes: Int) {
 @Composable
 private fun PerfMetric(label: String, value: String, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, color = color, fontSize = 20.sp, fontWeight = FontWeight.Black, maxLines = 1)
+        Text(value, color = color, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1)
         Text(label, color = TextDim, fontSize = 11.sp)
     }
 }
@@ -623,7 +494,7 @@ fun DetailStatCard(modifier: Modifier, icon: ImageVector, iconColor: Color, labe
                 Text(label, color = TextDim, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.height(6.dp))
-            Text(value, color = TextWhite, fontSize = 18.sp, fontWeight = FontWeight.Black, maxLines = 1)
+            Text(value, color = TextWhite, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1)
         }
     }
 }
@@ -675,8 +546,8 @@ fun GpsRouteCanvas(route: List<LatLngPoint>, accentColor: Color, modifier: Modif
         }
 
         val validSpeeds = speeds.filter { it > 0.1 }
-        val minSpeed = validSpeeds.minOrNull() ?: 1.2
-        val maxSpeed = validSpeeds.maxOrNull() ?: 3.8
+        val minSpeed = validSpeeds.minOrNull() ?: 0.0
+        val maxSpeed = validSpeeds.maxOrNull() ?: 0.0
         val speedRange = (maxSpeed - minSpeed).coerceAtLeast(0.5)
 
         // Draw pace-colored segments with halo and crisp line
@@ -685,9 +556,10 @@ fun GpsRouteCanvas(route: List<LatLngPoint>, accentColor: Color, modifier: Modif
             val p1 = route[i]
             if (p1.segmentStart) continue
 
-            val speed = speeds.getOrElse(i - 1) { minSpeed }
+            val speed = speeds.getOrElse(i - 1) { 0.0 }
             val ratio = ((speed - minSpeed) / speedRange).toFloat().coerceIn(0f, 1f)
             val segmentColor = when {
+                speed <= 0.0 -> accentColor
                 ratio >= 0.65f -> Color(0xFF00E676) // Fast / Sprint
                 ratio >= 0.35f -> Color(0xFFFFD600) // Steady
                 else -> Color(0xFFFF5252)           // Slow / Incline
@@ -726,31 +598,6 @@ fun GpsRouteCanvas(route: List<LatLngPoint>, accentColor: Color, modifier: Modif
         drawCircle(Color(0xFFFF5252), 7f, endPt)
         drawCircle(Color.White, 3f, endPt)
     }
-}
-
-private data class KmSplit(val kmNumber: Int, val paceSecondsPerKm: Long)
-
-private fun calculateSplits(route: List<LatLngPoint>): List<KmSplit> {
-    if (route.size < 2) return emptyList()
-    val splits = mutableListOf<KmSplit>()
-    var accumulatedDist = 0.0
-    var segmentStartTime = route.first().timestamp
-    var nextSplitKm = 1
-
-    for (i in 1 until route.size) {
-        val prev = route[i - 1]
-        val curr = route[i]
-        val d = haversineMeters(prev.lat, prev.lng, curr.lat, curr.lng)
-        accumulatedDist += d
-
-        if (accumulatedDist >= nextSplitKm * 1000.0) {
-            val dtSec = ((curr.timestamp - segmentStartTime) / 1000L).coerceAtLeast(1L)
-            splits.add(KmSplit(nextSplitKm, dtSec))
-            segmentStartTime = curr.timestamp
-            nextSplitKm++
-        }
-    }
-    return splits
 }
 
 private fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {

@@ -15,7 +15,7 @@ class HeartRateFacePolicyTest {
         assertEquals(now - 5_000L, display.capturedAt)
         assertTrue(display.sensorReading)
         assertEquals("BPM", HeartRatePolicy.complicationUnit(display.capturedAt, now))
-        assertEquals(75, HeartRatePolicy.reliableReading(display.bpm, 0, display.capturedAt,
+        assertEquals(-1, HeartRatePolicy.reliableReading(display.bpm, 0, display.capturedAt,
             now, HeartRatePolicy.FRESH_MS))
     }
 
@@ -58,9 +58,8 @@ class HeartRateFacePolicyTest {
     }
 
     @Test fun missingPreviewCannotExposeStoredUnreliableNumbersOnTheFace() {
-        for (accuracy in listOf(-1, 4)) {
+        for (accuracy in listOf(-1, 0, 4)) {
             assertEquals(HeartRateFaceReading(-1, 0L, false), face(75, accuracy, now, preview = null))
         }
-        assertEquals(HeartRateFaceReading(75, now, false), face(75, 0, now, preview = null))
     }
 }

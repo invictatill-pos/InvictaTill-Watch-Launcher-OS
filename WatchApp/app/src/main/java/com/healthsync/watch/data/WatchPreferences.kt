@@ -63,11 +63,13 @@ class WatchPreferences(context: Context) {
         set(v) { prefs.edit().putString("last_phone_address", v).apply() }
 
     var userWeightKg: Double
-        get() = prefs.getFloat("user_weight_kg", 70f).toDouble().coerceIn(30.0, 250.0)
+        get() = ProfileCalculationPolicy.weightKg(prefs.getBoolean("profile_weight_configured", false),
+            prefs.getFloat("user_weight_kg", ProfileCalculationPolicy.DEFAULT_WEIGHT_KG.toFloat()).toDouble())
         set(v) { if (v.isFinite()) prefs.edit().putFloat("user_weight_kg", v.coerceIn(30.0, 250.0).toFloat()).apply() }
 
     var userHeightCm: Int
-        get() = prefs.getInt("user_height_cm", 170).coerceIn(100, 230)
+        get() = ProfileCalculationPolicy.heightCm(prefs.getBoolean("profile_height_configured", false),
+            prefs.getInt("user_height_cm", ProfileCalculationPolicy.DEFAULT_HEIGHT_CM))
         set(v) { prefs.edit().putInt("user_height_cm", v.coerceIn(100, 230)).apply() }
 
     /** Foreground Always-On Display is opt-in because it keeps the watch screen awake. */

@@ -41,12 +41,12 @@ class ChronoWatchFaceView @JvmOverloads constructor(
     private var heartRate = 0
     private var heartMeasuredAt = 0L
     private var heartRateUnverified = false
-    private var steps = 0
+    private var steps = -1
     private var stepGoal = 10000
     private var calories = 0.0
     private var distanceKm = 0.0
     private var isBluetoothConnected = false
-    private var batteryLevel = 85
+    private var batteryLevel = -1
 
     // Ambient / AOD
     private var isAmbient = false
@@ -61,6 +61,8 @@ class ChronoWatchFaceView @JvmOverloads constructor(
     private var touchDownX = 0f
     private var touchDownY = 0f
     private var touchDownTime = 0L
+    private var pendingTapX=Float.NaN
+    private var pendingTapY=Float.NaN
 
     // Paints
     private val dialBgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -107,6 +109,9 @@ class ChronoWatchFaceView @JvmOverloads constructor(
 
     init {
         setupColors()
+        isClickable=true
+        isFocusable=true
+        contentDescription="Chrono clock. Activate to change the watch face. Workout and history are available from Health."
     }
 
     private fun setupColors() {
@@ -223,7 +228,7 @@ class ChronoWatchFaceView @JvmOverloads constructor(
     }
 
     fun setBatteryLevel(level: Int) {
-        batteryLevel = level.coerceIn(0, 100)
+        batteryLevel = level.takeIf { it in 0..100 } ?: -1
         if (!isAmbient) invalidate()
     }
 
@@ -315,7 +320,7 @@ class ChronoWatchFaceView @JvmOverloads constructor(
         canvas.drawText(hrText, cx, hrCy + subR * 0.18f, textPrimaryPaint)
 
         textSecondaryPaint.textSize = subR * 0.32f
-        canvas.drawText("BPM", cx, hrCy + subR * 0.58f, textSecondaryPaint)
+        canvas.drawText(if (heartRate > 0) com.healthsync.watch.sensor.HeartRatePolicy.complicationUnit(heartMeasuredAt, System.currentTimeMillis()) else "BPM", cx, hrCy + subR * 0.58f, textSecondaryPaint)
 
         // ── Subdial 2: Steps Goal (6 o'clock) ──
         val stepCy = cy + radius * 0.36f
@@ -325,8 +330,8 @@ class ChronoWatchFaceView @JvmOverloads constructor(
         drawSubdialArc(canvas, cx, stepCy, subR, stepRatio, 0xFF00E5FF.toInt())
 
         textPrimaryPaint.textSize = subR * 0.55f
-        val stepDisplay = if (steps >= 10000) String.format(Locale.US, "%.1fK", steps / 1000f) else "$steps"
-        canvas.drawText(stepDisplay, cx, stepCy + subR * 0.16f, textPrimaryPaint)
+        val stepDisplay = when { steps<0 -> "—"; steps >= 10000 -> String.format(Locale.US, "%.1fK", steps / 1000f); else -> "$steps" }
+        canvas.drawText(StepDisplayLabels.display(stepDisplay,steps), cx, stepCy + subR * 0.16f, textPrimaryPaint)
 
         textSecondaryPaint.textSize = subR * 0.32f
         canvas.drawText("STEPS", cx, stepCy + subR * 0.58f, textSecondaryPaint)
@@ -337,12 +342,12 @@ class ChronoWatchFaceView @JvmOverloads constructor(
             val batR = radius * 0.18f
             drawSubdialCircle(canvas, batCx, cy, batR)
 
-            val batRatio = batteryLevel / 100f
+            val batRatio = (batteryLevel / 100f).coerceIn(0f, 1f)
             val batColor = if (batteryLevel > 20) 0xFF4CAF50.toInt() else 0xFFFF5252.toInt()
             drawSubdialArc(canvas, batCx, cy, batR, batRatio, batColor)
 
             textPrimaryPaint.textSize = batR * 0.65f
-            canvas.drawText("$batteryLevel%", batCx, cy + batR * 0.22f, textPrimaryPaint)
+            canvas.drawText(if (batteryLevel >= 0) "$batteryLevel%" else "--", batCx, cy + batR * 0.22f, textPrimaryPaint)
             textSecondaryPaint.textSize = batR * 0.38f
             canvas.drawText("BAT", batCx, cy + batR * 0.68f, textSecondaryPaint)
         }
@@ -480,12 +485,21 @@ class ChronoWatchFaceView @JvmOverloads constructor(
                 val dy = event.y - touchDownY
                 val dt = SystemClock.elapsedRealtime() - touchDownTime
                 if (dx * dx + dy * dy < 400 && dt < 400) {
-                    handleTap(event.x, event.y)
-                    return true
+                    pendingTapX=event.x; pendingTapY=event.y
+                    return performClick()
                 }
             }
         }
         return super.onTouchEvent(event)
+    }
+
+    override fun performClick():Boolean {
+        super.performClick()
+        val x=pendingTapX; val y=pendingTapY
+        pendingTapX=Float.NaN; pendingTapY=Float.NaN
+        if(isAmbient) return false
+        handleTap(if(x.isFinite()) x else width/2f,if(y.isFinite()) y else height/2f)
+        return true
     }
 
     private fun handleTap(x: Float, y: Float) {

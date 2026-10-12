@@ -55,7 +55,7 @@ class CircularWatchFaceView @JvmOverloads constructor(
         updateContentDescription()
         if (!ambient) invalidate()
     }
-    private var steps = 0
+    private var steps = -1
     private var stepGoal = 10_000
     private var calories = 0
     private var distanceKm = 0f
@@ -107,10 +107,10 @@ class CircularWatchFaceView @JvmOverloads constructor(
 
     fun setHealthData(hr: Int, stepCount: Int, goal: Int, kcal: Int, distKm: Float) {
         val nextHeartRate = hr.coerceAtLeast(0)
-        val nextSteps = stepCount.coerceAtLeast(0)
+        val nextSteps = stepCount.coerceAtLeast(-1)
         val nextGoal = goal.coerceAtLeast(1)
-        val nextCalories = kcal.coerceAtLeast(0)
-        val nextDistance = if (distKm.isFinite()) distKm.coerceAtLeast(0f) else 0f
+        val nextCalories = kcal.coerceAtLeast(-1)
+        val nextDistance = if (distKm.isFinite()) distKm.coerceAtLeast(-1f) else -1f
         if (heartRate == nextHeartRate && steps == nextSteps && stepGoal == nextGoal &&
             calories == nextCalories && distanceKm == nextDistance) return
         heartRate = nextHeartRate
@@ -209,7 +209,7 @@ class CircularWatchFaceView @JvmOverloads constructor(
         drawText(canvas, if (heartRate > 0) heartRate.toString() else "--",
             cx - r * 0.36f, cy + r * 0.095f, r * 0.175f, heart, r, cy,
             bold = true, maxWidth = r * 0.68f)
-        drawText(canvas, numberFormat.format(steps), cx + r * 0.36f, cy + r * 0.095f,
+        drawText(canvas, StepDisplayLabels.display(numberFormat.format(steps),steps), cx + r * 0.36f, cy + r * 0.095f,
             r * 0.175f, mint, r, cy, bold = true, maxWidth = r * 0.68f)
         drawText(canvas, if (heartRate > 0) HeartRatePolicy.complicationUnit(heartMeasuredAt, currentTime.timeInMillis) else "BPM", cx - r * 0.36f, cy + r * 0.235f, r * 0.075f, muted, r, cy,
             maxWidth = r * 0.68f)
@@ -334,12 +334,12 @@ class CircularWatchFaceView @JvmOverloads constructor(
     private fun updateContentDescription() {
         val spokenTime = DateFormat.getTimeFormat(context).format(currentTime.time)
         contentDescription = if (ambient) "$spokenTime, always-on clock" else
-            "$spokenTime, ${numberFormat.format(steps)} steps of ${numberFormat.format(stepGoal)}, " +
+            "$spokenTime, ${StepDisplayLabels.spoken(steps)}" + (if(steps>=0) " of goal ${numberFormat.format(stepGoal)}, " else ", ") +
                 (if (heartRate > 0) "$heartRate beats per minute" +
                     if (heartRateUnverified) ", sensor reading" else ""
                  else "heart rate unavailable") +
-                ", ${numberFormat.format(calories)} estimated kilocalories, " +
-                "${String.format(Locale.getDefault(), "%.1f", distanceKm)} kilometers" +
+                (if(calories>=0) ", ${numberFormat.format(calories)} estimated kilocalories, " else ", Workout calories unavailable, ") +
+                (if(distanceKm>=0) "${String.format(Locale.getDefault(), "%.1f", distanceKm)} workout kilometers, may include step-based estimates" else "Workout distance unavailable") +
                 (if (batteryLevel >= 0) ", battery $batteryLevel percent" else "") +
                 (if (bluetoothConnected) ", phone connected" else ", phone offline")
     }

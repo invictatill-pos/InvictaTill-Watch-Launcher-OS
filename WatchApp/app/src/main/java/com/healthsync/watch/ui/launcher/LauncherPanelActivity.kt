@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.StateListDrawable
+import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.view.Gravity
@@ -21,6 +22,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.healthsync.watch.ui.RoundScrollView
 import com.healthsync.watch.ui.WatchFaceActivity
+import com.healthsync.watch.ui.WatchVisualStyle
 import kotlin.math.roundToInt
 
 /** Brightness for HealthSync's foreground windows; the Android setting is untouched. */
@@ -51,9 +53,9 @@ object LauncherBrightness {
 
 /** Shared round-screen layout and guarded navigation for foreground launcher panels. */
 abstract class LauncherPanelActivity : AppCompatActivity() {
-    protected val accent = 0xFF8CE7C8.toInt()
-    protected val muted = 0xFFA8B9B1.toInt()
-    protected val panelColor = 0xFF14221C.toInt()
+    protected val accent = WatchVisualStyle.ACCENT
+    protected val muted = WatchVisualStyle.MUTED
+    protected val panelColor = WatchVisualStyle.SURFACE
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -82,7 +84,7 @@ abstract class LauncherPanelActivity : AppCompatActivity() {
 
     protected fun roundContent(): LinearLayout {
         val scroll = RoundScrollView(this).apply {
-            setBackgroundColor(Color.BLACK)
+            background = WatchVisualStyle.screenBackground()
             isFillViewport = true
             clipToPadding = false
         }
@@ -99,9 +101,49 @@ abstract class LauncherPanelActivity : AppCompatActivity() {
     }
 
     protected fun heading(content: LinearLayout, title: String, subtitle: String) {
-        label(content, title, 23f, Color.WHITE, bold = true)
+        label(content, title, 23f, WatchVisualStyle.TEXT, bold = true)
         label(content, subtitle, 12f)
     }
+
+    /** Visible Back returns to the originating panel; Home always resets to the clock. */
+    protected fun navigationHeader(content: LinearLayout, title: String) {
+        val row = LinearLayout(this).apply { gravity = Gravity.CENTER; orientation = LinearLayout.HORIZONTAL }
+        fun navigationButton(value: String, description: String, click: () -> Unit) = Button(this).apply {
+            text = value; contentDescription = description; isAllCaps = false
+            textSize = 12f; setTextColor(muted); minWidth = 0; minimumWidth = 0
+            minHeight = dp(44); minimumHeight = dp(44); setPadding(dp(4), 0, dp(4), 0)
+            backgroundTintList = null; background = WatchVisualStyle.button(this@LauncherPanelActivity)
+            setOnClickListener { performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY); click() }
+        }
+        row.addView(navigationButton("‹ Back", "Back to previous screen") { onBackPressedDispatcher.onBackPressed() },
+            LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(4) })
+        row.addView(navigationButton("Clock", "Return to clock") { backToClock() },
+            LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginStart = dp(4) })
+        content.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(14) })
+        label(content, title, 23f, WatchVisualStyle.TEXT, bold = true)
+    }
+
+    protected fun card(content: LinearLayout): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
+        setPadding(dp(12), dp(12), dp(12), dp(12)); background = WatchVisualStyle.surface(this@LauncherPanelActivity)
+        content.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8); bottomMargin = dp(10) })
+    }
+
+    protected fun primaryAction(content: LinearLayout, text: String, click: () -> Unit): Button = action(content, text, click).apply {
+        setTextColor(WatchVisualStyle.primaryTextColor()); background = WatchVisualStyle.button(this@LauncherPanelActivity, primary = true)
+    }
+
+    protected fun openAppPermissions() = launchFirst(
+        listOf(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))),
+        "App permissions could not open. Open Android Settings, Apps, HealthSync Watch, Permissions."
+    )
+
+    protected fun openHealthReadings() = launchFirst(
+        listOf(Intent(this, com.healthsync.watch.ui.WatchOptionsActivity::class.java)
+            .putExtra(com.healthsync.watch.ui.WatchOptionsActivity.EXTRA_SCREEN,
+                com.healthsync.watch.ui.WatchOptionsActivity.SCREEN_HEALTH)),
+        "Health readings could not open."
+    )
 
     protected fun label(
         content: LinearLayout,
@@ -115,10 +157,11 @@ abstract class LauncherPanelActivity : AppCompatActivity() {
         setTextColor(color)
         gravity = Gravity.CENTER
         includeFontPadding = false
-        if (bold) typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        setPadding(dp(4), dp(6), dp(4), dp(6))
+        typeface = Typeface.create(if (bold) "sans-serif-medium" else "sans-serif", Typeface.NORMAL)
+        setLineSpacing(dp(2).toFloat(), 1f)
+        setPadding(dp(2), dp(4), dp(2), dp(4))
         content.addView(this, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            bottomMargin = dp(5)
+            bottomMargin = dp(4)
         })
     }
 
@@ -126,12 +169,13 @@ abstract class LauncherPanelActivity : AppCompatActivity() {
         this.text = text
         isAllCaps = false
         textSize = 14f
-        setTextColor(Color.WHITE)
+        setTextColor(WatchVisualStyle.TEXT)
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         gravity = Gravity.CENTER
-        minHeight = dp(50)
-        minimumHeight = dp(50)
-        setPadding(dp(10), dp(12), dp(10), dp(12))
+        minHeight = dp(48)
+        minimumHeight = dp(48)
+        minWidth = 0; minimumWidth = 0
+        setPadding(dp(10), dp(10), dp(10), dp(10))
         backgroundTintList = null
         background = buttonBackground()
         setOnClickListener {
@@ -143,15 +187,9 @@ abstract class LauncherPanelActivity : AppCompatActivity() {
         })
     }
 
-    protected fun shape(color: Int, radius: Int = 20): GradientDrawable = GradientDrawable().apply {
-        setColor(color)
-        cornerRadius = dp(radius).toFloat()
-    }
+    protected fun shape(color: Int, radius: Int = 22): GradientDrawable = WatchVisualStyle.surface(this, color, radius)
 
-    protected fun buttonBackground(): StateListDrawable = StateListDrawable().apply {
-        addState(intArrayOf(android.R.attr.state_pressed), shape(0xFF294839.toInt()))
-        addState(intArrayOf(), shape(panelColor))
-    }
+    protected fun buttonBackground(): StateListDrawable = WatchVisualStyle.button(this)
 
     /** Attempt actual launches: vendor firmware may hide a resolver despite an available screen. */
     protected fun launchFirst(intents: List<Intent>, failureMessage: String): Boolean {

@@ -2,6 +2,7 @@ package com.healthsync.phone.ui.workout
 
 import com.healthsync.phone.data.model.LatLngPoint
 import com.healthsync.phone.data.model.WorkoutEntity
+import com.healthsync.phone.data.distanceSourceLabel
 import java.time.Instant
 import java.util.Locale
 
@@ -17,7 +18,8 @@ fun workoutSummary(workout: WorkoutEntity): String {
         appendLine("$activity · HealthSync")
         appendLine("Duration: ${seconds / 60}m ${seconds % 60}s")
         if (workout.distanceMeters > 0) appendLine("Distance: ${String.format(Locale.getDefault(), "%.2f", workout.distanceMeters / 1000f)} km")
-        appendLine("Calories: ${workout.calories.toInt()} kcal")
+        appendLine("Estimated calories: ${workout.calories.toInt()} kcal")
+        appendLine(distanceSourceLabel(workout.distanceSource))
         if (workout.steps > 0) appendLine("Steps: ${workout.steps}")
         if (workout.avgHeartRate > 0) appendLine("Average heart rate: ${workout.avgHeartRate} bpm")
         if (workout.swingsCount > 0) appendLine("Swings / repetitions: ${workout.swingsCount}")
@@ -25,12 +27,13 @@ fun workoutSummary(workout: WorkoutEntity): String {
 }
 
 fun workoutsCsv(workouts: List<WorkoutEntity>): String = buildString {
-    appendLine("activity,start_utc,end_utc,duration_seconds,distance_metres,calories,average_heart_rate,steps,swings")
+    appendLine("activity,start_utc,end_utc,duration_seconds,distance_metres,estimated_calories,average_heart_rate,steps,swings,distance_source")
     workouts.forEach { workout ->
         val activity = "\"${workout.activityType.replace("\"", "\"\"")}\""
         appendLine(listOf(activity, Instant.ofEpochMilli(workout.startTime), Instant.ofEpochMilli(workout.endTime),
             workoutDurationSeconds(workout), workout.distanceMeters,
-            workout.calories, workout.avgHeartRate, workout.steps, workout.swingsCount).joinToString(","))
+            workout.calories, workout.avgHeartRate.takeIf { it > 0 } ?: "", workout.steps, workout.swingsCount,
+            workout.distanceSource).joinToString(","))
     }
 }
 

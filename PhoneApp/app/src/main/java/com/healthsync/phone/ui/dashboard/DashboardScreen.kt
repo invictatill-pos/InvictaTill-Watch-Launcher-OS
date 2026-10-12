@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.MonitorHeart
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SelfImprovement
@@ -82,15 +83,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.healthsync.phone.data.model.ConnectionInfo
 import com.healthsync.phone.data.model.SleepEntity
 import com.healthsync.phone.data.model.WorkoutEntity
-import com.healthsync.phone.data.RecoveryScoreEngine
-import com.healthsync.phone.data.DailyRecoveryResult
-import com.healthsync.phone.data.RecoveryTier
 import kotlin.math.roundToInt
 import com.healthsync.phone.service.BluetoothSyncService
 import com.healthsync.phone.data.heartRateFeedbackText
-import com.healthsync.phone.data.activeHeartRateSensorPreview
 import com.healthsync.phone.data.heartRateMeasurementDetailsText
-import com.healthsync.phone.ui.charts.SleepStackedBarChart
 import com.healthsync.phone.ui.charts.Steps24HourChart
 import com.healthsync.phone.ui.charts.StepsBarChart
 import com.healthsync.phone.ui.charts.HeartRateLineChart
@@ -134,7 +130,8 @@ fun DashboardScreen(
     onWorkoutClick: (WorkoutEntity) -> Unit = {},
     onDeviceClick: () -> Unit = {},
     onWatchFacesClick: () -> Unit = {},
-    onNotificationsClick: () -> Unit = {}
+    onNotificationsClick: () -> Unit = {},
+    onWorkoutsClick: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val connState by BluetoothSyncService.connectionState.collectAsState()
@@ -143,11 +140,11 @@ fun DashboardScreen(
     var showHeartDetails by remember { mutableStateOf(false) }
     val heartReport = heartFeedback?.diagnosticReport
     var currentTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var oxygenRequestedAt by remember { mutableLongStateOf(0L) }
     ResumeEffect { viewModel.refreshData(); currentTime = System.currentTimeMillis() }
     LaunchedEffect(Unit) {
         while (true) { delay(5_000); currentTime = System.currentTimeMillis() }
     }
-    val heartPreview = activeHeartRateSensorPreview(heartFeedback, connState.isConnected, currentTime)
     val heartDetails = heartRateMeasurementDetailsText(heartFeedback, connState.isConnected, currentTime)
     val measureHeart = {
         if (connState.isConnected) {
@@ -158,8 +155,10 @@ fun DashboardScreen(
     }
     val measureOxygen = {
         if (connState.isConnected) {
-            BluetoothSyncService.sendForceMeasureSpO2ToWatch(context)
-            Toast.makeText(context, "Oxygen reading requested from your watch.", Toast.LENGTH_SHORT).show()
+            val sent = BluetoothSyncService.sendForceMeasureSpO2ToWatch(context)
+            if (sent) oxygenRequestedAt = System.currentTimeMillis()
+            Toast.makeText(context, if (sent) "Oxygen reading requested. Keep your watch still."
+                else "Reconnect your watch and try again.", Toast.LENGTH_SHORT).show()
         } else onDeviceClick()
     }
 
@@ -184,19 +183,12 @@ fun DashboardScreen(
         )
     }
 
-    val restingHr = if (uiState.heartRate24h.isNotEmpty()) uiState.heartRate24h.minOf { it.bpm } else (uiState.latestHeartRate?.bpm ?: 0)
-    val yesterdaySteps = uiState.stepsLast7Days.dropLast(1).lastOrNull()?.steps ?: 0
-    val yesterdayCalories = uiState.stepsLast7Days.dropLast(1).lastOrNull()?.calories ?: 0.0
-    val recoveryResult = remember(uiState.latestSleep, restingHr, yesterdaySteps, yesterdayCalories) {
-        RecoveryScoreEngine.calculate(uiState.latestSleep, restingHr, yesterdaySteps, yesterdayCalories)
-    }
-
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .background(BgDeep),
-        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 34.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 30.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
             DashboardHeader(
@@ -213,26 +205,22 @@ fun DashboardScreen(
 
         if (!connState.isConnected && !uiState.isLoading && uiState.latestHeartRate == null && uiState.todaySteps == null && uiState.recentWorkouts.isEmpty()) {
             item {
-                HealthCard {
-                    SectionTitle("Your first sync", "Connect your watch to get started")
-                    Spacer(Modifier.height(8.dp))
-                    Text("Your readings, daily steps and workout history appear automatically after the watch connects.", color = TextSecondary, fontSize = 13.sp)
-                    TextButton(onClick = onDeviceClick) { Text("Set up your watch", color = AccentCyan) }
-                }
+                com.healthsync.phone.ui.components.AppStateCard(Icons.Default.Watch, "Your first sync",
+                    "Connect your watch to bring your captured readings, steps and workouts into one place.", "Set up your watch", onDeviceClick)
             }
         }
 
         item {
             DailySummaryCard(
-                steps = uiState.todaySteps?.steps ?: 0,
-                calories = uiState.todaySteps?.calories ?: 0.0,
+                steps = uiState.todaySteps?.steps,
+                calories = uiState.todaySteps?.calories,
                 goal = uiState.stepGoal,
-                activeMinutes = estimateActiveMinutes(uiState)
+                activeMinutes = recordedWorkoutMinutes(uiState, currentTime)
             )
         }
 
         item {
-            DailyRecoveryCard(recovery = recoveryResult)
+            CaptureStatusCard(uiState, connState.isConnected, currentTime, onDeviceClick)
         }
 
         item {
@@ -255,7 +243,7 @@ fun DashboardScreen(
                 Row(
                     modifier = Modifier.padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Box(
                         modifier = Modifier
@@ -268,7 +256,7 @@ fun DashboardScreen(
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Watch Face Studio & Store", color = TextWhite, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                        Text("50+ luxury, sports & sci-fi dials + Creator Studio", color = TextDim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("Browse dials and create your own watch face", color = TextDim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     Text("Explore", color = AccentCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
@@ -280,9 +268,9 @@ fun DashboardScreen(
                 VitalCard(
                     modifier = Modifier.weight(1f),
                     title = "Heart",
-                    value = heartPreview?.bpm?.toString()
-                        ?: if ((uiState.latestHeartRate?.bpm ?: 0) > 0) "${uiState.latestHeartRate?.bpm}" else "--",
+                    value = if ((uiState.latestHeartRate?.bpm ?: 0) > 0) "${uiState.latestHeartRate?.bpm}" else "--",
                     unit = "bpm",
+                    recordedAtText = "Last captured: ${readingAge(uiState.latestHeartRate?.timestamp, currentTime)}",
                     status = heartRateFeedbackText(heartFeedback, connState.isConnected, uiState.latestHeartRate?.timestamp, currentTime),
                     icon = Icons.Default.Favorite,
                     color = MetricHeart,
@@ -291,9 +279,14 @@ fun DashboardScreen(
                 VitalCard(
                     modifier = Modifier.weight(1f),
                     title = "Oxygen",
-                    value = if ((uiState.latestSpO2?.percentage ?: 0f) > 0f) "${uiState.latestSpO2?.percentage?.toInt()}" else "--",
+                    value = if ((uiState.latestSpO2?.percentage ?: 0f) > 0f) String.format(Locale.getDefault(), "%.1f", uiState.latestSpO2?.percentage) else "--",
                     unit = "%",
-                    status = readingAge(uiState.latestSpO2?.timestamp, currentTime),
+                    recordedAtText = "Last captured: ${readingAge(uiState.latestSpO2?.timestamp, currentTime)}",
+                    status = when {
+                        oxygenRequestedAt > (uiState.latestSpO2?.timestamp ?: 0L) && connState.isConnected && currentTime - oxygenRequestedAt < 60_000L -> "Waiting for sensor reading"
+                        oxygenRequestedAt > (uiState.latestSpO2?.timestamp ?: 0L) -> "No new reading received · retry"
+                        else -> readingAge(uiState.latestSpO2?.timestamp, currentTime)
+                    },
                     icon = Icons.Default.Bloodtype,
                     color = MetricSpO2,
                     onTap = measureOxygen
@@ -320,7 +313,7 @@ fun DashboardScreen(
                 val readings = uiState.spO2Last24h.sortedBy { it.timestamp }
                 SectionTitle("Oxygen", "Last 24 hours · ${readings.size} readings")
                 Spacer(Modifier.height(8.dp))
-                Text("${readings.minOf { it.percentage }.toInt()}–${readings.maxOf { it.percentage }.toInt()}% recorded", color = MetricSpO2, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(String.format(Locale.getDefault(), "%.1f–%.1f%% recorded", readings.minOf { it.percentage }, readings.maxOf { it.percentage }), color = MetricSpO2, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 SpO2LineChart(readings, Modifier.fillMaxWidth().height(132.dp))
             }
         }
@@ -331,6 +324,7 @@ fun DashboardScreen(
                     SectionTitle("Movement", "Hourly steps · last 24 hours")
                     Spacer(Modifier.height(12.dp))
                     Steps24HourChart(uiState.stepsLast24h, Modifier.fillMaxWidth().height(118.dp))
+                    Text("Recorded steps may include motion estimates. The source is unavailable for saved history.", color = TextDim, fontSize = 12.sp, lineHeight = 17.sp)
                 }
             }
         }
@@ -346,16 +340,22 @@ fun DashboardScreen(
                     StepsBarChart(uiState.stepsLast7Days.sortedBy { it.dayKey }, uiState.stepGoal, Modifier.fillMaxWidth().height(132.dp))
                     Spacer(Modifier.height(6.dp))
                     Text("${uiState.stepsLast7Days.size} recorded days · ${uiState.stepsLast7Days.map { it.steps }.average().toInt()} steps/day on average", color = TextDim, fontSize = 12.sp)
+                    Text("Recorded steps may include motion estimates. The source is unavailable for saved history.", color = TextDim, fontSize = 12.sp, lineHeight = 17.sp)
                 }
             }
         }
 
         uiState.latestSleep?.let { sleep ->
             item { SleepCard(sleep = sleep, history = uiState.sleepLast7Nights) }
+        } ?: item {
+            HealthCard {
+                SectionTitle("Rest tracking", "No captured rest estimate yet")
+                Text("Wear your watch overnight. A duration appears after enough motion samples are captured. Sleep stages are unavailable on this watch.", color = TextSecondary, fontSize = 12.sp)
+            }
         }
 
         if (uiState.recentWorkouts.isNotEmpty()) {
-            item { WorkoutsPreview(uiState.recentWorkouts, onWorkoutClick) }
+            item { WorkoutsPreview(uiState.recentWorkouts, onWorkoutClick, onWorkoutsClick) }
         }
 
         item {
@@ -364,10 +364,10 @@ fun DashboardScreen(
     }
 }
 
-private fun estimateActiveMinutes(state: DashboardUiState): Int {
-    val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+private fun recordedWorkoutMinutes(state: DashboardUiState, currentTime: Long): Int {
+    val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(currentTime))
     return state.recentWorkouts
-        .filter { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it.startTime)) == today }
+        .filter { SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(it.startTime)) == today }
         .sumOf { workoutDurationSeconds(it) }
         .let { (it / 60).toInt() }
 }
@@ -387,56 +387,38 @@ private fun DashboardHeader(
     val dateStr = SimpleDateFormat("EEE, MMM d", Locale.getDefault()).format(Date())
     val connected = connState.isConnected
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column {
-            Text(greeting, color = TextSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-            Text("HealthSync", color = TextWhite, fontSize = 34.sp, fontWeight = FontWeight.Black, lineHeight = 38.sp)
-            Text(dateStr, color = TextDim, fontSize = 13.sp)
-        }
-
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            // Notification Alerts Bell
-            Surface(
-                onClick = onNotifications,
-                shape = CircleShape,
-                color = BgCard,
-                border = BorderStroke(1.dp, BorderSubtle),
-                modifier = Modifier.size(40.dp)
-            ) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(greeting, color = TextSecondary, fontSize = 14.sp)
+                Text("Today", color = TextWhite, fontSize = 32.sp, fontWeight = FontWeight.Bold, lineHeight = 38.sp)
+                Text(dateStr, color = TextDim, fontSize = 13.sp)
+            }
+            Surface(onClick = onNotifications, shape = CircleShape, color = BgCard,
+                border = BorderStroke(1.dp, BorderSubtle), modifier = Modifier.size(48.dp)) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Watch, contentDescription = "Alerts", tint = TextWhite, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.Notifications, "Open alerts", tint = AccentCyan, modifier = Modifier.size(22.dp))
                 }
             }
-
-            // Connection Badge
-            Surface(
-                onClick = onReconnect,
-                shape = RoundedCornerShape(24.dp),
-                color = if (connected) StatusSuccess.copy(alpha = 0.12f) else StatusError.copy(alpha = 0.1f),
-                border = BorderStroke(1.dp, if (connected) StatusSuccess.copy(alpha = 0.22f) else StatusError.copy(alpha = 0.22f))
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(7.dp)
-                ) {
-                    Icon(Icons.Default.Watch, null, tint = if (connected) StatusSuccess else StatusError, modifier = Modifier.size(16.dp))
-                    Text(if (connected) "Online" else "Offline", color = if (connected) StatusSuccess else StatusError, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
+        }
+        Surface(onClick = onReconnect, shape = RoundedCornerShape(16.dp),
+            color = if (connected) StatusSuccess.copy(alpha = 0.08f) else BgCard,
+            border = BorderStroke(1.dp, BorderSubtle)) {
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 14.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Watch, null, tint = if (connected) StatusSuccess else TextDim, modifier = Modifier.size(18.dp))
+                Text(if (connected) "Watch connected" else "Connect your watch", color = if (connected) StatusSuccess else TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text(if (connected) "Manage" else "Set up", color = AccentCyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }
 }
 
 @Composable
-private fun DailySummaryCard(steps: Int, calories: Double, goal: Int, activeMinutes: Int) {
+private fun DailySummaryCard(steps: Int?, calories: Double?, goal: Int, activeMinutes: Int) {
     val safeGoal = goal.coerceAtLeast(1)
     val progress by animateFloatAsState(
-        targetValue = (steps.toFloat() / safeGoal).coerceIn(0f, 1f),
+        targetValue = ((steps ?: 0).toFloat() / safeGoal).coerceIn(0f, 1f),
         animationSpec = tween(900, easing = EaseOutCubic),
         label = "steps-progress"
     )
@@ -451,13 +433,13 @@ private fun DailySummaryCard(steps: Int, calories: Double, goal: Int, activeMinu
             modifier = Modifier
                 .background(
                     Brush.linearGradient(
-                        listOf(AccentCyan, Color(0xFF28745F), Color(0xFF25382F))
+                        listOf(AccentCyan, Color(0xFF245840), Color(0xFF183E2E))
                     )
                 )
                 .padding(20.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(138.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(112.dp), contentAlignment = Alignment.Center) {
                     Canvas(Modifier.fillMaxSize()) {
                         val stroke = 14.dp.toPx()
                         val inset = stroke / 2
@@ -482,7 +464,7 @@ private fun DailySummaryCard(steps: Int, calories: Double, goal: Int, activeMinu
                         )
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("${(progress * 100).toInt()}%", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Black, lineHeight = 26.sp)
+                        Text(if (steps == null) "—" else "${(progress * 100).toInt()}%", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold, lineHeight = 26.sp)
                         Text("goal", color = Color.White.copy(alpha = 0.72f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
@@ -490,13 +472,14 @@ private fun DailySummaryCard(steps: Int, calories: Double, goal: Int, activeMinu
                 Spacer(Modifier.width(18.dp))
 
                 Column(Modifier.weight(1f)) {
-                    Text("Daily Progress", color = Color.White.copy(alpha = 0.72f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    Text(steps.toString(), color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Black, lineHeight = 38.sp)
-                    Text(if (steps >= safeGoal) "Goal reached! +${steps - safeGoal} steps" else "${safeGoal - steps} steps to your goal", color = Color.White.copy(alpha = 0.76f), fontSize = 13.sp)
+                    Text("Daily movement", color = Color.White.copy(alpha = 0.72f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text(steps?.toString() ?: "—", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold, lineHeight = 38.sp)
+                    Text(when { steps == null -> "Waiting for today’s step capture"; steps >= safeGoal -> "Goal reached! +${steps - safeGoal} steps"; else -> "${safeGoal - steps} steps to your goal" }, color = Color.White.copy(alpha = 0.76f), fontSize = 13.sp)
+                    Text("Recorded steps may include motion estimates", color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 6.dp))
                     Spacer(Modifier.height(14.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SummaryPill("${calories.toInt()}", "kcal")
-                        SummaryPill("$activeMinutes", "min")
+                        SummaryPill(calories?.toInt()?.toString() ?: "—", "est. kcal")
+                        SummaryPill("$activeMinutes", "workout min")
                     }
                 }
             }
@@ -509,7 +492,7 @@ private fun SummaryPill(value: String, label: String) {
     Surface(shape = RoundedCornerShape(14.dp), color = Color.White.copy(alpha = 0.16f)) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             Text(value, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            Text(label, color = Color.White.copy(alpha = 0.68f), fontSize = 10.sp)
+            Text(label, color = Color.White.copy(alpha = 0.68f), fontSize = 11.sp)
         }
     }
 }
@@ -555,6 +538,7 @@ private fun VitalCard(
     status: String,
     icon: ImageVector,
     color: Color,
+    recordedAtText: String? = null,
     onTap: () -> Unit
 ) {
     HealthCard(modifier = modifier.clickable { onTap() }) {
@@ -569,10 +553,11 @@ private fun VitalCard(
         Spacer(Modifier.height(12.dp))
         Text(title, color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         Row(verticalAlignment = Alignment.Bottom) {
-            Text(value, color = TextWhite, fontSize = 35.sp, fontWeight = FontWeight.Black, lineHeight = 37.sp)
+            Text(value, color = TextWhite, fontSize = 35.sp, fontWeight = FontWeight.Bold, lineHeight = 37.sp)
             Spacer(Modifier.width(4.dp))
             Text(unit, color = TextDim, fontSize = 12.sp, modifier = Modifier.padding(bottom = 5.dp))
         }
+        recordedAtText?.let { Text(it, color = TextDim, fontSize = 11.sp) }
         Text(status, color = color, fontSize = 12.sp, fontWeight = FontWeight.Bold)
     }
 }
@@ -589,255 +574,48 @@ private fun readingAge(timestamp: Long?, currentTime: Long): String {
 }
 
 @Composable
-private fun DailyRecoveryCard(recovery: DailyRecoveryResult) {
-    val tierColor = Color(recovery.tier.colorHex)
-    val animatedScore by animateFloatAsState(
-        targetValue = recovery.score.toFloat(),
-        animationSpec = tween(durationMillis = 1000, easing = EaseOutCubic),
-        label = "recoveryScore"
-    )
-
+private fun CaptureStatusCard(state: DashboardUiState, connected: Boolean, currentTime: Long, onDeviceClick: () -> Unit) {
     HealthCard {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            SectionTitle("Daily Readiness", recovery.tier.label)
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = tierColor.copy(alpha = 0.15f),
-                border = BorderStroke(1.dp, tierColor.copy(alpha = 0.35f))
-            ) {
-                Text(
-                    text = "${recovery.score}/100",
-                    color = tierColor,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Black,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                )
-            }
-        }
-
-        Spacer(Modifier.height(14.dp))
-
-        Row(
-            Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Circular arc progress gauge for readiness
-            Box(
-                Modifier.size(80.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Canvas(Modifier.fillMaxSize()) {
-                    val stroke = 8f
-                    val sweep = 240f
-                    val startAngle = 150f
-                    // Background track
-                    drawArc(
-                        color = Color.White.copy(alpha = 0.08f),
-                        startAngle = startAngle,
-                        sweepAngle = sweep,
-                        useCenter = false,
-                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke, cap = StrokeCap.Round)
-                    )
-                    // Foreground active arc
-                    drawArc(
-                        color = tierColor,
-                        startAngle = startAngle,
-                        sweepAngle = sweep * (animatedScore / 100f),
-                        useCenter = false,
-                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke, cap = StrokeCap.Round)
-                    )
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "${animatedScore.roundToInt()}",
-                        color = TextWhite,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Black
-                    )
-                    Text(
-                        text = "SCORE",
-                        color = TextDim,
-                        fontSize = 8.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = recovery.headline,
-                    color = TextWhite,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = recovery.recommendation,
-                    color = TextSecondary,
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp
-                )
-            }
-        }
-
-        if (recovery.factors.isNotEmpty()) {
-            Spacer(Modifier.height(14.dp))
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                recovery.factors.take(3).forEach { factor ->
-                    Surface(
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp),
-                        color = BgCardHover,
-                        border = BorderStroke(1.dp, BorderSubtle)
-                    ) {
-                        Column(
-                            Modifier.padding(8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = factor.valueStr,
-                                color = if (factor.isPositive) StatusSuccess else TextWhite,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Black
-                            )
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                text = factor.title,
-                                color = TextDim,
-                                fontSize = 10.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
-            }
-        }
+        SectionTitle("Your captured data", if (connected) "Watch connected · history stays on this phone" else "Saved history · watch disconnected")
+        Spacer(Modifier.height(10.dp))
+        Text("${state.heartRate24h.size} heart-rate readings · ${state.spO2Last24h.size} oxygen readings in the last 24 hours", color = TextSecondary, fontSize = 13.sp)
+        Spacer(Modifier.height(6.dp))
+        Text("Steps: ${readingAge(state.todaySteps?.timestamp, currentTime)}", color = TextDim, fontSize = 12.sp)
+        Text("Watch readings retain their capture time. Recorded steps may include motion estimates; the source is unavailable for saved step history. Calories, pace and rest duration are estimates or calculations. Missing measurements stay unavailable.", color = TextDim, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 6.dp))
+        if (!connected) TextButton(onClick = onDeviceClick) { Text("Connect to capture and sync", color = AccentCyan) }
     }
 }
 
 @Composable
 private fun SleepCard(sleep: SleepEntity, history: List<SleepEntity>) {
-    val breakdown = remember(sleep) { RecoveryScoreEngine.computeSleepBreakdown(sleep) }
-    val totalMins = breakdown.totalMinutes
-
     HealthCard {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            SectionTitle("Sleep Stages", SimpleDateFormat("EEE, MMM d", Locale.getDefault()).format(Date(sleep.endTime)))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = AccentCyan.copy(alpha = 0.15f)
-                ) {
-                    Text(
-                        text = "Score ${breakdown.sleepScore}",
-                        color = AccentCyan,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
-                    )
+        SectionTitle("Rest estimate", SimpleDateFormat("EEE, MMM d", Locale.getDefault()).format(Date(sleep.endTime)))
+        Spacer(Modifier.height(10.dp))
+        Text("${sleep.estimatedMinutes / 60}h ${sleep.estimatedMinutes % 60}m", color = MetricSleep, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+        Text("Motion-based estimate from captured watch samples", color = TextSecondary, fontSize = 13.sp)
+        Text("Stillness can include awake rest. Deep, REM and light sleep stages, sleep scores and readiness are unavailable.", color = TextDim, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 6.dp))
+        if (history.size > 1) {
+            Spacer(Modifier.height(12.dp))
+            Text("Recent rest estimates", color = TextWhite, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            history.take(7).forEach { record ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(SimpleDateFormat("EEE, MMM d", Locale.getDefault()).format(Date(record.endTime)), color = TextDim, fontSize = 12.sp)
+                    Text("${record.estimatedMinutes / 60}h ${record.estimatedMinutes % 60}m", color = MetricSleep, fontSize = 12.sp)
                 }
-                TrendBadge("${totalMins / 60}h ${totalMins % 60}m", MetricSleep)
             }
-        }
-
-        Spacer(Modifier.height(14.dp))
-
-        // Horizontal multi-colored sleep stage distribution bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(8.dp)
-                .clip(RoundedCornerShape(4.dp))
-                .background(Color(0xFF263238))
-        ) {
-            if (breakdown.deepPercent > 0.01f) {
-                Box(
-                    modifier = Modifier
-                        .weight(breakdown.deepPercent)
-                        .fillMaxHeight()
-                        .background(SleepDeep)
-                )
-            }
-            if (breakdown.remPercent > 0.01f) {
-                Box(
-                    modifier = Modifier
-                        .weight(breakdown.remPercent)
-                        .fillMaxHeight()
-                        .background(SleepRem)
-                )
-            }
-            if (breakdown.lightPercent > 0.01f) {
-                Box(
-                    modifier = Modifier
-                        .weight(breakdown.lightPercent)
-                        .fillMaxHeight()
-                        .background(SleepLight)
-                )
-            }
-            if (breakdown.awakePercent > 0.01f) {
-                Box(
-                    modifier = Modifier
-                        .weight(breakdown.awakePercent)
-                        .fillMaxHeight()
-                        .background(SleepAwake)
-                )
-            }
-        }
-
-        Spacer(Modifier.height(14.dp))
-
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            SleepStageDetail("Deep", breakdown.deepMinutes, breakdown.deepPercent, SleepDeep)
-            SleepStageDetail("REM", breakdown.remMinutes, breakdown.remPercent, SleepRem)
-            SleepStageDetail("Light", breakdown.lightMinutes, breakdown.lightPercent, SleepLight)
-            SleepStageDetail("Awake", breakdown.awakeMinutes, breakdown.awakePercent, SleepAwake)
-        }
-
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "${breakdown.efficiencyPercent}% Sleep Efficiency · ${(breakdown.deepPercent * 100).roundToInt()}% Deep restoration",
-            color = TextDim,
-            fontSize = 11.sp
-        )
-
-        if (history.isNotEmpty()) {
-            Spacer(Modifier.height(14.dp))
-            SleepStackedBarChart(history, Modifier.fillMaxWidth().height(104.dp))
         }
     }
 }
 
 @Composable
-private fun SleepStageDetail(label: String, mins: Int, percent: Float, color: Color) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(8.dp).clip(CircleShape).background(color))
-        Spacer(Modifier.height(5.dp))
-        Text("${mins / 60}h ${mins % 60}m", color = TextWhite, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        Text("${(percent * 100).roundToInt()}% · $label", color = TextDim, fontSize = 10.sp)
-    }
-}
-
-@Composable
-private fun WorkoutsPreview(workouts: List<WorkoutEntity>, onClick: (WorkoutEntity) -> Unit) {
+private fun WorkoutsPreview(workouts: List<WorkoutEntity>, onClick: (WorkoutEntity) -> Unit, onViewAll: () -> Unit) {
     HealthCard {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             SectionTitle("Recent Workouts", "${workouts.size} sessions")
-            TrendBadge("${workouts.sumOf { it.calories }.toInt()} kcal", MetricCalories)
+            TrendBadge("${workouts.sumOf { it.calories }.toInt()} est. kcal", MetricCalories)
         }
         Spacer(Modifier.height(12.dp))
+        TextButton(onClick = onViewAll) { Text("View all workouts", color = AccentCyan) }
         workouts.take(4).forEachIndexed { index, workout ->
             WorkoutRow(workout) { onClick(workout) }
             if (index < workouts.take(4).lastIndex) Spacer(Modifier.height(8.dp))
@@ -872,8 +650,8 @@ fun WorkoutRow(workout: WorkoutEntity, onClick: () -> Unit) {
                 Text("$dateStr | ${durMin}m", color = TextDim, fontSize = 11.sp, maxLines = 1)
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text("${workout.calories.toInt()}", color = MetricCalories, fontWeight = FontWeight.Black, fontSize = 17.sp)
-                Text("kcal", color = TextDim, fontSize = 10.sp)
+                Text("${workout.calories.toInt()}", color = MetricCalories, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                Text("est. kcal", color = TextDim, fontSize = 11.sp)
             }
         }
     }
@@ -903,14 +681,14 @@ fun HealthCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.(
         border = BorderStroke(1.dp, BorderSubtle),
         shadowElevation = 1.dp
     ) {
-        Column(Modifier.padding(16.dp), content = content)
+        Column(Modifier.padding(18.dp), content = content)
     }
 }
 
 @Composable
 fun SectionTitle(title: String, subtitle: String) {
     Column {
-        Text(title, color = TextWhite, fontWeight = FontWeight.Black, fontSize = 18.sp)
+        Text(title, color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text(subtitle, color = TextDim, fontSize = 12.sp)
     }
 }

@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -106,7 +107,8 @@ import java.util.Locale
 @Composable
 fun WorkoutsScreen(
     viewModel: DashboardViewModel,
-    onWorkoutClick: (WorkoutEntity) -> Unit
+    onWorkoutClick: (WorkoutEntity) -> Unit,
+    onDeviceClick: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val workouts = uiState.recentWorkouts
@@ -125,7 +127,7 @@ fun WorkoutsScreen(
             }
             Toast.makeText(context, if (success) "Workout CSV saved" else "Could not save CSV. Try another location.", Toast.LENGTH_LONG).show()
             pendingExport = ""
-        }
+        } else pendingExport = ""
     }
     ResumeEffect { today = LocalDate.now(); viewModel.refreshData() }
     val since = when (period) {
@@ -157,14 +159,11 @@ fun WorkoutsScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(BgDeep),
-        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 34.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 30.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Column {
-                Text("Training", color = TextWhite, fontSize = 34.sp, fontWeight = FontWeight.Black, lineHeight = 38.sp)
-                Text("${filtered.size} sessions in view", color = TextSecondary, fontSize = 13.sp)
-            }
+            com.healthsync.phone.ui.components.ScreenHeading("Training", "${filtered.size} recorded sessions in view")
         }
 
         if (uiState.isLoading) {
@@ -173,7 +172,7 @@ fun WorkoutsScreen(
             item { Text(uiState.errorMessage ?: "", color = TextDim); TextButton(onClick = viewModel::refreshData) { Text("Retry") } }
         } else if (workouts.isEmpty()) {
             item {
-                EmptyWorkoutState()
+                EmptyWorkoutState(onDeviceClick)
             }
         } else {
             item {
@@ -288,14 +287,14 @@ private fun WorkoutTotalsCard(sessions: Int, distanceKm: Double, calories: Doubl
         border = BorderStroke(1.dp, BorderSubtle),
         shadowElevation = 1.dp
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Box(Modifier.size(38.dp).clip(CircleShape).background(AccentCyan.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
                         Icon(Icons.Default.Bolt, null, tint = AccentCyan, modifier = Modifier.size(20.dp))
                     }
                     Column {
-                        Text("Workout Log", color = TextWhite, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                        Text("Workout Log", color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Text("Recent performance", color = TextDim, fontSize = 12.sp)
                     }
                 }
@@ -305,7 +304,7 @@ private fun WorkoutTotalsCard(sessions: Int, distanceKm: Double, calories: Doubl
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TotalStat(sessions.toString(), "Sessions", AccentCyan, Modifier.weight(1f))
                 TotalStat(String.format(Locale.getDefault(), "%.1f", distanceKm), "km", StatusSuccess, Modifier.weight(1f))
-                TotalStat(calories.toInt().toString(), "kcal", MetricCalories, Modifier.weight(1f))
+                TotalStat(calories.toInt().toString(), "est. kcal", MetricCalories, Modifier.weight(1f))
                 TotalStat(if (minutes >= 60) "${minutes / 60}h ${minutes % 60}m" else "${minutes}m", "Time", MetricSpO2, Modifier.weight(1f))
             }
         }
@@ -316,31 +315,17 @@ private fun WorkoutTotalsCard(sessions: Int, distanceKm: Double, calories: Doubl
 private fun TotalStat(value: String, label: String, color: Color, modifier: Modifier) {
     Surface(modifier = modifier.height(72.dp), shape = RoundedCornerShape(18.dp), color = color.copy(alpha = 0.1f)) {
         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Text(value, color = color, fontSize = 18.sp, fontWeight = FontWeight.Black, maxLines = 1)
-            Text(label, color = TextDim, fontSize = 10.sp, maxLines = 1)
+            Text(value, color = color, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            Text(label, color = TextDim, fontSize = 11.sp, maxLines = 1)
         }
     }
 }
 
 @Composable
-private fun EmptyWorkoutState() {
-    Box(modifier = Modifier.fillMaxWidth().height(380.dp), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(
-                modifier = Modifier
-                    .size(86.dp)
-                    .clip(CircleShape)
-                    .background(AccentCyan.copy(alpha = 0.1f))
-                    .border(1.dp, AccentCyan.copy(alpha = 0.18f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.DirectionsRun, null, tint = AccentCyan, modifier = Modifier.size(40.dp))
-            }
-            Spacer(Modifier.height(16.dp))
-            Text("No workouts yet", color = TextWhite, fontWeight = FontWeight.Black, fontSize = 20.sp)
-            Text("Start one from the watch", color = TextDim, fontSize = 14.sp, textAlign = TextAlign.Center)
-        }
-    }
+private fun EmptyWorkoutState(onDeviceClick: () -> Unit) {
+    com.healthsync.phone.ui.components.AppStateCard(Icons.Default.DirectionsRun, "No workouts yet",
+        "Start a workout on your watch. Your session will appear here after syncing.",
+        "Open watch connection", onDeviceClick)
 }
 
 @Composable
@@ -381,20 +366,20 @@ fun WorkoutCard(workout: WorkoutEntity, onClick: () -> Unit) {
                         Icon(icon, null, tint = accent, modifier = Modifier.size(24.dp))
                     }
                     Column(Modifier.weight(1f)) {
-                        Text(cleanActivityName(workout.activityType), color = TextWhite, fontWeight = FontWeight.Black, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(cleanActivityName(workout.activityType), color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(dateStr, color = TextDim, fontSize = 12.sp, maxLines = 1)
                         Spacer(Modifier.height(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                             InlineMetric(Icons.Default.Timer, "${durMin}m", accent)
                             if (workout.avgHeartRate > 0) InlineMetric(Icons.Default.Favorite, "${workout.avgHeartRate} bpm", MetricHeart)
-                            InlineMetric(Icons.Default.LocalFireDepartment, "${workout.calories.toInt()} kcal", MetricCalories)
+                            InlineMetric(Icons.Default.LocalFireDepartment, "${workout.calories.toInt()} est. kcal", MetricCalories)
                         }
                     }
                 }
 
                 Column(horizontalAlignment = Alignment.End) {
-                    Text(mainMetric.first, color = accent, fontWeight = FontWeight.Black, fontSize = 22.sp, maxLines = 1)
-                    Text(mainMetric.second, color = TextDim, fontSize = 10.sp, maxLines = 1)
+                    Text(mainMetric.first, color = accent, fontWeight = FontWeight.Bold, fontSize = 22.sp, maxLines = 1)
+                    Text(mainMetric.second, color = TextDim, fontSize = 11.sp, maxLines = 1)
                 }
             }
         }

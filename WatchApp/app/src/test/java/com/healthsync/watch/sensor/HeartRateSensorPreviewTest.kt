@@ -14,9 +14,9 @@ class HeartRateSensorPreviewTest {
         val preview = tracker.preview!!
         assertEquals(73, preview.bpm)
         assertEquals(998_000L, preview.capturedAt)
-        assertEquals("73 bpm\nSensor reading · just now", preview.valueText(1_000_000L))
-        assertTrue(HeartRatePolicy.validReading(73f, 0))
-        assertEquals(73, HeartRatePolicy.reliableReading(preview.bpm, 0, preview.capturedAt,
+        assertEquals("73 bpm\nUnverified sensor · just now", preview.valueText(1_000_000L))
+        assertFalse(HeartRatePolicy.validReading(73f, 0))
+        assertEquals(-1, HeartRatePolicy.reliableReading(preview.bpm, 0, preview.capturedAt,
             1_000_000L, HeartRatePolicy.FRESH_MS))
     }
 
@@ -79,6 +79,6 @@ class HeartRateSensorPreviewTest {
         assertEquals(73, preview.displayBpm(preview.capturedAt + HeartRatePolicy.DISPLAY_MS))
         assertEquals(-1, preview.displayBpm(preview.capturedAt + HeartRatePolicy.DISPLAY_MS + 1))
         assertEquals(-1, preview.displayBpm(preview.capturedAt - 1))
-        assertEquals("73 bpm\nSensor reading · 1 min ago", preview.valueText(preview.capturedAt + 60_000L))
+        assertEquals("73 bpm\nUnverified sensor · 1 min ago", preview.valueText(preview.capturedAt + 60_000L))
     }
 }

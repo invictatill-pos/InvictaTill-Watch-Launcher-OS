@@ -33,6 +33,7 @@ class WatchHistoryActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_watch_history)
+        findViewById<View>(R.id.btnHistoryBack).setOnClickListener { finish() }
         recycler = findViewById(R.id.historyRecyclerView)
         recycler.layoutManager = LinearLayoutManager(this)
         recycler.addOnScrollListener(object : RecyclerView.OnScrollListener() {
@@ -111,7 +112,7 @@ class HistoryAdapter(
             type.contains("HOME") || type.contains("STRENGTH") -> "${workout.swings} reps"
             type.contains("BASKETBALL") -> "${workout.swings} moves"
             type.contains("BADMINTON") || type.contains("CRICKET") -> "${workout.swings} swings"
-            workout.distance_m > 0 -> String.format(Locale.getDefault(), "%.2f km", workout.distance_m / 1000f)
+            workout.distance_m > 0 -> WorkoutMeasurementLabels.distanceValue(workout.distance_m, workout.distance_source)
             else -> "${workout.step_count} steps"
         }
         holder.tvKcal.text = "${workout.calories.toInt()} kcal est."
@@ -121,6 +122,7 @@ class HistoryAdapter(
                 putExtra(WorkoutTrackingService.EXTRA_ACTIVITY_TYPE, displayType)
                 putExtra("summary_duration_ms", workout.duration_sec.toLong() * 1000L)
                 putExtra("summary_distance_m", workout.distance_m)
+                putExtra("summary_distance_source", workout.distance_source)
                 putExtra("summary_hr", workout.avg_hr)
                 putExtra("summary_calories", workout.calories)
                 putExtra("summary_steps", workout.step_count)

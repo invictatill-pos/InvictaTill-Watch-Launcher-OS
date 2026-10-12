@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FilterAlt
@@ -87,7 +88,7 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun NotificationsScreen(viewModel: NotificationsViewModel = hiltViewModel()) {
+fun NotificationsScreen(viewModel: NotificationsViewModel = hiltViewModel(), onBack: () -> Unit = {}) {
     val notifications by viewModel.notifications.collectAsState(initial = emptyList())
     val appFilters by viewModel.appFilters.collectAsState()
     val allAppsOn by viewModel.allAppsEnabled.collectAsState()
@@ -102,7 +103,7 @@ fun NotificationsScreen(viewModel: NotificationsViewModel = hiltViewModel()) {
     var hasAccess by remember { mutableStateOf(false) }
     var today by remember { mutableStateOf(LocalDate.now()) }
     val openNotificationAccess = {
-        try { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) } catch (_: Exception) { }
+        try { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) } catch (_: Exception) { android.widget.Toast.makeText(context, "Could not open Android settings on this phone.", android.widget.Toast.LENGTH_LONG).show() }
     }
     ResumeEffect {
         hasAccess = context.packageName in NotificationManagerCompat.getEnabledListenerPackages(context)
@@ -127,9 +128,15 @@ fun NotificationsScreen(viewModel: NotificationsViewModel = hiltViewModel()) {
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(BgDeep),
-        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 34.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 30.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        item {
+            TextButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = AccentCyan)
+                Text("Back", color = AccentCyan)
+            }
+        }
         item {
             NotificationHeader(
                 count = notifications.size,
@@ -138,6 +145,8 @@ fun NotificationsScreen(viewModel: NotificationsViewModel = hiltViewModel()) {
                 onSelectTab = { selectedTab = it }
             )
         }
+
+        if (selectedTab == 0) item { Text("Latest 100 mirrored notifications · stored on this phone", color = TextDim, fontSize = 12.sp) }
 
         if (!hasAccess && selectedTab == 0) {
             item { NotificationAccessCard(onOpen = openNotificationAccess) }
@@ -168,7 +177,7 @@ fun NotificationsScreen(viewModel: NotificationsViewModel = hiltViewModel()) {
                             formatDateHeader(dateKey),
                             color = TextDim,
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.Black,
+                            fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(top = 4.dp)
                         )
                     }
@@ -265,12 +274,9 @@ private fun NotificationHeader(
     selectedTab: Int,
     onSelectTab: (Int) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Column {
-                Text("Alerts", color = TextWhite, fontSize = 34.sp, fontWeight = FontWeight.Black, lineHeight = 38.sp)
-                Text("$count saved alerts", color = TextSecondary, fontSize = 13.sp)
-            }
+            com.healthsync.phone.ui.components.ScreenHeading("Alerts", "$count saved notifications", Modifier.weight(1f))
             Surface(shape = RoundedCornerShape(18.dp), color = AccentBlue.copy(alpha = 0.1f), border = BorderStroke(1.dp, AccentBlue.copy(alpha = 0.18f))) {
                 Row(Modifier.padding(horizontal = 11.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Icon(if (allAppsOn) Icons.Default.NotificationsActive else Icons.Default.FilterAlt, null, tint = AccentBlue, modifier = Modifier.size(16.dp))
@@ -292,12 +298,12 @@ private fun NotificationHeader(
 private fun SegmentButton(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        modifier = modifier.height(42.dp),
+        modifier = modifier.height(48.dp),
         shape = RoundedCornerShape(16.dp),
         color = if (selected) AccentCyan else Color.Transparent
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Text(label, color = if (selected) Color.White else TextSecondary, fontSize = 13.sp, fontWeight = FontWeight.Black)
+            Text(label, color = if (selected) Color.White else TextSecondary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -333,16 +339,9 @@ private fun SearchBox(value: String, onValueChange: (String) -> Unit, placeholde
 
 @Composable
 private fun EmptyNotificationsState(filtered: Boolean = false) {
-    Box(modifier = Modifier.fillMaxWidth().height(320.dp), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(Modifier.size(78.dp).clip(CircleShape).background(BgCard).border(1.dp, BorderSubtle, CircleShape), contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.NotificationsOff, null, tint = TextDim, modifier = Modifier.size(36.dp))
-            }
-            Spacer(Modifier.height(14.dp))
-            Text(if (filtered) "No matching alerts" else "No notifications yet", color = TextWhite, fontWeight = FontWeight.Black, fontSize = 19.sp)
-            Text(if (filtered) "Change your search or time period" else "New allowed alerts appear here", color = TextDim, fontSize = 13.sp)
-        }
-    }
+    com.healthsync.phone.ui.components.AppStateCard(Icons.Default.NotificationsOff,
+        if (filtered) "No matching alerts" else "Your alerts will appear here",
+        if (filtered) "Try another search or time period." else "Allow notification access and choose your apps to mirror alerts from your phone.")
 }
 
 private fun formatDateHeader(dateStr: String): String {
@@ -379,12 +378,12 @@ private fun NotificationCard(notification: NotificationHistoryEntity) {
                 modifier = Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(AccentCyan.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(notification.appLabel.firstOrNull()?.uppercaseChar()?.toString() ?: "?", color = AccentCyan, fontSize = 16.sp, fontWeight = FontWeight.Black)
+                Text(notification.appLabel.firstOrNull()?.uppercaseChar()?.toString() ?: "?", color = AccentCyan, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
             Column(Modifier.weight(1f)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text(notification.appLabel, color = AccentCyan, fontSize = 12.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    Text(timeFmt.format(Date(notification.timestamp)), color = TextDim, fontSize = 10.sp)
+                    Text(notification.appLabel, color = AccentCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Text(timeFmt.format(Date(notification.timestamp)), color = TextDim, fontSize = 11.sp)
                 }
                 Spacer(Modifier.height(3.dp))
                 Text(notification.title.ifBlank { "Notification" }, color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = if (expanded) Int.MAX_VALUE else 1, overflow = TextOverflow.Ellipsis)
@@ -416,7 +415,7 @@ private fun AppFilterMasterCard(
                 Icon(Icons.Default.Apps, null, tint = AccentCyan, modifier = Modifier.size(21.dp))
             }
             Column(Modifier.weight(1f)) {
-                Text("App Mirroring", color = TextWhite, fontSize = 17.sp, fontWeight = FontWeight.Black)
+                Text("App Mirroring", color = TextWhite, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                 Text(if (allAppsOn) "$appCount apps allowed" else "Selected apps only", color = TextDim, fontSize = 12.sp)
             }
             IconButton(onClick = onRefresh) {
@@ -445,18 +444,18 @@ private fun AppFilterItem(app: AppFilterInfo, masterOn: Boolean, onToggle: (Bool
                 modifier = Modifier.size(38.dp).clip(CircleShape).background(if (enabled) AccentCyan.copy(alpha = 0.12f) else TextDim.copy(alpha = 0.08f)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(app.label.firstOrNull()?.uppercaseChar()?.toString() ?: "?", color = if (enabled) AccentCyan else TextDim, fontSize = 15.sp, fontWeight = FontWeight.Black)
+                Text(app.label.firstOrNull()?.uppercaseChar()?.toString() ?: "?", color = if (enabled) AccentCyan else TextDim, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             }
             Column(Modifier.weight(1f)) {
                 Text(app.label, color = if (enabled) TextWhite else TextDim, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(app.packageName, color = TextDim, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(app.packageName, color = TextDim, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (app.isSystemApp || app.hasPostedNotification) {
                     Text(
                         listOfNotNull(
                             "System app".takeIf { app.isSystemApp },
                             "Notification source".takeIf { app.hasPostedNotification }
                         ).joinToString(" · "),
-                        color = AccentBlue, fontSize = 10.sp
+                        color = AccentBlue, fontSize = 11.sp
                     )
                 }
             }

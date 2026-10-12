@@ -11,6 +11,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -68,6 +70,7 @@ private val SPO2_INTERVALS = listOf(
 @Composable
 fun SettingsScreen(
     onRequestPermissions: () -> Unit = {},
+    onOpenNotifications: () -> Unit = {},
     notificationViewModel: NotificationsViewModel = hiltViewModel(),
     updateViewModel: com.healthsync.phone.viewmodel.AppUpdateViewModel = hiltViewModel()
 ) {
@@ -82,8 +85,8 @@ fun SettingsScreen(
     val appLoadError by notificationViewModel.appLoadError.collectAsState()
     var settingsSent by remember { mutableStateOf(false) }
     var stepGoal by remember { mutableStateOf(prefs.stepGoal.toString()) }
-    var weightText by rememberSaveable { mutableStateOf(prefs.userWeightKg.toString()) }
-    var heightText by rememberSaveable { mutableStateOf(prefs.userHeightCm.toString()) }
+    var weightText by rememberSaveable { mutableStateOf(if (prefs.hasUserWeight) prefs.userWeightKg.toString() else "") }
+    var heightText by rememberSaveable { mutableStateOf(if (prefs.hasUserHeight) prefs.userHeightCm.toString() else "") }
     var syncNotifications by remember { mutableStateOf(prefs.syncNotifications) }
     var syncCalls by remember { mutableStateOf(prefs.syncCalls) }
     var showAppSelectionDialog by remember { mutableStateOf(false) }
@@ -96,7 +99,9 @@ fun SettingsScreen(
     val validWeight = weightText.replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() && it in 30.0..250.0 }
     val validHeight = heightText.toIntOrNull()?.takeIf { it in 100..230 }
     val validGoal = stepGoal.toIntOrNull()?.takeIf { it in 1..100000 }
-    val canApply = validWeight != null && validHeight != null && validGoal != null
+    val weightUsesDefault = weightText.isBlank() && !prefs.hasUserWeight
+    val heightUsesDefault = heightText.isBlank() && !prefs.hasUserHeight
+    val canApply = (validWeight != null || weightUsesDefault) && (validHeight != null || heightUsesDefault) && validGoal != null
     ResumeEffect {
         hasNotifAccess = isNotificationAccessGranted(context)
         watchCallAssociated = WatchCallSetup.associated(context, connection.deviceAddress.orEmpty())
@@ -126,27 +131,22 @@ fun SettingsScreen(
     Box(Modifier.fillMaxSize().background(BgDeep)) {
         LazyColumn(
             Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 30.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)) {
-                    Icon(Icons.Default.Settings, null, tint = AccentCyan, modifier = Modifier.size(26.dp))
-                    Column {
-                        Text("Settings", color = TextWhite, fontSize = 28.sp, fontWeight = FontWeight.Black)
-                        Text("Configure your experience", color = TextDim, fontSize = 13.sp)
-                    }
-                }
+                com.healthsync.phone.ui.components.ScreenHeading("Settings", "Make HealthSync work for you")
             }
 
             if (missingPermissions.isNotEmpty()) {
                 item {
                     SettingsCard("Phone Permissions", Icons.Default.Security) {
-                        Text("Allow nearby devices for watch connection, Phone for call alerts, Contacts for caller names, and Notifications for service status.", color = TextSecondary, fontSize = 13.sp)
+                        Text("Allow nearby devices for watch connection, Phone for call alerts, Contacts for caller names, and Notifications for service status. Call and contact access are optional for health capture.", color = TextSecondary, fontSize = 13.sp)
+                        Text("Missing: " + missingPermissions.map { permission -> when (permission) { Manifest.permission.BLUETOOTH_CONNECT -> "Nearby devices"; Manifest.permission.READ_PHONE_STATE -> "Phone"; Manifest.permission.READ_CONTACTS -> "Contacts"; Manifest.permission.ANSWER_PHONE_CALLS -> "Answer calls"; else -> "Notifications" } }.distinct().joinToString(", "), color = TextDim, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(onClick = onRequestPermissions) { Text("Grant permissions", color = AccentCyan) }
                             TextButton(onClick = {
-                                try { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) } catch (_: Exception) { }
+                                try { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) } catch (_: Exception) { android.widget.Toast.makeText(context, "Could not open Android settings on this phone.", android.widget.Toast.LENGTH_LONG).show() }
                             }) { Text("App settings", color = TextDim) }
                         }
                     }
@@ -194,7 +194,7 @@ fun SettingsScreen(
                             Text(if (watchCallAssociated) "Check call setup" else "Enable watch call controls", color = AccentCyan)
                         }
                         TextButton(onClick = {
-                            try { context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) } catch (_: Exception) { }
+                            try { context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) } catch (_: Exception) { android.widget.Toast.makeText(context, "Could not open Android settings on this phone.", android.widget.Toast.LENGTH_LONG).show() }
                         }) { Text("Bluetooth", color = TextDim) }
                     }
                     if (!connection.isConnected) Text("Connect your watch first to enable call controls.", color = TextDim, fontSize = 12.sp)
@@ -213,29 +213,8 @@ fun SettingsScreen(
                         Icon(Icons.Default.DirectionsWalk, null, tint = MetricSteps, modifier = Modifier.size(20.dp))
                         Text("Steps", color = TextWhite, fontSize = 14.sp, modifier = Modifier.weight(1f))
                         Surface(shape = RoundedCornerShape(20.dp), color = MetricSteps.copy(alpha = 0.12f)) {
-                            Text("Always On", color = MetricSteps, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
+                            Text("Watch sensor", color = MetricSteps, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
                         }
-                    }
-                }
-            }
-
-            // Apply to Watch
-            item {
-                Surface(
-                    onClick = {
-                        BluetoothSyncService.sendSettingsToWatch(context, WatchSettingsPayload(hrIntervalMs, spo2IntervalMs, prefs.stepGoal, prefs.userWeightKg, prefs.userHeightCm))
-                        settingsSent = true
-                    },
-                    enabled = connection.isConnected && canApply,
-                    modifier = Modifier.fillMaxWidth().height(50.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    color = if (settingsSent) StatusSuccess.copy(alpha = 0.12f) else AccentCyan.copy(alpha = 0.12f),
-                    border = BorderStroke(1.dp, if (settingsSent) StatusSuccess.copy(alpha = 0.3f) else AccentCyan.copy(alpha = 0.3f))
-                ) {
-                    Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                        Icon(if (settingsSent) Icons.Default.CheckCircle else Icons.Default.Sync, null, tint = if (settingsSent) StatusSuccess else AccentCyan, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(if (!canApply) "Check goal and profile values below" else if (!connection.isConnected) "Saved · applies when watch reconnects" else if (settingsSent) "Settings request sent" else "Apply to Watch", color = if (settingsSent) StatusSuccess else AccentCyan, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -262,7 +241,8 @@ fun SettingsScreen(
 
             item {
                 SettingsCard("Your Profile", Icons.Default.Person) {
-                    Text("Weight and height help estimate workout calories and walking distance. These values are stored on your phone and sent to your paired watch.", color = TextSecondary, fontSize = 13.sp, lineHeight = 18.sp)
+                    Text("Optional entries help calculate activity estimates. These are values you enter, stored on your phone and sent to your paired watch.", color = TextSecondary, fontSize = 14.sp, lineHeight = 20.sp)
+                    if (weightUsesDefault || heightUsesDefault) Text("Unentered values use calculation defaults: 70 kg and 170 cm. They are not measured body data.", color = TextDim, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
                     Spacer(Modifier.height(12.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         OutlinedTextField(
@@ -276,9 +256,10 @@ fun SettingsScreen(
                             },
                             modifier = Modifier.weight(1f),
                             label = { Text("Weight") },
+                            placeholder = { Text("Enter weight") },
                             suffix = { Text("kg") },
                             supportingText = { Text("30–250 kg") },
-                            isError = validWeight == null,
+                            isError = validWeight == null && !weightUsesDefault,
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                         )
@@ -290,20 +271,43 @@ fun SettingsScreen(
                             },
                             modifier = Modifier.weight(1f),
                             label = { Text("Height") },
+                            placeholder = { Text("Enter height") },
                             suffix = { Text("cm") },
                             supportingText = { Text("100–230 cm") },
-                            isError = validHeight == null,
+                            isError = validHeight == null && !heightUsesDefault,
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                         )
                     }
-                    if (validWeight == null || validHeight == null) Text("Your last valid entries are retained while you finish editing.", color = StatusError, fontSize = 12.sp)
+                    if ((validWeight == null && !weightUsesDefault) || (validHeight == null && !heightUsesDefault)) Text("Your last valid entries are retained while you finish editing.", color = StatusError, fontSize = 12.sp)
+                }
+            }
+
+            // Apply to Watch
+            item {
+                Surface(
+                    onClick = {
+                        settingsSent = BluetoothSyncService.sendSettingsToWatch(context, WatchSettingsPayload(hrIntervalMs, spo2IntervalMs, prefs.stepGoal, prefs.userWeightKg, prefs.userHeightCm))
+                        if (!settingsSent) android.widget.Toast.makeText(context, "Settings could not be sent. Reconnect your watch and try again.", android.widget.Toast.LENGTH_LONG).show()
+                    },
+                    enabled = connection.isConnected && canApply,
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    color = if (settingsSent) StatusSuccess.copy(alpha = 0.12f) else AccentCyan.copy(alpha = 0.12f),
+                    border = BorderStroke(1.dp, if (settingsSent) StatusSuccess.copy(alpha = 0.3f) else AccentCyan.copy(alpha = 0.3f))
+                ) {
+                    Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                        Icon(if (settingsSent) Icons.Default.CheckCircle else Icons.Default.Sync, null, tint = if (settingsSent) StatusSuccess else AccentCyan, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (!canApply) "Check goal and profile values above" else if (!connection.isConnected) "Saved · applies when watch reconnects" else if (settingsSent) "Settings request sent" else "Apply to Watch", color = if (settingsSent) StatusSuccess else AccentCyan, fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
 
             // Notification Apps
             item {
                 SettingsCard("Notification Apps", Icons.Default.Notifications) {
+                    TextButton(onClick = onOpenNotifications) { Text("Open alerts and notification history", color = AccentCyan) }
                     MasterToggle("All Apps", allAppsEnabled) {
                         notificationViewModel.setAllAppsEnabled(it)
                     }
@@ -363,7 +367,8 @@ fun SettingsScreen(
                     val phoneVersion = remember { try { context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "Unknown" } catch (_: Exception) { "Unknown" } }
                     val liveWatchVersion by BluetoothSyncService.connectedWatchVersionName.collectAsState()
                     val watchVersion = liveWatchVersion ?: remember { PhonePreferences(context).lastKnownWatchVersion }
-                    val displayWatchVersion = if (watchVersion.startsWith("v", ignoreCase = true)) watchVersion else "v$watchVersion"
+                    val displayWatchVersion = if (watchVersion == "Unknown") "Version unknown" else if (watchVersion.startsWith("v", ignoreCase = true)) watchVersion else "v$watchVersion"
+                    val updateManifest by updateViewModel.manifest.collectAsState()
 
                     // Phone App Row
                     Row(
@@ -395,7 +400,7 @@ fun SettingsScreen(
                                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     Icon(Icons.Default.CheckCircle, null, tint = StatusSuccess, modifier = Modifier.size(12.dp))
-                                    Text("Up to date", color = StatusSuccess, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                    Text(if (updateManifest == null) "Check needed" else "No newer version listed", color = if (updateManifest == null) TextDim else StatusSuccess, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                                 }
                             }
                         }
@@ -411,7 +416,7 @@ fun SettingsScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Watch Companion", color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                            Text("$displayWatchVersion (Kolabee U8)", color = TextDim, fontSize = 12.sp)
+                            Text(if (liveWatchVersion != null && connection.isConnected) "$displayWatchVersion · connected watch" else "$displayWatchVersion · last known", color = TextDim, fontSize = 12.sp)
                         }
                         if (watchUpdateInfo != null) {
                             Button(
@@ -434,7 +439,7 @@ fun SettingsScreen(
                                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
                                         Icon(Icons.Default.CheckCircle, null, tint = StatusSuccess, modifier = Modifier.size(12.dp))
-                                        Text("Up to date", color = StatusSuccess, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                        Text(when { watchVersion == "Unknown" -> "Version unknown"; updateManifest == null -> "Check needed"; else -> "Last known version current" }, color = TextDim, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                                     }
                                 }
                                 TextButton(
@@ -486,12 +491,15 @@ fun SettingsScreen(
                                 )
                                 Spacer(Modifier.height(4.dp))
                                 Text(
-                                    text = "Streaming to Watch: ${s.percent}% (chunk ${s.currentChunk}/${s.totalChunks})",
+                                    text = if (s.percent >= 100) "Transfer complete · waiting for watch verification" else "Sending to watch: ${s.percent}% (chunk ${s.currentChunk}/${s.totalChunks})",
                                     color = AccentCyan,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium
                                 )
                             }
+                        }
+                        is com.healthsync.phone.data.update.UpdateStatus.WatchInstallRequired -> {
+                            Text(if (s.verified) "Confirm installation on your watch" else "Sent. Check the watch notification and confirm installation.", color = AccentCyan, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
                         }
                         is com.healthsync.phone.data.update.UpdateStatus.ReadyToInstall -> {
                             Button(
@@ -519,7 +527,7 @@ fun SettingsScreen(
                     // Check for Updates Button
                     Surface(
                         onClick = { updateViewModel.checkForUpdates(silent = false) },
-                        modifier = Modifier.fillMaxWidth().height(40.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
                         shape = RoundedCornerShape(10.dp),
                         color = AccentCyan.copy(alpha = 0.12f)
                     ) {
@@ -541,15 +549,16 @@ fun SettingsScreen(
                     HorizontalDivider(color = BorderSubtle)
                     AboutRow("Storage", "On this phone")
                     HorizontalDivider(color = BorderSubtle)
-                    AboutRow("Developer", "HealthSync Team")
+                    AboutRow("Health data", "Captured on watch")
+                    Text("Heart rate and oxygen require supported watch sensors and permission. Rest duration is estimated from motion. Calories and some distances are calculated from activity and profile values.", color = TextDim, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
                 }
             }
 
             // Open System Settings
             item {
                 Surface(
-                    onClick = { try { context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) {} },
-                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                    onClick = { try { context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) { android.widget.Toast.makeText(context, "Could not open Android settings on this phone.", android.widget.Toast.LENGTH_LONG).show() } },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(12.dp),
                     color = BgCard
                 ) {
@@ -612,7 +621,7 @@ fun SettingsScreen(
 
                         // Category chips
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             FilterChip(
@@ -687,6 +696,11 @@ fun SettingsScreen(
 
                         HorizontalDivider(color = BorderSubtle, modifier = Modifier.padding(vertical = 4.dp))
 
+                        appLoadError?.let { message ->
+                            Text(message, color = StatusError, fontSize = 12.sp)
+                            TextButton(onClick = notificationViewModel::loadInstalledApps) { Text("Retry loading apps", color = AccentCyan) }
+                        }
+
                         // Scrollable List
                         if (loadingApps && installedApps.isEmpty()) {
                             Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
@@ -720,7 +734,7 @@ fun SettingsScreen(
                         // Done button
                         Button(
                             onClick = { showAppSelectionDialog = false },
-                            modifier = Modifier.fillMaxWidth().height(44.dp),
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = AccentCyan)
                         ) {
@@ -745,7 +759,7 @@ private fun IntervalPicker(
         Text(label, color = TextWhite, fontSize = 14.sp, modifier = Modifier.weight(1f))
         Box {
             Row(
-                modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(color.copy(alpha = 0.08f)).border(1.dp, color.copy(alpha = 0.25f), RoundedCornerShape(8.dp)).clickable { expanded = true }.padding(horizontal = 10.dp, vertical = 6.dp),
+                modifier = Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).background(color.copy(alpha = 0.08f)).border(1.dp, color.copy(alpha = 0.25f), RoundedCornerShape(12.dp)).clickable { expanded = true }.padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(selectedLabel, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -788,7 +802,7 @@ private fun MasterToggle(label: String, checked: Boolean, onChange: (Boolean) ->
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Icon(Icons.Default.Apps, null, tint = AccentCyan, modifier = Modifier.size(18.dp))
         Text(label, color = TextWhite, fontSize = 14.sp, modifier = Modifier.weight(1f))
-        Switch(checked = checked, onCheckedChange = onChange, colors = SwitchDefaults.colors(checkedThumbColor = AccentCyan, checkedTrackColor = AccentCyan.copy(alpha = 0.3f)))
+        Switch(checked = checked, onCheckedChange = onChange, colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = AccentCyan, uncheckedThumbColor = TextDim, uncheckedTrackColor = BgInput))
     }
 }
 
@@ -804,10 +818,10 @@ private fun AppToggleItem(
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(appName, color = TextWhite, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(pkg, color = TextDim, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (isSystemApp) Text("Preinstalled / system app", color = AccentBlue, fontSize = 10.sp)
+                Text(pkg, color = TextDim, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (isSystemApp) Text("Preinstalled / system app", color = AccentBlue, fontSize = 11.sp)
             }
-            Switch(checked = isChecked, onCheckedChange = onToggle, enabled = selectable, colors = SwitchDefaults.colors(checkedThumbColor = AccentCyan, checkedTrackColor = AccentCyan.copy(alpha = 0.3f)))
+            Switch(checked = isChecked, onCheckedChange = onToggle, enabled = selectable, colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = AccentCyan, uncheckedThumbColor = TextDim, uncheckedTrackColor = BgInput))
         }
     }
 }
@@ -824,14 +838,14 @@ private fun AboutRow(label: String, value: String) {
 private fun SettingsCard(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = BgCard),
         border = BorderStroke(1.dp, BorderSubtle)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(bottom = 8.dp)) {
-                Icon(icon, null, tint = TextDim, modifier = Modifier.size(14.dp))
-                Text(title.uppercase(), color = TextDim, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.8.sp)
+                Icon(icon, null, tint = AccentCyan, modifier = Modifier.size(20.dp))
+                Text(title, color = TextWhite, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
             }
             content()
         }
@@ -857,7 +871,7 @@ private fun NotificationAccessBanner(context: Context) {
             }
             Text("Enable HealthSync in Android's Notification Access screen. Then choose Gmail or other sources in Notification Apps below; Android's access screen lists notification readers, not message source apps.", color = TextWhite.copy(alpha = 0.8f), fontSize = 13.sp, lineHeight = 18.sp)
             Surface(
-                onClick = { try { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) } catch (_: Exception) { } },
+                onClick = { try { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) } catch (_: Exception) { android.widget.Toast.makeText(context, "Could not open Android settings on this phone.", android.widget.Toast.LENGTH_LONG).show() } },
                 shape = RoundedCornerShape(10.dp),
                 color = StatusError.copy(alpha = 0.15f)
             ) {

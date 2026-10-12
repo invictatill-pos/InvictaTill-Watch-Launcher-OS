@@ -15,6 +15,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.healthsync.watch.ui.WatchVisualStyle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -59,7 +60,7 @@ class NotificationsPanel(
         setPadding(side, end, side, end)
     }
     private val scroll = RoundScrollView(activity).apply {
-        setBackgroundColor(Color.BLACK)
+        background=WatchVisualStyle.screenBackground()
         isFillViewport = true
         clipToPadding = false
         addView(content, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -308,6 +309,6 @@ class NotificationsPanel(
         if (resumed) reload()
     }
     private fun toast(message: String) = Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
-    private fun shape(color: Int) = GradientDrawable().apply { setColor(color); cornerRadius = dp(20).toFloat() }
+    private fun shape(color: Int) = WatchVisualStyle.surface(activity,color)
     private fun dp(value: Int) = (value * activity.resources.displayMetrics.density).roundToInt()
 }

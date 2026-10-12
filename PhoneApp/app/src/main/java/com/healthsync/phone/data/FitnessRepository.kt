@@ -48,21 +48,29 @@ class FitnessRepository @Inject constructor(
 
     fun getLatestHeartRate(): Flow<HeartRateEntity?> = db.heartRateDao().getLatest()
 
+    fun getWorkoutHeartRates(start: Long, end: Long): Flow<List<HeartRateEntity>> =
+        db.heartRateDao().getForWorkout(start, end)
+
     fun getHeartRateLast24h(): Flow<List<HeartRateEntity>> =
         rollingQuery { db.heartRateDao().getLast24h(it - 24 * 60 * 60 * 1000L) }
 
     // ── Steps ─────────────────────────────────────────────────────────────────
+
+    private fun mergeStepCount(previous: StepsEntity?, steps: Int, timestamp: Long) =
+        StepCountMergePolicy.merge(previous?.let { StepCountObservation(it.steps, it.timestamp) },
+            StepCountObservation(steps, timestamp))
 
     suspend fun saveSteps(payload: StepsPayload?, timestamp: Long = System.currentTimeMillis()) = db.withTransaction {
         if (payload == null) return@withTransaction
         if (!SyncValidation.validTimestamp(timestamp) || !SyncValidation.validSteps(payload.steps, payload.calories)) return@withTransaction
         val dayKey = dayKey(timestamp)
         val previous = db.stepsDao().getLatestForDayOnce(dayKey)
+        val retained = mergeStepCount(previous, payload.steps, timestamp)
         db.stepsDao().insert(
             StepsEntity(
-                steps    = maxOf(payload.steps, previous?.steps ?: 0),
+                steps    = retained.steps,
                 calories = maxOf(payload.calories, previous?.calories ?: 0.0),
-                timestamp = maxOf(timestamp, previous?.timestamp ?: 0),
+                timestamp = retained.timestamp,
                 dayKey   = dayKey
             )
         )
@@ -83,12 +91,14 @@ class FitnessRepository @Inject constructor(
         )
         val buckets = db.stepBucketDao().getForDay(dayKey)
         val previous = db.stepsDao().getLatestForDayOnce(dayKey)
+        val retained = mergeStepCount(previous, buckets.sumOf { it.steps.toLong() }.coerceAtMost(1_000_000).toInt(),
+            buckets.maxOfOrNull { it.timestamp } ?: timestamp)
         db.stepsDao().insert(
             StepsEntity(
                 dayKey = dayKey,
-                steps = maxOf(previous?.steps ?: 0, buckets.sumOf { it.steps.toLong() }.coerceAtMost(1_000_000).toInt()),
+                steps = retained.steps,
                 calories = maxOf(previous?.calories ?: 0.0, buckets.sumOf { it.calories }),
-                timestamp = maxOf(previous?.timestamp ?: 0, buckets.maxOfOrNull { it.timestamp } ?: timestamp)
+                timestamp = retained.timestamp
             )
         )
     }
@@ -102,11 +112,13 @@ class FitnessRepository @Inject constructor(
         for (day in valid.map { dayKey(it.timestamp) }.distinct()) {
             val buckets = db.stepBucketDao().getForDay(day)
             val previous = db.stepsDao().getLatestForDayOnce(day)
+            val retained = mergeStepCount(previous, buckets.sumOf { it.steps.toLong() }.coerceAtMost(1_000_000).toInt(),
+                buckets.maxOfOrNull { it.timestamp } ?: 0)
             db.stepsDao().insert(StepsEntity(
                 dayKey = day,
-                steps = maxOf(previous?.steps ?: 0, buckets.sumOf { it.steps.toLong() }.coerceAtMost(1_000_000).toInt()),
+                steps = retained.steps,
                 calories = maxOf(previous?.calories ?: 0.0, buckets.sumOf { it.calories }),
-                timestamp = maxOf(previous?.timestamp ?: 0, buckets.maxOfOrNull { it.timestamp } ?: 0)
+                timestamp = retained.timestamp
             ))
         }
         valid.map { it.timestamp }
@@ -129,13 +141,17 @@ class FitnessRepository @Inject constructor(
     // ── SpO2 ──────────────────────────────────────────────────────────────────
 
     suspend fun saveSpO2(payload: SpO2Payload?, timestamp: Long = System.currentTimeMillis()) {
-        if (payload == null || !SyncValidation.validSpO2(payload.percentage, timestamp)) return
-        db.spO2Dao().insert(
-            SpO2Entity(
-                percentage = payload.percentage,
-                timestamp = timestamp
+        if (payload == null || payload.source != "WATCH_SENSOR" || !SyncValidation.validSpO2(payload.percentage, timestamp)) return
+        db.withTransaction {
+            if (db.spO2Dao().hasReading(timestamp, payload.percentage)) return@withTransaction
+            db.spO2Dao().insert(
+                SpO2Entity(
+                    percentage = payload.percentage,
+                    timestamp = timestamp,
+                    source = payload.source
+                )
             )
-        )
+        }
     }
 
     fun getLatestSpO2(): Flow<SpO2Entity?> = db.spO2Dao().getLatest()
@@ -147,7 +163,8 @@ class FitnessRepository @Inject constructor(
 
     suspend fun saveSleep(incoming: SleepPayload?) = db.withTransaction {
         val payload = requireNotNull(incoming) { "Missing sleep record" }
-        require(SyncValidation.validSleep(payload.startTime, payload.endTime, payload.deepMinutes,
+        require(SyncValidation.validCapturedSleep(payload.startTime, payload.endTime, payload.source,
+            payload.estimatedMinutes, payload.stagesAvailable, payload.deepMinutes,
             payload.lightMinutes, payload.remMinutes, payload.awakeMinutes))
         if (db.sleepDao().getByStartTime(payload.startTime) != null) return@withTransaction
         db.sleepDao().insert(
@@ -157,7 +174,10 @@ class FitnessRepository @Inject constructor(
                 deepMinutes = payload.deepMinutes,
                 lightMinutes = payload.lightMinutes,
                 remMinutes = payload.remMinutes,
-                awakeMinutes = payload.awakeMinutes
+                awakeMinutes = payload.awakeMinutes,
+                source = payload.source,
+                estimatedMinutes = payload.estimatedMinutes,
+                stagesAvailable = payload.stagesAvailable
             )
         )
     }
@@ -204,7 +224,9 @@ class FitnessRepository @Inject constructor(
                 steps = payload.steps,
                 swingsCount = payload.swings,
                 routeJson = routeJson,
-                durationSeconds = payload.durationSeconds
+                durationSeconds = payload.durationSeconds,
+                distanceSource = validatedDistanceSource(payload.distanceSource),
+                caloriesEstimated = true
             )
         )
     }
@@ -234,12 +256,14 @@ class FitnessRepository @Inject constructor(
                 steps = session.step_count,
                 swingsCount = session.swings,
                 routeJson = routeJson,
-                durationSeconds = session.duration_sec
+                durationSeconds = session.duration_sec,
+                distanceSource = validatedDistanceSource(session.distance_source),
+                caloriesEstimated = true
             )
         )
     }
 
-    fun getRecentWorkouts(): Flow<List<WorkoutEntity>> = db.workoutDao().getRecentWorkouts()
+    fun getRecentWorkouts(): Flow<List<WorkoutEntity>> = db.workoutDao().getAllWorkouts()
 
     // ── Cleanup ───────────────────────────────────────────────────────────────
 

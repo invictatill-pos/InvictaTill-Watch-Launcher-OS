@@ -21,6 +21,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.healthsync.watch.ui.WatchVisualStyle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.healthsync.watch.service.BluetoothClientService
@@ -47,7 +48,7 @@ class MediaPanel(
         setPadding(side, end, side, end)
     }
     private val scroll = RoundScrollView(activity).apply {
-        setBackgroundColor(Color.BLACK)
+        background=WatchVisualStyle.screenBackground()
         isFillViewport = true
         clipToPadding = false
         addView(content, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -220,7 +221,7 @@ class MediaPanel(
         setOnClickListener { it.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY); run() }
     }
 
-    private fun shape(color: Int, radius: Int) = GradientDrawable().apply { setColor(color); cornerRadius = dp(radius).toFloat() }
+    private fun shape(color: Int, radius: Int) = WatchVisualStyle.surface(activity,color,radius)
     private fun fullWidth() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
     private fun dp(value: Int) = (value * activity.resources.displayMetrics.density).roundToInt()
 

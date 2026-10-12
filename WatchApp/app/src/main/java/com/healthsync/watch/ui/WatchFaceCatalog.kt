@@ -12,7 +12,7 @@ object WatchFaceCatalog {
         Entry("orbit", "Orbit Pro", "Mint activity goal arc with live complications", native = true, clockShortcuts = true),
         Entry("chrono", "Chrono Ultra", "Luxury sports chronograph with luminous hands & live subdials", native = true, clockShortcuts = true),
         Entry("classic", "Retro Illuminator", "Vintage digital LCD with cyan backlight & health odometer", native = true, clockShortcuts = false),
-        Entry("neon", "Cyberpunk HUD", "Futuristic matrix with ECG pulse wave & 4 neon themes", native = true, clockShortcuts = true),
+        Entry("neon", "Cyberpunk HUD", "Captured heart rate, step progress & 4 neon themes", native = true, clockShortcuts = true),
         Entry("bauhaus", "Bauhaus Minimal", "Swiss luxury executive dial with fine batons & date aperture", native = true, clockShortcuts = true)
     )
     val entries = nativeEntries

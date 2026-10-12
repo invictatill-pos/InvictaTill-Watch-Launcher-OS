@@ -57,6 +57,8 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
         const val EXTRA_METRIC_2 = "metric_2"
         const val EXTRA_IS_PAUSED = "is_paused"
         const val EXTRA_CALORIES = "calories"
+        const val EXTRA_DISTANCE_SOURCE = "distance_source"
+        const val EXTRA_CALORIES_ESTIMATED = "calories_estimated"
         const val EXTRA_STEPS = "steps"
         const val EXTRA_BPM = "bpm"
         const val EXTRA_CADENCE = "cadence"
@@ -110,6 +112,7 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
     private var hrSum = 0L
     private var hrCount = 0L
     private var lastHrSampleTime = 0L
+    private var hrWindowStartTime = 0L
     private var peakHr = 0
     private var currentReps = 0
     private var currentSwings = 0
@@ -148,6 +151,7 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
             }
             ACTION_RESUME -> if (tracking && paused) {
                 paused = false; anchorElapsedMs = SystemClock.elapsedRealtime(); lastStepTotal = lifetimeSteps()
+                hrWindowStartTime = System.currentTimeMillis()
                 lastLocation = null; gpsLocked = false; lastFixElapsed = -1L; lastGpsFixElapsed = -1L
                 repDetector.reset(currentReps); swingDetector.reset(currentSwings)
                 registerTrackingSensors(); publishState(); checkpoint()
@@ -194,6 +198,7 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
         tracking = true; paused = false; activityType = type
         sessionId = "W_${UUID.randomUUID()}"
         startTimeMs = System.currentTimeMillis(); anchorElapsedMs = SystemClock.elapsedRealtime(); elapsedBeforeAnchor = 0L
+        hrWindowStartTime = startTimeMs
         workoutSteps = 0; activeStartSteps = SensorCollectorService.latestSteps; lastStepTotal = lifetimeSteps()
         totalDistanceMeters = 0f; fallbackDistanceMeters = 0f; routePoints.clear(); lastLocation = null; gpsLocked = false; gpsSatCount = 0
         lastFixElapsed = -1L; lastGpsFixElapsed = -1L; lastLocationProvider = ""; lastReportedAccuracy = -1f
@@ -261,13 +266,13 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
             while (tracking && isActive) {
                 collectSteps()
                 if (!paused) {
-                    // Keep continuous heart rate measurement active during workouts like Apple Watch/Garmin
+                    // Keep requesting real readings during the workout; unavailable readings remain empty.
                     if (tick % 20 == 0 || SensorCollectorService.hrStatus !in setOf("measuring", "reading")) {
                         SensorCollectorService.forceMeasureHr(this@WorkoutTrackingService)
                     }
                     val sampleTime = SensorCollectorService.latestBpmTimeMs
-                    val bpm = SensorCollectorService.freshBpm().takeIf { it > 0 } ?: SensorCollectorService.latestBpm
-                    if (bpm in 30..240 && sampleTime >= startTimeMs && sampleTime != lastHrSampleTime) {
+                    val bpm = SensorCollectorService.freshBpm()
+                    if (bpm in 25..240 && sampleTime >= hrWindowStartTime && sampleTime > lastHrSampleTime) {
                         hrSum += bpm; hrCount++; peakHr = maxOf(peakHr, bpm); lastHrSampleTime = sampleTime
                     }
                 }
@@ -309,10 +314,13 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
         else -> 0f
     }
 
+    private fun distanceSource(): String = workoutDistanceSource(workoutUsesLocation(activityType),
+        routePoints.isNotEmpty(), fallbackDistanceMeters > 0f)
+
     private fun broadcastUpdate() {
         if (!tracking) return
         val duration = activeDurationMs(); val distance = distanceMeters()
-        val bpm = SensorCollectorService.freshBpm().takeIf { it > 0 } ?: SensorCollectorService.latestBpm.takeIf { it in 30..240 } ?: -1
+        val bpm = SensorCollectorService.freshBpm()
         val cadence = if (paused) 0 else cadenceTracker.currentCadence(SystemClock.elapsedRealtime())
         val metric1 = when (activityType) {
             "Run" -> if (distance >= 10f) String.format(Locale.getDefault(), "%.2f min/km", SportAlgorithms.calculatePaceMinPerKm(distance.toDouble(), duration / 1000)) else "-- min/km"
@@ -332,6 +340,7 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
             putExtra(EXTRA_DURATION, duration); putExtra(EXTRA_DISTANCE, distance)
             putExtra(EXTRA_METRIC_1, metric1); putExtra(EXTRA_METRIC_2, metric2); putExtra(EXTRA_IS_PAUSED, paused)
             putExtra(EXTRA_ACTIVITY_TYPE, activityType); putExtra(EXTRA_CALORIES, SportAlgorithms.estimateCalories(activityType, duration, watchPrefs.userWeightKg))
+            putExtra(EXTRA_DISTANCE_SOURCE, distanceSource()); putExtra(EXTRA_CALORIES_ESTIMATED, true)
             putExtra(EXTRA_STEPS, workoutSteps); putExtra(EXTRA_BPM, bpm); putExtra(EXTRA_CADENCE, cadence)
             putExtra(EXTRA_REPS, currentReps); putExtra(EXTRA_SETS, currentSets)
             putExtra(EXTRA_ROUTE_COUNT, routePoints.size)
@@ -346,13 +355,14 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
         val distance = distanceMeters(); val calories = SportAlgorithms.estimateCalories(activityType, activeMs, watchPrefs.userWeightKg)
         val count = if (activityType in setOf("Badminton", "Basketball", "Cricket")) currentSwings else currentReps
         val session = WorkoutSessionPayload(sessionId, activityType.uppercase(Locale.ROOT).replace(" ", "_"), startTimeMs, endMs,
-            (activeMs / 1000L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), distance, calories, workoutSteps, count, avgHr, gson.toJson(routePoints))
+            (activeMs / 1000L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), distance, calories, workoutSteps, count, avgHr, gson.toJson(routePoints), distanceSource(), true)
         if (!WatchDatabaseHelper.getInstance(this).insertWorkoutSession(session, false)) {
             elapsedBeforeAnchor = activeMs
             sendBroadcast(Intent(ACTION_SAVE_FAILED).setPackage(packageName))
             return false
         }
-        val payload = WorkoutPayload(activityType, startTimeMs, endMs, distance, calories, avgHr, workoutSteps, count, routePoints.toList(), durationSeconds = session.duration_sec)
+        val payload = WorkoutPayload(activityType, startTimeMs, endMs, distance, calories, avgHr, workoutSteps, count, routePoints.toList(), durationSeconds = session.duration_sec,
+            distanceSource = distanceSource(), caloriesEstimated = true)
         val prefs = getSharedPreferences("watch_workouts", Context.MODE_PRIVATE)
         // SQLite is authoritative. Keep the legacy summary cache small and off the UI thread.
         CoroutineScope(Dispatchers.IO).launch {

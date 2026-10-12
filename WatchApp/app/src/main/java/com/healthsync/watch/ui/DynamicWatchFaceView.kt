@@ -7,6 +7,7 @@ import android.util.AttributeSet
 import android.util.Base64
 import android.view.View
 import com.healthsync.watch.data.watchface.*
+import com.healthsync.watch.sensor.HeartRatePolicy
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.*
@@ -35,14 +36,15 @@ class DynamicWatchFaceView @JvmOverloads constructor(
     private val timeCal = Calendar.getInstance()
 
     // Health & System state
-    private var heartRate: Int = 72
+    private var heartRate: Int = 0
+    private var heartMeasuredAt = 0L
     private var heartRateUnverified: Boolean = false
-    private var stepCount: Int = 4520
+    private var stepCount: Int = -1
     private var stepGoal: Int = 10000
-    private var calories: Double = 230.0
-    private var distanceKm: Double = 3.2
-    private var batteryLevel: Int = 85
-    private var isBluetoothConnected: Boolean = true
+    private var calories: Double = 0.0
+    private var distanceKm: Double = 0.0
+    private var batteryLevel: Int = -1
+    private var isBluetoothConnected: Boolean = false
 
     // Ambient / AOD state
     private var isAmbient: Boolean = false
@@ -130,7 +132,7 @@ class DynamicWatchFaceView @JvmOverloads constructor(
         if (!isAmbient) invalidate()
     }
 
-    fun setHeartRateTime(time: Long) {}
+    fun setHeartRateTime(time: Long) { heartMeasuredAt = time }
     fun setHeartRateUnverified(value: Boolean) {
         heartRateUnverified = value
         if (!isAmbient) invalidate()
@@ -142,7 +144,7 @@ class DynamicWatchFaceView @JvmOverloads constructor(
     }
 
     fun setBatteryLevel(level: Int) {
-        batteryLevel = level.coerceIn(0, 100)
+        batteryLevel = level.takeIf { it in 0..100 } ?: -1
         if (!isAmbient) invalidate()
     }
 
@@ -399,7 +401,7 @@ class DynamicWatchFaceView @JvmOverloads constructor(
                 canvas, hrX, hrY, hrR,
                 currentVal = heartRate.toFloat(),
                 maxVal = 180f,
-                label = cfg.heartRate.label ?: "BPM",
+                label = if (heartRate > 0) HeartRatePolicy.complicationUnit(heartMeasuredAt, System.currentTimeMillis()) else "BPM",
                 valText = if (heartRate > 0) "$heartRate" else "--",
                 style = cfg.heartRate.style,
                 colorHex = cfg.heartRate.colorHex,
@@ -418,7 +420,7 @@ class DynamicWatchFaceView @JvmOverloads constructor(
                 currentVal = stepCount.toFloat(),
                 maxVal = stepGoal.toFloat().coerceAtLeast(1f),
                 label = cfg.steps.label ?: "STEPS",
-                valText = if (stepCount >= 1000) String.format(Locale.getDefault(), "%.1fk", stepCount / 1000f) else "$stepCount",
+                valText = StepDisplayLabels.display(if(stepCount >= 1000) String.format(Locale.getDefault(), "%.1fk", stepCount / 1000f) else "$stepCount",stepCount),
                 style = cfg.steps.style,
                 colorHex = cfg.steps.colorHex,
                 accentColorHex = cfg.steps.accentColorHex,
@@ -436,7 +438,7 @@ class DynamicWatchFaceView @JvmOverloads constructor(
                 currentVal = batteryLevel.toFloat(),
                 maxVal = 100f,
                 label = "BAT",
-                valText = "$batteryLevel%",
+                valText = if (batteryLevel >= 0) "$batteryLevel%" else "--",
                 style = cfg.battery.style,
                 colorHex = if (batteryLevel <= 20) "#EF4444" else cfg.battery.colorHex,
                 accentColorHex = cfg.battery.accentColorHex,

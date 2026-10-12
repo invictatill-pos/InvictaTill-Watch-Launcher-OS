@@ -98,6 +98,9 @@ class DashboardViewModel @Inject constructor(
         _uiState.update { it.copy(selectedWorkout = workout) }
     }
 
+    fun workoutHeartRates(workout: WorkoutEntity): Flow<List<HeartRateEntity>> =
+        repository.getWorkoutHeartRates(workout.startTime, workout.endTime)
+
     fun updateStepGoal(newGoal: Int) {
         preferences.stepGoal = newGoal.coerceIn(1, 100000)
         _uiState.update { it.copy(stepGoal = preferences.stepGoal) }

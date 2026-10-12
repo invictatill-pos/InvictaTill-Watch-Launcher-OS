@@ -6,6 +6,14 @@ import java.util.Locale
 fun workoutUsesLocation(type: String): Boolean = type.lowercase(Locale.ROOT).trim() in setOf("walk", "run", "running", "cycling", "basketball", "cricket")
 fun workoutUsesStepDistance(type: String): Boolean = type.lowercase(Locale.ROOT).trim() in setOf("walk", "run", "running")
 
+fun workoutDistanceSource(usesLocation: Boolean, observedRoute: Boolean, stepEstimate: Boolean): String = when {
+    !usesLocation -> "NOT_APPLICABLE"
+    observedRoute && stepEstimate -> "LOCATION_AND_STEP_ESTIMATE"
+    stepEstimate -> "STEP_ESTIMATE"
+    observedRoute -> "LOCATION"
+    else -> "UNAVAILABLE"
+}
+
 enum class WorkoutLocationState { NOT_USED, PAUSED, PERMISSION_REQUIRED, PRECISE_REQUIRED, NO_PROVIDER, DISABLED, GPS_DISABLED, UNAVAILABLE, SEARCHING, STALE, GPS_FIX, LOCATION_FIX }
 
 internal fun workoutLocationState(

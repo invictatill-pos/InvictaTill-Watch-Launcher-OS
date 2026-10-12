@@ -12,7 +12,6 @@ import com.github.mikephil.charting.components.XAxis
 import com.github.mikephil.charting.data.*
 import com.github.mikephil.charting.formatter.ValueFormatter
 import com.healthsync.phone.data.model.HeartRateEntity
-import com.healthsync.phone.data.model.SleepEntity
 import com.healthsync.phone.data.model.SpO2Entity
 import com.healthsync.phone.data.model.StepBucketEntity
 import com.healthsync.phone.data.model.StepsEntity
@@ -39,13 +38,13 @@ fun HeartRateLineChart(data: List<HeartRateEntity>, modifier: Modifier = Modifie
             val baseTime = data.minOf { it.timestamp }
             val entries = data.sortedBy { it.timestamp }.map { e -> Entry(((e.timestamp - baseTime) / 60000f), e.bpm.toFloat()) }
             val ds = LineDataSet(entries, "BPM").apply {
-                color = 0xFFFF5252.toInt()
-                setCircleColor(0xFFFF5252.toInt())
-                circleRadius = 2f
+                color = Color.TRANSPARENT
+                setCircleColor(0xFFB7334F.toInt())
+                circleRadius = 3f
                 lineWidth = 2.5f
                 mode = LineDataSet.Mode.LINEAR
-                setDrawFilled(true)
-                fillColor = 0xFFFF5252.toInt()
+                setDrawFilled(false)
+                fillColor = 0xFFB7334F.toInt()
                 fillAlpha = 40
                 valueTextColor = Color.WHITE
                 setDrawValues(false)
@@ -101,11 +100,11 @@ fun StepsBarChart(data: List<StepsEntity>, goal: Int = 10000, modifier: Modifier
         },
         update = { chart ->
             if (data.isEmpty()) { chart.clear(); return@AndroidView }
-            val dayFmt = SimpleDateFormat("EEE", Locale.getDefault())
-            val entries = data.mapIndexed { i, s ->
-                BarEntry(i.toFloat(), s.steps.toFloat())
+            val baseDay = java.time.LocalDate.parse(data.minOf { it.dayKey })
+            val entries = data.map { record ->
+                BarEntry(java.time.temporal.ChronoUnit.DAYS.between(baseDay, java.time.LocalDate.parse(record.dayKey)).toFloat(), record.steps.toFloat())
             }
-            val labels = data.map { dayFmt.format(Date(it.timestamp)) }
+            val dayFmt = java.time.format.DateTimeFormatter.ofPattern("EEE", Locale.getDefault())
             val ds = BarDataSet(entries, "Steps").apply {
                 colors = entries.map {
                     if (it.y >= goal) 0xFF2F765B.toInt() else 0xFFBC862F.toInt()
@@ -116,8 +115,9 @@ fun StepsBarChart(data: List<StepsEntity>, goal: Int = 10000, modifier: Modifier
             chart.data = BarData(ds)
             chart.xAxis.valueFormatter = object : ValueFormatter() {
                 override fun getFormattedValue(value: Float): String =
-                    labels.getOrNull(value.toInt()) ?: ""
+                    baseDay.plusDays(value.toLong()).format(dayFmt)
             }
+            chart.contentDescription = "Steps across ${data.size} captured days; missing days have no bar"
             chart.axisLeft.removeAllLimitLines()
             chart.axisLeft.addLimitLine(
                 com.github.mikephil.charting.components.LimitLine(goal.toFloat(), "Goal").apply {
@@ -152,8 +152,8 @@ fun Steps24HourChart(data: List<StepBucketEntity>, modifier: Modifier = Modifier
                 return@AndroidView
             }
             val hourFmt = SimpleDateFormat("ha", Locale.getDefault())
-            val entries = hourly.mapIndexed { i, bucket -> BarEntry(i.toFloat(), bucket.steps.toFloat()) }
-            val labels = hourly.map { hourFmt.format(Date(it.timestamp)).lowercase(Locale.getDefault()) }
+            val baseHour = hourly.first().timestamp
+            val entries = hourly.map { bucket -> BarEntry(((bucket.timestamp - baseHour) / 3_600_000L).toFloat(), bucket.steps.toFloat()) }
             val ds = BarDataSet(entries, "24h steps").apply {
                 color = 0xFF2F765B.toInt()
                 valueTextColor = 0xFF40584A.toInt()
@@ -163,9 +163,10 @@ fun Steps24HourChart(data: List<StepBucketEntity>, modifier: Modifier = Modifier
             chart.data = BarData(ds)
             chart.xAxis.valueFormatter = object : ValueFormatter() {
                 override fun getFormattedValue(value: Float): String =
-                    labels.getOrNull(value.toInt()) ?: ""
+                    hourFmt.format(Date(baseHour + value.toLong() * 3_600_000L)).lowercase(Locale.getDefault())
             }
-            chart.xAxis.setLabelCount(6, true)
+            chart.contentDescription = "Hourly captured steps; missing hours have no bar"
+            chart.xAxis.setLabelCount(6, false)
             chart.invalidate()
         }
     )
@@ -234,13 +235,13 @@ fun SpO2LineChart(data: List<SpO2Entity>, modifier: Modifier = Modifier) {
             val baseTime = data.minOf { it.timestamp }
             val entries = data.sortedBy { it.timestamp }.map { e -> Entry(((e.timestamp - baseTime) / 60000f), e.percentage) }
             val ds = LineDataSet(entries, "SpO2 %").apply {
-                color = 0xFF40C4FF.toInt()
-                setCircleColor(0xFF40C4FF.toInt())
-                circleRadius = 2f
+                color = Color.TRANSPARENT
+                setCircleColor(0xFF226B86.toInt())
+                circleRadius = 3f
                 lineWidth = 2.5f
                 mode = LineDataSet.Mode.LINEAR
-                setDrawFilled(true)
-                fillColor = 0xFF40C4FF.toInt()
+                setDrawFilled(false)
+                fillColor = 0xFF226B86.toInt()
                 fillAlpha = 40
                 setDrawValues(false)
             }
@@ -252,61 +253,7 @@ fun SpO2LineChart(data: List<SpO2Entity>, modifier: Modifier = Modifier) {
                 axisMaximum = 100f
                 removeAllLimitLines()
             }
-            chart.contentDescription = "Oxygen saturation: ${data.minOf { it.percentage }.toInt()} to ${data.maxOf { it.percentage }.toInt()} percent, ${data.size} readings"
-            chart.invalidate()
-        }
-    )
-}
-
-// ── Sleep Stacked Bar Chart ───────────────────────────────────────────────────
-
-@Composable
-fun SleepStackedBarChart(data: List<SleepEntity>, modifier: Modifier = Modifier) {
-    AndroidView(
-        modifier = modifier,
-        factory = { ctx ->
-            BarChart(ctx).apply {
-                layoutParams = ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-                styleBarChart(this)
-            }
-        },
-        update = { chart ->
-            if (data.isEmpty()) { chart.clear(); return@AndroidView }
-            val dayFmt = SimpleDateFormat("E", Locale.getDefault())
-            val entries = data.mapIndexed { i, s ->
-                BarEntry(
-                    i.toFloat(),
-                    floatArrayOf(
-                        s.deepMinutes.toFloat(),
-                        s.remMinutes.toFloat(),
-                        s.lightMinutes.toFloat(),
-                        s.awakeMinutes.toFloat()
-                    )
-                )
-            }
-            val labels = data.map { dayFmt.format(Date(it.startTime)) }
-            val ds = BarDataSet(entries, "Sleep").apply {
-                setColors(
-                    0xFF3D5AFE.toInt(), // Deep
-                    0xFFE040FB.toInt(), // REM
-                    0xFF40C4FF.toInt(), // Light
-                    0xFF69FF47.toInt()  // Awake
-                )
-                stackLabels = arrayOf("Deep", "REM", "Light", "Awake")
-                valueTextColor = Color.TRANSPARENT
-            }
-            chart.data = BarData(ds)
-            chart.xAxis.valueFormatter = object : ValueFormatter() {
-                override fun getFormattedValue(value: Float): String =
-                    labels.getOrNull(value.toInt()) ?: ""
-            }
-            chart.legend.apply {
-                isEnabled = true
-                textColor = 0xFF6D7A71.toInt()
-            }
+            chart.contentDescription = "Oxygen saturation: ${String.format(Locale.getDefault(), "%.1f", data.minOf { it.percentage })} to ${String.format(Locale.getDefault(), "%.1f", data.maxOf { it.percentage })} percent, ${data.size} readings"
             chart.invalidate()
         }
     )

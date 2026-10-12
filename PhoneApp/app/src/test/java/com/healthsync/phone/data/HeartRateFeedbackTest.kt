@@ -5,6 +5,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class HeartRateFeedbackTest {
+    @Test fun backgroundSensorPermissionFeedbackRemainsAnActionableStatus() {
+        val feedback = heartRateFeedbackFromJson("""{"status":"background_permission_required"}""", 1_000_000)
+        assertEquals("background_permission_required", feedback.status)
+        assertEquals("Open Health on watch or allow all-time Sensors", heartRateFeedbackText(feedback, true, null, 1_000_000))
+        assertNull(feedback.sensorPreview)
+    }
     @Test fun noEventsAndRejectedSamplesRemainFeedbackWithoutARecordedValue() {
         val now = 1_000_000L
         for (status in listOf("no_events", "invalid_samples")) {
@@ -64,12 +70,12 @@ class HeartRateFeedbackTest {
         val feedback = heartRateFeedbackFromJson(
             """{"status":"unreliable_accuracy","sensorBpm":75,"sensorReadingTime":990000}""", now)
         assertEquals(UnverifiedHeartRatePreview(75, 990_000L), feedback.sensorPreview)
-        assertEquals("Sensor reading · 10 sec ago", heartRateFeedbackText(feedback, true, 700_000L, now))
+        assertEquals("Sensor reading · unverified signal · 10 sec ago", heartRateFeedbackText(feedback, true, 700_000L, now))
         val details = heartRateMeasurementDetailsText(feedback, true, now)!!
         assertTrue(details.contains("75 bpm · unverified · 10 sec ago"))
         assertTrue(details.contains("accuracy 0"))
         assertTrue(details.contains("not saved to history or used in workouts"))
-        assertTrue(SyncValidation.validHeartRate(feedback.sensorPreview!!.bpm, 0, now, now))
+        assertFalse(SyncValidation.validHeartRate(feedback.sensorPreview!!.bpm, 0, now, now))
         assertFalse(SyncValidation.validHeartRate(feedback.sensorPreview!!.bpm, -1, now, now))
     }
 

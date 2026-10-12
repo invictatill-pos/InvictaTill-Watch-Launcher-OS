@@ -1,26 +1,30 @@
 <resources>
     <style name="WatchText">
-        <item name="android:textColor">#EEF7F1</item>
+        <item name="android:textColor">#EAF7F0</item>
         <item name="android:fontFamily">sans-serif</item>
         <item name="android:includeFontPadding">false</item>
+        <item name="android:lineSpacingExtra">2dp</item>
     </style>
     <style name="WatchLabel" parent="WatchText">
-        <item name="android:textColor">#9BAEA4</item>
-        <item name="android:textSize">11sp</item>
+        <item name="android:textColor">#A7BDB2</item>
+        <item name="android:textSize">12sp</item>
     </style>
     <style name="WatchValue" parent="WatchText">
         <item name="android:textSize">22sp</item>
-        <item name="android:textStyle">bold</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
     </style>
     <style name="WatchAction" parent="Widget.MaterialComponents.Button.UnelevatedButton">
         <item name="android:minHeight">48dp</item>
         <item name="android:minWidth">48dp</item>
-        <item name="android:textSize">12sp</item>
-        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:includeFontPadding">false</item>
         <item name="android:insetTop">0dp</item>
         <item name="android:insetBottom">0dp</item>
         <item name="android:textColor">#06110B</item>
         <item name="backgroundTint">#8CE7C8</item>
         <item name="cornerRadius">24dp</item>
+        <item name="rippleColor">#33294339</item>
     </style>
 </resources>

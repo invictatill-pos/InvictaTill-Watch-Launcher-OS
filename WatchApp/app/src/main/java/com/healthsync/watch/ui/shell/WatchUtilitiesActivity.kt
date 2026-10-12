@@ -143,6 +143,10 @@ class WatchUtilitiesActivity : LauncherPanelActivity() {
             launchFirst(listOf(Intent(AlarmClock.ACTION_SHOW_ALARMS), Intent(AlarmClock.ACTION_SET_ALARM)),
                 "Watch alarms could not open. Use Timer for a countdown alert.")
         }
+        toolButton(android.R.drawable.ic_menu_compass, "Compass", "Magnetic heading · location altitude") {
+            launchFirst(listOf(Intent(this, com.healthsync.watch.ui.CompassActivity::class.java)), "Compass could not open.")
+        }
+        action(content, "Back to clock") { backToClock() }
     }
 
     private fun renderTimer() {

@@ -105,6 +105,7 @@ class WatchOptionsActivity : AppCompatActivity() {
         setWatchFullscreen(window)
         content = findViewById(R.id.watchOptionsContent)
         scroll = findViewById(R.id.watchOptionsScroll)
+        scroll.background = WatchVisualStyle.screenBackground()
         // Keep each control inside the central chord of a round display. The generous
         // end padding lets both first and last controls scroll through its widest point.
         val side = (resources.displayMetrics.widthPixels * 0.15f).roundToInt()
@@ -213,6 +214,7 @@ class WatchOptionsActivity : AppCompatActivity() {
         liveUpdate = null
         content.removeAllViews()
         screen = requestedScreen
+        navigationHeader()
         // A fullscreen Android 8 window ignores ADJUST_RESIZE. PAN keeps the focused
         // number field above the keyboard without changing the circular viewport.
         window.setSoftInputMode((if (requestedScreen == SCREEN_PROFILE && !isSmallWatch())
@@ -510,6 +512,7 @@ class WatchOptionsActivity : AppCompatActivity() {
         val oxygenStatus = label("")
         val oxygenButton = action("Measure oxygen") { requestOperation("measure_oxygen") }
         val steps = label("Steps today", 18f, bold = true)
+        val stepsStatus=label("",11f)
         val battery = label("Battery", 18f, bold = true)
         liveUpdate = {
             val hasBodyPermission = allowed(Manifest.permission.BODY_SENSORS)
@@ -520,21 +523,16 @@ class WatchOptionsActivity : AppCompatActivity() {
             // Keep this action available so an empty inventory cannot block permission or a retry.
             heartButton.text = if (hasBodyPermission) "Measure heart rate" else "Allow sensor access"
             heartButton.contentDescription = heartButton.text
-            val oxygenAvailable = hasBodyPermission && hasOxygenSensor()
-            val spo2 = SensorCollectorService.latestSpo2
-            val age = System.currentTimeMillis() - SensorCollectorService.latestSpo2TimeMs
-            val valid = spo2.isFinite() && spo2 in 50f..100f && SensorCollectorService.latestSpo2TimeMs > 0L && age >= 0L
-            oxygen.text = if (valid) "Blood oxygen\n${String.format(Locale.getDefault(), "%.0f", spo2)}%" else "Blood oxygen\n—%"
-            oxygenStatus.text = when {
-                !hasBodyPermission -> "Allow sensor access to measure oxygen."
-                !oxygenAvailable -> "This watch does not expose a compatible blood oxygen sensor to Android apps."
-                !valid -> "No reading yet. Tap Measure and stay still for up to 30 seconds."
-                age < 60_000L -> "Last reading: just now"
-                else -> "Last reading: ${age / 60_000L} min ago"
-            }
-            oxygenButton.text = if (hasBodyPermission) "Measure oxygen" else "Allow sensor access"
+            val spo2 = SensorCollectorService.displaySpO2().takeIf { it > 0f }
+            oxygen.text = spo2?.let { "Blood oxygen\n${String.format(Locale.getDefault(), "%.0f", it)}%" }
+                ?: "Blood oxygen\n—%"
+            oxygenStatus.text = SensorCollectorService.oxygenStatusText(this)
+            val oxygenMeasuring = SensorCollectorService.spo2Status == "measuring"
+            oxygenButton.text = if (!hasBodyPermission) "Allow sensor access" else if (oxygenMeasuring) "Measuring oxygen…" else "Measure oxygen"
+            oxygenButton.isEnabled = !oxygenMeasuring
             oxygenButton.contentDescription = oxygenButton.text
-            steps.text = "Steps today\n${java.text.NumberFormat.getIntegerInstance().format(SensorCollectorService.latestSteps.coerceAtLeast(0))}"
+            steps.text = "Steps today\n" + if(SensorCollectorService.hasCapturedStepsToday()) java.text.NumberFormat.getIntegerInstance().format(SensorCollectorService.latestSteps.coerceAtLeast(0)) else "—"
+            stepsStatus.text=SensorCollectorService.stepStatusText(this)
             val batteryLevel = batteryPercentage()
             battery.text = if (batteryLevel in 0..100) "Battery\n$batteryLevel%" else "Battery\nUnavailable"
         }
@@ -571,6 +569,17 @@ class WatchOptionsActivity : AppCompatActivity() {
 
     private fun sensorScreen() {
         heading("Sensor settings", "Automatic readings")
+        val foregroundAccess=label("")
+        var backgroundAccess:TextView?=null
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            backgroundAccess=label("")
+            label("To capture while this app is in the background, open App permissions, select Sensors, then allow all the time if your watch offers it. This is a separate choice from foreground access.")
+        }
+        liveUpdate={
+            foregroundAccess.text="Foreground sensor access: ${if (allowed(Manifest.permission.BODY_SENSORS)) "Allowed" else "Not allowed"}"
+            if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.TIRAMISU)
+                backgroundAccess?.text="Background sensor access: ${if (allowed(Manifest.permission.BODY_SENSORS_BACKGROUND)) "Allowed" else "Not allowed"}"
+        }
         action("Heart rate\n${intervalLabel(preferences.hrIntervalMs)}") { showScreen(SCREEN_HR_INTERVAL) }
         action("Blood oxygen\n${intervalLabel(preferences.spo2IntervalMs)}") { showScreen(SCREEN_OXYGEN_INTERVAL) }
         label("Heart rate allows up to 60 seconds for wrist contact and stops after a reliable sample. Oxygen lasts up to 30 seconds. Longer intervals use less battery. Off disables automatic readings; manual measurement remains available.")
@@ -615,15 +624,23 @@ class WatchOptionsActivity : AppCompatActivity() {
 
     private fun profileScreen() {
         heading("Profile & goal", "Improve activity estimates")
-        val savedProfile = ProfileDraft(String.format(Locale.US, "%.1f", preferences.userWeightKg),
-            preferences.userHeightCm.toString(), preferences.stepGoal.toString())
+        val profilePreferences = getSharedPreferences("watch_sync_prefs", MODE_PRIVATE)
+        val weightConfigured=profilePreferences.getBoolean("profile_weight_configured",false)
+        val heightConfigured=profilePreferences.getBoolean("profile_height_configured",false)
+        val profileAssumptions = label(if (!weightConfigured || !heightConfigured)
+            "Unset profile entries use calculation defaults: 70 kg weight and 170 cm height. These are assumptions, not measurements."
+            else "Weight and height are saved profile entries.", 11f)
+        val savedProfile = ProfileDraft(if(weightConfigured) String.format(Locale.US, "%.1f", preferences.userWeightKg) else "",
+            if(heightConfigured) preferences.userHeightCm.toString() else "", preferences.stepGoal.toString())
         val values = profileDraft ?: savedProfile
         profileBaseline = savedProfile
         label("Weight (kg)", bold = true)
         val weight = input(values.weight, decimal = true)
+        weight.hint="Enter weight"
         weight.contentDescription = "Weight in kilograms, from 30 to 250"
         label("Height (cm)", bold = true)
         val height = input(values.height)
+        height.hint="Enter height"
         height.contentDescription = "Height in centimetres, from 100 to 230"
         label("Daily step goal", bold = true)
         val goal = input(values.goal)
@@ -669,6 +686,8 @@ class WatchOptionsActivity : AppCompatActivity() {
                     preferences.userWeightKg = weightValue
                     preferences.userHeightCm = heightValue
                     preferences.stepGoal = goalValue
+                    profilePreferences.edit().putBoolean("profile_weight_configured",true).putBoolean("profile_height_configured",true).apply()
+                    profileAssumptions.text = "Weight and height are saved profile entries."
                     profileBaseline = ProfileDraft(weight.text.toString(), height.text.toString(), goal.text.toString())
                     profileDraft = null
                     hideKeyboard()
@@ -684,7 +703,7 @@ class WatchOptionsActivity : AppCompatActivity() {
             profileBaseline = null
             showScreen(SCREEN_PROFILE)
         }
-        label("Weight is used for estimated calories. Height helps estimate distance when GPS is unavailable.")
+        label("Calories use activity, duration and profile weight estimates. Height helps estimate distance when location is unavailable.",11f)
         label("Phone settings apply again when connected.")
         backToMenu()
     }
@@ -899,9 +918,7 @@ class WatchOptionsActivity : AppCompatActivity() {
 
     private fun hasOxygenSensor() = runCatching {
         (getSystemService(Context.SENSOR_SERVICE) as? SensorManager)?.getSensorList(Sensor.TYPE_ALL)?.any { sensor ->
-            val name = "${sensor.name} ${sensor.stringType}".lowercase(Locale.ROOT)
-            sensor.type != Sensor.TYPE_HEART_RATE && sensor.type != Sensor.TYPE_HEART_BEAT &&
-                (name.contains("spo2") || name.contains("oxygen saturation") || name.contains("blood oxygen"))
+            com.healthsync.watch.sensor.OxygenCapturePolicy.isOxygenSensor(sensor.type, sensor.name, sensor.stringType)
         } == true
     }.getOrDefault(false)
 
@@ -921,8 +938,21 @@ class WatchOptionsActivity : AppCompatActivity() {
     }
 
     private fun heading(title: String, subtitle: String) {
-        label(title, 20f, bold = true).setTextColor(Color.WHITE)
+        label(title, 23f, bold = true).setTextColor(WatchVisualStyle.TEXT)
         label(subtitle)
+    }
+
+    private fun navigationHeader() {
+        val row=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER }
+        fun button(title:String,click:()->Unit)=Button(this).apply {
+            text=title; isAllCaps=false; textSize=12f; setTextColor(WatchVisualStyle.MUTED)
+            minWidth=0; minimumWidth=0; minHeight=dp(44); minimumHeight=dp(44)
+            setPadding(dp(4),0,dp(4),0); backgroundTintList=null; background=WatchVisualStyle.button(this@WatchOptionsActivity)
+            setOnClickListener { performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY); click() }
+        }
+        row.addView(button("‹ Back") { onBackPressedDispatcher.onBackPressed() },LinearLayout.LayoutParams(0,dp(44),1f).apply { marginEnd=dp(4) })
+        row.addView(button("Clock") { openShell("clock") },LinearLayout.LayoutParams(0,dp(44),1f).apply { marginStart=dp(4) })
+        content.addView(row,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(14) })
     }
 
     private fun label(value: String, size: Float = 13f, bold: Boolean = false): TextView = TextView(this).apply {
@@ -930,7 +960,9 @@ class WatchOptionsActivity : AppCompatActivity() {
         textSize = size
         setTextColor(if (bold) Color.WHITE else MUTED)
         gravity = Gravity.CENTER
-        if (bold) typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        typeface = Typeface.create(if(bold) "sans-serif-medium" else "sans-serif", Typeface.NORMAL)
+        includeFontPadding=false
+        setLineSpacing(dp(2).toFloat(),1f)
         setPadding(dp(2), dp(5), dp(2), dp(8))
         content.addView(this, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             bottomMargin = dp(6)
@@ -945,6 +977,9 @@ class WatchOptionsActivity : AppCompatActivity() {
         gravity = Gravity.CENTER
         minHeight = dp(56)
         minimumHeight = dp(56)
+        minWidth=0; minimumWidth=0
+        typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+        backgroundTintList=null
         setPadding(dp(10), dp(12), dp(10), dp(12))
         setTextColor(if (selected) ACCENT else Color.WHITE)
         background = StateListDrawable().apply {
@@ -973,11 +1008,7 @@ class WatchOptionsActivity : AppCompatActivity() {
         content.addView(this, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { bottomMargin = dp(10) })
     }
 
-    private fun panel(color: Int) = GradientDrawable().apply {
-        shape = GradientDrawable.RECTANGLE
-        cornerRadius = dp(22).toFloat()
-        setColor(color)
-    }
+    private fun panel(color: Int) = WatchVisualStyle.surface(this,color)
 
     private fun backToMenu() = action("Back to menu") { showScreen(SCREEN_MENU) }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).roundToInt()

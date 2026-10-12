@@ -11,25 +11,25 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-val BgDeep = Color(0xFFF4F6F1)
-val BgBase = Color(0xFFECEFE8)
-val BgSurface = Color(0xFFFFFFFF)
-val BgCard = Color(0xFFFFFFFF)
-val BgCardHover = Color(0xFFF8FAF6)
+val BgDeep = Color(0xFFF7F6F1)
+val BgBase = Color(0xFFEDEFE7)
+val BgSurface = Color(0xFFFFFEFB)
+val BgCard = Color(0xFFFFFEFB)
+val BgCardHover = Color(0xFFF2F4EC)
 val BgGlass = Color(0xCCFFFFFF)
-val BgInput = Color(0xFFF0F3ED)
+val BgInput = Color(0xFFF0F2EA)
 
-val AccentCyan = Color(0xFF1F8A70)
-val AccentBlue = Color(0xFF3066BE)
-val AccentPurple = Color(0xFF7B61FF)
+val AccentCyan = Color(0xFF235E49)
+val AccentBlue = Color(0xFF355B8C)
+val AccentPurple = Color(0xFF665184)
 val AccentElectric = Color(0xFF0077B6)
 
-val MetricHeart = Color(0xFFE6475F)
-val MetricSteps = Color(0xFFE4A11B)
-val MetricSpO2 = Color(0xFF168AAD)
-val MetricSleep = Color(0xFF6D5BD0)
+val MetricHeart = Color(0xFFB7334F)
+val MetricSteps = Color(0xFF92631E)
+val MetricSpO2 = Color(0xFF226B86)
+val MetricSleep = Color(0xFF67528F)
 val MetricWater = Color(0xFF2D9CDB)
-val MetricCalories = Color(0xFFE26D2E)
+val MetricCalories = Color(0xFFA64F26)
 val MetricMood = Color(0xFFC05299)
 
 val SleepDeep = Color(0xFF3A5A9F)
@@ -37,16 +37,16 @@ val SleepLight = Color(0xFF2D9CDB)
 val SleepRem = Color(0xFFC05299)
 val SleepAwake = Color(0xFF55A66F)
 
-val StatusSuccess = Color(0xFF2F9E68)
-val StatusWarning = Color(0xFFD9971B)
-val StatusError = Color(0xFFD64550)
+val StatusSuccess = Color(0xFF2D7154)
+val StatusWarning = Color(0xFF946315)
+val StatusError = Color(0xFFB73742)
 val StatusInfo = Color(0xFF168AAD)
 
-val TextWhite = Color(0xFF18201B)
-val TextPrimary = Color(0xFF222A24)
-val TextSecondary = Color(0xFF667267)
-val TextDim = Color(0xFF8A938A)
-val TextPlaceholder = Color(0xFF9EA89F)
+val TextWhite = Color(0xFF1D3027)
+val TextPrimary = Color(0xFF23362C)
+val TextSecondary = Color(0xFF526459)
+val TextDim = Color(0xFF657267)
+val TextPlaceholder = Color(0xFF6F7B72)
 
 val BorderSubtle = Color(0x1F18201B)
 val BorderDefault = Color(0x3318201B)
@@ -130,6 +130,10 @@ fun HealthSyncTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = AppColorScheme,
         typography = AppTypography,
+        shapes = androidx.compose.material3.Shapes(
+            extraSmall = Shapes.xs, small = Shapes.sm, medium = Shapes.md,
+            large = Shapes.lg, extraLarge = Shapes.xl
+        ),
         content = content
     )
 }

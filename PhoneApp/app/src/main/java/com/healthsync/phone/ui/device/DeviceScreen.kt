@@ -101,19 +101,16 @@ fun DeviceScreen(
     val bluetoothEnabled = remember(refreshVersion, state.isConnected) { viewModel.bluetoothEnabled }
     val openBluetoothSettings = {
         try { context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
-        catch (_: Exception) { }
+        catch (_: Exception) { android.widget.Toast.makeText(context, "Could not open Android settings on this phone.", android.widget.Toast.LENGTH_LONG).show() }
     }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(BgDeep),
-        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 34.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 30.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Column {
-                Text("Device", color = TextWhite, fontSize = 34.sp, fontWeight = FontWeight.Black, lineHeight = 38.sp)
-                Text("Watch connection", color = TextSecondary, fontSize = 13.sp)
-            }
+            com.healthsync.phone.ui.components.ScreenHeading("Your watch", "Connection, pairing and software")
         }
 
         item { ConnectionStatusCard(state = state, phoneName = phoneName) }
@@ -128,7 +125,7 @@ fun DeviceScreen(
                             Text(if (!hasPermission) "Allow access" else "Open Bluetooth settings", color = AccentCyan)
                         }
                         if (!hasPermission) TextButton(onClick = {
-                            try { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) } catch (_: Exception) { }
+                            try { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) } catch (_: Exception) { android.widget.Toast.makeText(context, "Could not open Android settings on this phone.", android.widget.Toast.LENGTH_LONG).show() }
                         }) { Text("Open app permissions", color = AccentCyan) }
                     }
                 }
@@ -171,18 +168,19 @@ fun DeviceScreen(
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Icon(Icons.Default.Watch, null, tint = AccentCyan, modifier = Modifier.size(18.dp))
-                            Text("Watch Firmware & Launcher", color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text("Watch software", color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
                         val liveWatchVersion by BluetoothSyncService.connectedWatchVersionName.collectAsState()
                         val watchVersion = liveWatchVersion ?: remember { PhonePreferences(context).lastKnownWatchVersion }
-                        val displayWatchVersion = if (watchVersion.startsWith("v", ignoreCase = true)) watchVersion else "v$watchVersion"
+                        val displayWatchVersion = if (watchVersion == "Unknown") "Version not reported yet" else if (watchVersion.startsWith("v", ignoreCase = true)) watchVersion else "v$watchVersion"
+                        Text(if (liveWatchVersion != null) "$displayWatchVersion · reported by connected watch" else "$displayWatchVersion · last known", color = TextDim, fontSize = 12.sp)
                         val watchUpdateInfo by updateViewModel.watchUpdateInfo.collectAsState()
                         Surface(
                             onClick = {
                                 if (watchUpdateInfo != null) updateViewModel.updateWatch(context)
                                 else updateViewModel.checkWatchUpdateManually()
                             },
-                            modifier = Modifier.fillMaxWidth().height(40.dp),
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
                             shape = RoundedCornerShape(10.dp),
                             color = AccentCyan.copy(alpha = 0.12f)
                         ) {
@@ -210,12 +208,12 @@ fun DeviceScreen(
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Icon(Icons.Default.Watch, null, tint = AccentCyan, modifier = Modifier.size(18.dp))
-                            Text("Watch Face Studio & Store", color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text("Watch faces", color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
-                        Text("Explore luxury, cyberpunk, sport, and minimalist dials. Live interactive preview and 1-tap beam to watch.", color = TextDim, fontSize = 12.sp)
+                        Text("Find a dial you like or design your own. Preview it here, then send it to your connected watch.", color = TextDim, fontSize = 12.sp)
                         Surface(
                             onClick = onOpenWatchFaceStore,
-                            modifier = Modifier.fillMaxWidth().height(42.dp),
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
                             shape = RoundedCornerShape(10.dp),
                             color = AccentCyan
                         ) {
@@ -315,7 +313,7 @@ private fun ConnectionStatusCard(state: ConnectionInfo, phoneName: String) {
                 },
                 color = statusColor,
                 fontSize = 20.sp,
-                fontWeight = FontWeight.Black
+                fontWeight = FontWeight.Bold
             )
 
             val detail = when {
@@ -343,7 +341,7 @@ private fun DeviceActionButton(label: String, icon: ImageVector, color: Color, m
         Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
             Icon(icon, null, tint = color, modifier = Modifier.size(18.dp))
             Spacer(Modifier.size(7.dp))
-            Text(label, color = color, fontSize = 13.sp, fontWeight = FontWeight.Black)
+            Text(label, color = color, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -354,7 +352,7 @@ private fun ConnectionStepsCard() {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(Icons.Default.SettingsBluetooth, null, tint = AccentCyan, modifier = Modifier.size(20.dp))
-                Text("Pairing Checklist", color = TextWhite, fontSize = 17.sp, fontWeight = FontWeight.Black)
+                Text("Pairing Checklist", color = TextWhite, fontSize = 17.sp, fontWeight = FontWeight.Bold)
             }
             GuideStep("1", "Pair the watch in Android Bluetooth settings")
             GuideStep("2", "Open HealthSync on the watch")
@@ -367,7 +365,7 @@ private fun ConnectionStepsCard() {
 private fun GuideStep(step: String, text: String) {
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
         Box(Modifier.size(22.dp).clip(CircleShape).background(AccentCyan.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
-            Text(step, color = AccentCyan, fontSize = 11.sp, fontWeight = FontWeight.Black)
+            Text(step, color = AccentCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         }
         Text(text, color = TextSecondary, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.weight(1f))
     }
@@ -377,23 +375,14 @@ private fun GuideStep(step: String, text: String) {
 private fun SectionHeader(label: String, icon: ImageVector, color: Color) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 2.dp)) {
         Icon(icon, null, tint = color, modifier = Modifier.size(16.dp))
-        Text(label.uppercase(), color = TextDim, fontSize = 11.sp, fontWeight = FontWeight.Black)
+        Text(label.uppercase(), color = TextDim, fontSize = 11.sp, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
 private fun EmptyDeviceCard() {
-    Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp), color = BgCard, border = BorderStroke(1.dp, BorderSubtle)) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(Icons.Default.BluetoothDisabled, null, tint = TextDim, modifier = Modifier.size(34.dp))
-            Text("No paired devices", color = TextWhite, fontSize = 16.sp, fontWeight = FontWeight.Black)
-            Text("Use Android Bluetooth settings", color = TextDim, fontSize = 12.sp)
-        }
-    }
+    com.healthsync.phone.ui.components.AppStateCard(Icons.Default.BluetoothDisabled, "No paired devices",
+        "Pair your watch in Android Bluetooth settings, then open HealthSync on both devices.")
 }
 
 @Composable
@@ -412,6 +401,7 @@ private fun PairedDeviceRow(name: String, address: String, isConnected: Boolean)
             Column(Modifier.weight(1f)) {
                 Text(name, color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(address, color = TextDim, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(if (isConnected) "Connected to HealthSync" else "Paired in Android", color = color, fontSize = 11.sp)
             }
             if (isConnected) {
                 Box(Modifier.size(26.dp).clip(CircleShape).background(StatusSuccess.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {

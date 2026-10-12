@@ -33,7 +33,8 @@ internal object WorkoutHistoryStore {
                             .coerceAtMost(Int.MAX_VALUE.toLong()).toInt()).coerceAtLeast(0),
                         distance_m = item.distanceMeters.coerceAtLeast(0f),
                         calories = item.calories.coerceAtLeast(0.0), step_count = item.steps.coerceAtLeast(0),
-                        swings = item.swings.coerceAtLeast(0), avg_hr = item.avgHeartRate.coerceAtLeast(0)
+                        swings = item.swings.coerceAtLeast(0), avg_hr = item.avgHeartRate.coerceAtLeast(0),
+                        distance_source = item.distanceSource ?: "UNKNOWN", calories_estimated = true
                     )
                 }
             }

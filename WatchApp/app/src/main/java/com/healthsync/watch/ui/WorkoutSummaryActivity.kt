@@ -116,10 +116,11 @@ class WorkoutSummaryActivity : AppCompatActivity() {
                 object : com.google.gson.reflect.TypeToken<List<com.healthsync.watch.data.LatLngPoint>>() {}.type)?.size ?: 0
         }.getOrDefault(0)
         display(session.activity_type, session.start_time, session.duration_sec.toLong(),
-            session.distance_m, session.avg_hr, session.calories, session.step_count, session.swings, pts)
+            session.distance_m, session.avg_hr, session.calories, session.step_count, session.swings, pts, session.distance_source)
     }
 
-    private fun display(type: String, start: Long, durationSec: Long, distance: Float, hr: Int, calories: Double, steps: Int, reps: Int, routePoints: Int = intent.getIntExtra("summary_route_count", 0)) {
+    private fun display(type: String, start: Long, durationSec: Long, distance: Float, hr: Int, calories: Double, steps: Int, reps: Int,
+        routePoints: Int = intent.getIntExtra("summary_route_count", 0), distanceSource: String? = intent.getStringExtra("summary_distance_source")) {
         val normalized = type.lowercase(Locale.ROOT)
         val seconds = durationSec.coerceAtLeast(0)
         findViewById<TextView>(R.id.tvSummaryType).text = type.replace("_", " ")
@@ -129,7 +130,8 @@ class WorkoutSummaryActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.tvStatDuration).text = if (seconds >= 3600)
             String.format(Locale.getDefault(), "%d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60)
             else String.format(Locale.getDefault(), "%02d:%02d", seconds / 60, seconds % 60)
-        findViewById<TextView>(R.id.tvStatCal).text = String.format(Locale.getDefault(), "%.0f kcal", calories.coerceAtLeast(0.0))
+        findViewById<TextView>(R.id.tvStatCal).text = if (calories.isFinite() && calories >= 0.0)
+            String.format(Locale.getDefault(), "%.0f kcal est.", calories) else "— kcal"
         findViewById<TextView>(R.id.tvStatHr).text = if (hr > 0) "$hr bpm" else "-- bpm"
         val strength = normalized.contains("home") || normalized.contains("strength")
         val swings = normalized.contains("badminton") || normalized.contains("cricket") || normalized.contains("basketball")
@@ -143,19 +145,21 @@ class WorkoutSummaryActivity : AppCompatActivity() {
         val sets = intent.getIntExtra(EXTRA_SETS, 0)
         val detail = when {
             strength && sets > 0 -> "$sets sets completed"
-            distance > 0f -> {
+            distance.isFinite() && distance > 0f && distanceSource != "UNAVAILABLE" && distanceSource != "NOT_APPLICABLE" -> {
                 val km = distance / 1000.0
-                val base = String.format(Locale.getDefault(), "%.2f km", km)
+                val base = WorkoutMeasurementLabels.distanceValue(distance, distanceSource)
                 if (normalized.contains("run") || normalized.contains("walk")) {
                     val paceSeconds = (seconds / km).toLong()
                     "$base  •  ${paceSeconds / 60}:${(paceSeconds % 60).toString().padStart(2, '0')} /km"
                 } else base
             }
-            else -> ""
+            strength || swings -> ""
+            else -> WorkoutMeasurementLabels.distanceValue(distance, distanceSource)
         }
         val count = if (routePoints > 0) routePoints else intent.getIntExtra("summary_route_count", 0)
         val routeSuffix = if (count > 0) "\n✓ $count route points recorded" else ""
-        findViewById<TextView>(R.id.tvSummaryPrimary).text = detail + routeSuffix
+        val source = if (strength || swings || distanceSource == "NOT_APPLICABLE") "" else "\n${WorkoutMeasurementLabels.distanceSource(distanceSource)}"
+        findViewById<TextView>(R.id.tvSummaryPrimary).text = detail + source + routeSuffix
     }
 
     override fun onResume() {

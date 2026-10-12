@@ -9,7 +9,7 @@
         <TextView android:id="@+id/tvHistoryType" style="@style/WatchText" android:layout_width="match_parent"
             android:layout_height="wrap_content" android:text="Workout" android:textSize="14sp" android:textStyle="bold" />
         <TextView android:id="@+id/tvHistoryDate" style="@style/WatchLabel" android:layout_width="match_parent"
-            android:layout_height="wrap_content" android:layout_marginTop="4dp" android:textSize="10sp" />
+            android:layout_height="wrap_content" android:layout_marginTop="4dp" android:textSize="12sp" />
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="6dp">
             <TextView android:id="@+id/tvHistoryDuration" style="@style/WatchText" android:layout_width="0dp" android:layout_weight="1"
                 android:layout_height="wrap_content" android:text="0:00" android:textColor="#8CE7C8" android:textStyle="bold" android:textSize="12sp" />
@@ -17,6 +17,6 @@
                 android:layout_height="wrap_content" android:text="0 steps" android:gravity="end" android:textSize="11sp" />
         </LinearLayout>
         <TextView android:id="@+id/tvHistoryKcal" style="@style/WatchLabel" android:layout_width="match_parent"
-            android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="0 kcal est." android:textColor="#FFBC6A" android:textSize="10sp" />
+            android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="0 kcal est." android:textColor="#FFBC6A" android:textSize="12sp" />
     </LinearLayout>
 </LinearLayout>

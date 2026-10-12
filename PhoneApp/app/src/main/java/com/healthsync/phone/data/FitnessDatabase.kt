@@ -11,16 +11,19 @@ interface HeartRateDao {
     @Insert
     suspend fun insert(entity: HeartRateEntity)
 
-    @Query("SELECT EXISTS(SELECT 1 FROM heart_rate WHERE timestamp = :timestamp AND bpm = :bpm AND accuracy >= 0)")
+    @Query("SELECT EXISTS(SELECT 1 FROM heart_rate WHERE timestamp = :timestamp AND bpm = :bpm AND accuracy BETWEEN 1 AND 3)")
     suspend fun hasReading(timestamp: Long, bpm: Int): Boolean
 
-    @Query("SELECT * FROM heart_rate WHERE timestamp >= :since AND accuracy >= 0 AND bpm BETWEEN 25 AND 240 ORDER BY timestamp DESC")
+    @Query("SELECT * FROM heart_rate WHERE timestamp >= :since AND accuracy BETWEEN 1 AND 3 AND bpm BETWEEN 25 AND 240 ORDER BY timestamp DESC")
     fun getLast24h(since: Long): Flow<List<HeartRateEntity>>
 
-    @Query("SELECT * FROM heart_rate WHERE accuracy >= 0 AND bpm BETWEEN 25 AND 240 ORDER BY timestamp DESC LIMIT 1")
+    @Query("SELECT * FROM heart_rate WHERE accuracy BETWEEN 1 AND 3 AND bpm BETWEEN 25 AND 240 ORDER BY timestamp DESC LIMIT 1")
     fun getLatest(): Flow<HeartRateEntity?>
 
-    @Query("SELECT AVG(bpm) FROM heart_rate WHERE timestamp >= :since AND accuracy >= 0 AND bpm BETWEEN 25 AND 240")
+    @Query("SELECT * FROM heart_rate WHERE timestamp BETWEEN :start AND :end AND accuracy BETWEEN 1 AND 3 AND bpm BETWEEN 25 AND 240 ORDER BY timestamp ASC")
+    fun getForWorkout(start: Long, end: Long): Flow<List<HeartRateEntity>>
+
+    @Query("SELECT AVG(bpm) FROM heart_rate WHERE timestamp >= :since AND accuracy BETWEEN 1 AND 3 AND bpm BETWEEN 25 AND 240")
     suspend fun getAvgBpm(since: Long): Float?
 
     @Query("DELETE FROM heart_rate WHERE timestamp < :before")
@@ -76,10 +79,13 @@ interface SpO2Dao {
     @Insert
     suspend fun insert(entity: SpO2Entity)
 
-    @Query("SELECT * FROM spo2 WHERE timestamp >= :since ORDER BY timestamp DESC")
+    @Query("SELECT EXISTS(SELECT 1 FROM spo2 WHERE timestamp = :timestamp AND percentage = :percentage AND source = 'WATCH_SENSOR')")
+    suspend fun hasReading(timestamp: Long, percentage: Float): Boolean
+
+    @Query("SELECT * FROM spo2 WHERE timestamp >= :since AND source = 'WATCH_SENSOR' AND percentage BETWEEN 50 AND 100 ORDER BY timestamp DESC")
     fun getLast24h(since: Long): Flow<List<SpO2Entity>>
 
-    @Query("SELECT * FROM spo2 ORDER BY timestamp DESC LIMIT 1")
+    @Query("SELECT * FROM spo2 WHERE source = 'WATCH_SENSOR' AND percentage BETWEEN 50 AND 100 ORDER BY timestamp DESC LIMIT 1")
     fun getLatest(): Flow<SpO2Entity?>
 
     @Query("DELETE FROM spo2 WHERE timestamp < :before")
@@ -96,10 +102,10 @@ interface SleepDao {
     @Query("SELECT * FROM sleep WHERE startTime = :startTime LIMIT 1")
     suspend fun getByStartTime(startTime: Long): SleepEntity?
 
-    @Query("SELECT * FROM sleep ORDER BY startTime DESC LIMIT 7")
+    @Query("SELECT * FROM sleep WHERE source = 'WATCH_ACTIGRAPHY' AND estimatedMinutes > 0 AND stagesAvailable = 0 ORDER BY startTime DESC LIMIT 7")
     fun getLast7Nights(): Flow<List<SleepEntity>>
 
-    @Query("SELECT * FROM sleep ORDER BY startTime DESC LIMIT 1")
+    @Query("SELECT * FROM sleep WHERE source = 'WATCH_ACTIGRAPHY' AND estimatedMinutes > 0 AND stagesAvailable = 0 ORDER BY startTime DESC LIMIT 1")
     fun getLatestNight(): Flow<SleepEntity?>
 
     @Query("DELETE FROM sleep WHERE startTime < :before")
@@ -150,7 +156,7 @@ interface WorkoutDao {
         NotificationHistoryEntity::class,
         WorkoutEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class FitnessDatabase : RoomDatabase() {

@@ -11,7 +11,7 @@ class WatchDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE
     companion object {
         private const val TAG = "WatchDatabase"
         private const val DATABASE_NAME = "healthsync_watch.db"
-        private const val DATABASE_VERSION = 2
+        private const val DATABASE_VERSION = 3
 
         const val TABLE_WORKOUTS = "workout_sessions"
         const val TABLE_DAILY_STEPS = "daily_steps"
@@ -40,6 +40,8 @@ class WatchDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE
                 swings_count INTEGER,
                 avg_heart_rate INTEGER,
                 route_json TEXT DEFAULT '[]',
+                distance_source TEXT NOT NULL DEFAULT 'UNKNOWN',
+                calories_estimated INTEGER NOT NULL DEFAULT 1,
                 is_synced INTEGER DEFAULT 0
             );
         """.trimIndent()
@@ -68,11 +70,16 @@ class WatchDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE
                 Log.w(TAG, "Migration v1->v2 failed (column may already exist): ${e.message}")
             }
         }
+        if (oldVersion < 3) {
+            db.execSQL("ALTER TABLE $TABLE_WORKOUTS ADD COLUMN distance_source TEXT NOT NULL DEFAULT 'UNKNOWN'")
+            db.execSQL("ALTER TABLE $TABLE_WORKOUTS ADD COLUMN calories_estimated INTEGER NOT NULL DEFAULT 1")
+        }
     }
 
     // ── Workout Operations ────────────────────────────────────────────────────
 
     fun insertWorkoutSession(session: WorkoutSessionPayload, isSynced: Boolean = false): Boolean {
+        if (!validCapturedWorkout(session)) return false
         return try {
             val db = writableDatabase
             val cv = ContentValues().apply {
@@ -87,6 +94,8 @@ class WatchDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE
                 put("swings_count", session.swings)
                 put("avg_heart_rate", session.avg_hr)
                 put("route_json", session.route_json)
+                put("distance_source", session.distance_source)
+                put("calories_estimated", if (session.calories_estimated) 1 else 0)
                 put("is_synced", if (isSynced) 1 else 0)
             }
             val res = db.insertWithOnConflict(TABLE_WORKOUTS, null, cv, SQLiteDatabase.CONFLICT_REPLACE)
@@ -119,7 +128,9 @@ class WatchDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE
                             step_count = it.getInt(it.getColumnIndexOrThrow("step_count")),
                             swings = it.getInt(it.getColumnIndexOrThrow("swings_count")),
                             avg_hr = it.getInt(it.getColumnIndexOrThrow("avg_heart_rate")),
-                            route_json = it.getString(it.getColumnIndexOrThrow("route_json")) ?: "[]"
+                            route_json = it.getString(it.getColumnIndexOrThrow("route_json")) ?: "[]",
+                            distance_source = it.getString(it.getColumnIndexOrThrow("distance_source")) ?: "UNKNOWN",
+                            calories_estimated = it.getInt(it.getColumnIndexOrThrow("calories_estimated")) != 0
                         )
                     )
                 }
@@ -173,8 +184,11 @@ class WatchDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE
 
             val cv = ContentValues().apply {
                 put("timestamp", timestampBucket)
-                put("step_delta", if (exists) existingSteps + stepDelta else stepDelta)
-                put("calories_delta", if (exists) existingCal + caloriesDelta else caloriesDelta)
+                val combinedSteps = existingSteps.toLong() + stepDelta
+                val combinedCalories = existingCal + caloriesDelta
+                if (combinedSteps > Int.MAX_VALUE || !combinedCalories.isFinite()) return false
+                put("step_delta", combinedSteps.toInt())
+                put("calories_delta", combinedCalories)
                 put("is_synced", 0)
             }
             val res = db.insertWithOnConflict(TABLE_DAILY_STEPS, null, cv, SQLiteDatabase.CONFLICT_REPLACE)
@@ -252,7 +266,9 @@ class WatchDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE
                             step_count = it.getInt(it.getColumnIndexOrThrow("step_count")),
                             swings = it.getInt(it.getColumnIndexOrThrow("swings_count")),
                             avg_hr = it.getInt(it.getColumnIndexOrThrow("avg_heart_rate")),
-                            route_json = try { it.getString(it.getColumnIndexOrThrow("route_json")) ?: "[]" } catch (_: Exception) { "[]" }
+                            route_json = try { it.getString(it.getColumnIndexOrThrow("route_json")) ?: "[]" } catch (_: Exception) { "[]" },
+                            distance_source = it.getString(it.getColumnIndexOrThrow("distance_source")) ?: "UNKNOWN",
+                            calories_estimated = it.getInt(it.getColumnIndexOrThrow("calories_estimated")) != 0
                         )
                     )
                 }

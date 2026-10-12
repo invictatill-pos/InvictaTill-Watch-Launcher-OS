@@ -608,7 +608,7 @@ object OnlineWatchFaceCatalog {
             sports(
                 id = "tri_rings_pro",
                 name = "Activity Rings Pro",
-                description = "Three concentric activity rings for Move, Exercise, and Stand with live BPM, step odometer, and calories.",
+                description = "Three progress rings for steps, estimated calories, and workout time with captured heart rate and step totals.",
                 tags = listOf("Fitness", "Rings", "Steps", "Activity"),
                 downloads = "7.8k",
                 accentColor = "#10B981",

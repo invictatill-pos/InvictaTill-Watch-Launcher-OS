@@ -19,14 +19,17 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.healthsync.phone.data.watchface.*
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.*
 
 /**
- * 1:1 Jetpack Compose Canvas previewer for declarative .hswf dynamic watch faces.
- * Renders on Android phone screens with pixel-accurate parity to the native watch Canvas engine.
+ * Design preview for declarative .hswf faces. Missing health values remain placeholders.
  */
 @Composable
 fun DynamicFacePreview(
@@ -35,10 +38,11 @@ fun DynamicFacePreview(
     hours: Int = 10,
     minutes: Int = 10,
     seconds: Int = 30,
-    heartRate: Int = 72,
-    steps: Int = 4520,
+    heartRate: Int = -1,
+    steps: Int = -1,
     stepGoal: Int = 10000,
-    battery: Int = 85
+    battery: Int = -1,
+    ambientLayout: Boolean = false
 ) {
     val cachedImage = remember(pkg.background.imageBase64) {
         val b64 = pkg.background.imageBase64
@@ -67,22 +71,27 @@ fun DynamicFacePreview(
             val density = radius / 150f // normalize to watch scale
 
             // 1. Draw Background
-            drawBackgroundLayer(pkg.background, cachedImage, cx, cy, radius, w, h)
+            if (ambientLayout && pkg.aod.hideBackground) drawRect(Color.Black)
+            else drawBackgroundLayer(pkg.background, cachedImage, cx, cy, radius, w, h)
 
             // 2. Draw Dial Ticks & Numbers
-            drawDialLayer(pkg.dial, cx, cy, radius, density)
+            val previewDial = if (ambientLayout && pkg.aod.hideMinorTicks) pkg.dial.copy(tickCount = 12) else pkg.dial
+            drawDialLayer(previewDial, cx, cy, radius, density)
 
             // 3. Draw Digital Clock (if enabled)
             pkg.digitalClock?.let { if (it.enabled) drawDigitalClock(it, w, h, hours, minutes, seconds, density) }
 
             // 4. Draw Date Window (if enabled)
-            pkg.date?.let { if (it.enabled) drawDateWindow(it, w, h, density) }
+            pkg.date?.let { if (it.enabled) drawDateWindow(if (ambientLayout) it.copy(hasFrame = false) else it, w, h, density) }
 
             // 5. Draw Complications
             drawComplicationsLayer(pkg.complications, w, h, radius, heartRate, steps, stepGoal, battery, density)
 
             // 6. Draw Analog Hands (if configured)
-            pkg.hands?.let { drawHandsLayer(it, cx, cy, radius, hours, minutes, seconds, density) }
+            pkg.hands?.let {
+                val previewHands = if (ambientLayout && pkg.aod.hideSecondsHand) it.copy(secondHand = null) else it
+                drawHandsLayer(previewHands, cx, cy, radius, hours, minutes, seconds, density)
+            }
         }
     }
 }
@@ -120,8 +129,10 @@ private fun DrawScope.drawBackgroundLayer(
         "gradient_linear" -> {
             val start = parseColor(bg.gradientStartHex ?: bg.colorHex, Color(0xFF101622))
             val end = parseColor(bg.gradientEndHex ?: "#000000", Color.Black)
+            val angle = Math.toRadians(bg.gradientAngle.toDouble())
+            val delta = Offset((cos(angle) * radius).toFloat(), (sin(angle) * radius).toFloat())
             drawRect(
-                brush = Brush.linearGradient(listOf(start, end), start = Offset(0f, 0f), end = Offset(w, h)),
+                brush = Brush.linearGradient(listOf(start, end), start = Offset(cx, cy) - delta, end = Offset(cx, cy) + delta),
                 size = size
             )
         }
@@ -142,12 +153,12 @@ private fun DrawScope.drawDialLayer(
     val dialR = radius * dial.dialRadiusRatio
 
     if (dial.showTicks) {
-        val count = dial.tickCount
+        val count = dial.tickCount.coerceAtLeast(12)
         val majorColor = parseColor(dial.majorTickColorHex, Color(0xFF00E5FF))
         val minorColor = parseColor(dial.minorTickColorHex, Color(0xFF334155))
 
         for (i in 0 until count) {
-            val isMajor = (i % (count / 12)) == 0
+            val isMajor = (i % (count / 12).coerceAtLeast(1)) == 0
             val angleDeg = (i * 360f / count) - 90f
             val angleRad = Math.toRadians(angleDeg.toDouble())
 
@@ -176,12 +187,13 @@ private fun DrawScope.drawDialLayer(
             }
 
             when (dial.numberType) {
-                "arabic" -> {
+                "arabic", "roman" -> {
+                    val roman = listOf("I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII")
                     for (h in 1..12) {
                         val angleRad = Math.toRadians((h * 30.0) - 90.0)
                         val nx = cx + (cos(angleRad) * numRadius).toFloat()
                         val ny = cy + (sin(angleRad) * numRadius).toFloat() + (paint.textSize * 0.35f)
-                        canvas.nativeCanvas.drawText(h.toString(), nx, ny, paint)
+                        canvas.nativeCanvas.drawText(if (dial.numberType == "roman") roman[h - 1] else h.toString(), nx, ny, paint)
                     }
                 }
                 "minimal_cardinal" -> {
@@ -209,7 +221,11 @@ private fun DrawScope.drawDigitalClock(
 ) {
     val x = w * cfg.xRatio
     val y = h * cfg.yRatio
-    val timeStr = String.format("%02d:%02d", (hours % 12).let { if (it == 0) 12 else it }, minutes)
+    val timeStr = when (cfg.format) {
+        "HH:mm:ss" -> String.format(Locale.getDefault(), "%02d:%02d:%02d", hours, minutes, seconds)
+        "hh:mm a" -> String.format(Locale.getDefault(), "%02d:%02d %s", (hours % 12).let { if (it == 0) 12 else it }, minutes, if (hours < 12) "AM" else "PM")
+        else -> String.format(Locale.getDefault(), "%02d:%02d", hours, minutes)
+    }
 
     drawIntoCanvas { canvas ->
         val paint = AndroidPaint().apply {
@@ -217,7 +233,8 @@ private fun DrawScope.drawDigitalClock(
             textAlign = AndroidPaint.Align.CENTER
             textSize = cfg.fontSizeSp * density
             color = parseColor(cfg.colorHex, Color.White).toArgb()
-            typeface = Typeface.create(Typeface.MONOSPACE, if (cfg.isBold) Typeface.BOLD else Typeface.NORMAL)
+            val family = when (cfg.fontFamily) { "serif" -> Typeface.SERIF; "sans" -> Typeface.SANS_SERIF; else -> Typeface.MONOSPACE }
+            typeface = Typeface.create(family, if (cfg.isBold) Typeface.BOLD else Typeface.NORMAL)
         }
         canvas.nativeCanvas.drawText(timeStr, x, y, paint)
     }
@@ -231,7 +248,8 @@ private fun DrawScope.drawDateWindow(
 ) {
     val x = w * cfg.xRatio
     val y = h * cfg.yRatio
-    val dateStr = "SAT 10"
+    val dateFormat = cfg.format.takeIf { it in listOf("d", "dd/MM", "EEE, MMM d", "EEE d") } ?: "EEE d"
+    val dateStr = SimpleDateFormat(dateFormat, Locale.getDefault()).format(Date()).uppercase(Locale.getDefault())
 
     drawIntoCanvas { canvas ->
         val paint = AndroidPaint().apply {
@@ -282,9 +300,10 @@ private fun DrawScope.drawComplicationsLayer(
             r = radius * cfg.heartRate.radiusRatio,
             progress = (bpm / 180f).coerceIn(0f, 1f),
             label = cfg.heartRate.label ?: "BPM",
-            valText = "$bpm",
+            valText = if (bpm > 0) "$bpm" else "—",
             color = parseColor(cfg.heartRate.colorHex, Color(0xFFFF007F)),
             trackColor = parseColor(cfg.heartRate.accentColorHex, Color(0xFF1E293B)),
+            widgetStyle = cfg.heartRate.style,
             density = density
         )
     }
@@ -296,9 +315,10 @@ private fun DrawScope.drawComplicationsLayer(
             r = radius * cfg.steps.radiusRatio,
             progress = (steps.toFloat() / goal.coerceAtLeast(1)).coerceIn(0f, 1f),
             label = cfg.steps.label ?: "STEPS",
-            valText = if (steps >= 1000) String.format("%.1fk", steps / 1000f) else "$steps",
+            valText = if (steps < 0) "—" else if (steps >= 1000) String.format("%.1fk", steps / 1000f) else "$steps",
             color = parseColor(cfg.steps.colorHex, Color(0xFF00E5FF)),
             trackColor = parseColor(cfg.steps.accentColorHex, Color(0xFF1E293B)),
+            widgetStyle = cfg.steps.style,
             density = density
         )
     }
@@ -310,9 +330,10 @@ private fun DrawScope.drawComplicationsLayer(
             r = radius * cfg.battery.radiusRatio,
             progress = (bat / 100f).coerceIn(0f, 1f),
             label = "BAT",
-            valText = "$bat%",
+            valText = if (bat in 0..100) "$bat%" else "—",
             color = parseColor(cfg.battery.colorHex, Color(0xFF10B981)),
             trackColor = parseColor(cfg.battery.accentColorHex, Color(0xFF1E293B)),
+            widgetStyle = cfg.battery.style,
             density = density
         )
     }
@@ -327,13 +348,14 @@ private fun DrawScope.drawGauge(
     valText: String,
     color: Color,
     trackColor: Color,
-    density: Float
+    density: Float,
+    widgetStyle: String
 ) {
     val stroke = Stroke(width = 3f * density, cap = StrokeCap.Round)
     val startAngle = 135f
     val sweepAngle = 270f
 
-    drawArc(
+    if (widgetStyle == "arc_gauge" || widgetStyle == "subdial") drawArc(
         color = trackColor,
         startAngle = startAngle,
         sweepAngle = sweepAngle,
@@ -343,7 +365,7 @@ private fun DrawScope.drawGauge(
         style = stroke
     )
 
-    if (progress > 0) {
+    if (progress > 0 && (widgetStyle == "arc_gauge" || widgetStyle == "subdial")) {
         drawArc(
             color = color,
             startAngle = startAngle,
@@ -356,14 +378,23 @@ private fun DrawScope.drawGauge(
     }
 
     drawIntoCanvas { canvas ->
+        val valueColor = if (widgetStyle == "text_only" || widgetStyle == "icon_text") color.toArgb() else AndroidColor.WHITE
         val textPaint = AndroidPaint().apply {
             isAntiAlias = true
             textAlign = AndroidPaint.Align.CENTER
-            textSize = r * 0.6f
-            setColor(AndroidColor.WHITE)
+            textSize = if (widgetStyle == "text_only" || widgetStyle == "icon_text") 12f * density else r * 0.6f
+            setColor(valueColor)
             typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
         }
-        canvas.nativeCanvas.drawText(valText, cx, cy + (textPaint.textSize * 0.35f), textPaint)
+        if (widgetStyle == "text_only" || widgetStyle == "icon_text") {
+            canvas.nativeCanvas.drawText("$valText $label", cx, cy, textPaint)
+        } else {
+            canvas.nativeCanvas.drawText(valText, cx, cy + (textPaint.textSize * 0.35f), textPaint)
+            textPaint.textSize = r * .32f
+            textPaint.color = AndroidColor.rgb(148, 163, 184)
+            textPaint.typeface = Typeface.DEFAULT
+            canvas.nativeCanvas.drawText(label, cx, cy + r - 2f * density, textPaint)
+        }
     }
 }
 
@@ -382,31 +413,52 @@ private fun DrawScope.drawHandsLayer(
     val secAngle = (seconds * 6f) - 90f
 
     // Hour hand
-    drawHand(cx, cy, hourAngle, radius * hands.hourHand.lengthRatio, hands.hourHand.widthDp * density, parseColor(hands.hourHand.colorHex, Color.White))
+    drawHand(cx, cy, hourAngle, radius, hands.hourHand, density)
 
     // Minute hand
-    drawHand(cx, cy, minAngle, radius * hands.minuteHand.lengthRatio, hands.minuteHand.widthDp * density, parseColor(hands.minuteHand.colorHex, Color(0xFF38BDF8)))
+    drawHand(cx, cy, minAngle, radius, hands.minuteHand, density)
 
     // Second hand
     hands.secondHand?.let { sec ->
-        drawHand(cx, cy, secAngle, radius * sec.lengthRatio, sec.widthDp * density, parseColor(sec.colorHex, Color(0xFFFF3366)))
+        drawHand(cx, cy, secAngle, radius, sec, density)
     }
 
     // Pin cap
-    drawCircle(Color.White, radius = 5f * density, center = Offset(cx, cy))
+    drawCircle(parseColor(hands.minuteHand.colorHex, Color.White), radius = hands.hourHand.capRadius * density, center = Offset(cx, cy))
 }
 
 private fun DrawScope.drawHand(
     cx: Float,
     cy: Float,
     angleDeg: Float,
-    length: Float,
-    width: Float,
-    color: Color
+    radius: Float,
+    style: HandStyle,
+    density: Float
 ) {
-    val rad = Math.toRadians(angleDeg.toDouble())
-    val end = Offset(cx + (cos(rad) * length).toFloat(), cy + (sin(rad) * length).toFloat())
-    drawLine(color = color, start = Offset(cx, cy), end = end, strokeWidth = width, cap = StrokeCap.Round)
+    val length = radius * style.lengthRatio
+    val width = style.widthDp * density
+    val tail = length * style.tailRatio
+    val color = parseColor(style.colorHex, Color.White)
+    withTransform({ rotate(angleDeg + 90f, Offset(cx, cy)) }) {
+        when (style.shape) {
+            "needle" -> drawLine(color, Offset(cx, cy + tail), Offset(cx, cy - length), width, StrokeCap.Round)
+            "baton" -> drawRoundRect(color, topLeft = Offset(cx - width / 2f, cy - length), size = Size(width, length + tail), cornerRadius = androidx.compose.ui.geometry.CornerRadius(width / 2f))
+            else -> {
+                val path = Path().apply {
+                    moveTo(cx - width / 2f, cy + tail)
+                    lineTo(cx + width / 2f, cy + tail)
+                    lineTo(cx + width / 2f, cy - length * .72f)
+                    lineTo(cx + width * (if (style.shape == "arrow") 1.6f else .7f), cy - length * .72f)
+                    lineTo(cx, cy - length)
+                    lineTo(cx - width * (if (style.shape == "arrow") 1.6f else .7f), cy - length * .72f)
+                    lineTo(cx - width / 2f, cy - length * .72f)
+                    close()
+                }
+                drawPath(path, color)
+            }
+        }
+        if (style.hasCounterweight) drawCircle(color, width * 1.4f, Offset(cx, cy + tail * .65f))
+    }
 }
 
 private fun parseColor(hex: String?, fallback: Color): Color {

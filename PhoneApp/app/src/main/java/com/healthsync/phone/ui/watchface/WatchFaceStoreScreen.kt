@@ -39,7 +39,7 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 
 enum class StudioSection(val title: String, val subtitle: String) {
-    STORE("Watch Face Store", "Curated dials for Kolabee U8 Ultra"),
+    STORE("Watch Face Store", "Design previews · health fields show placeholders"),
     CREATOR("Watch Face Creator", "Design your personalized dial"),
     MY_CREATIONS("My Creations", "Personal dials & custom designs")
 }
@@ -58,15 +58,17 @@ fun WatchFaceStoreScreen(
     val scope = rememberCoroutineScope()
     val connState by BluetoothSyncService.connectionState.collectAsState()
 
-    var currentSection by remember { mutableStateOf(StudioSection.STORE) }
+    var currentSection by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(StudioSection.STORE) }
     var editingPackageForCreator by remember { mutableStateOf<HswfPackage?>(null) }
     var myCreationsRefreshTrigger by remember { mutableIntStateOf(0) }
 
-    var selectedCategory by remember { mutableStateOf("All") }
-    var searchQuery by remember { mutableStateOf("") }
+    var selectedCategory by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("All") }
+    var searchQuery by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
     var selectedItemForDetail by remember { mutableStateOf<StoreItem?>(null) }
 
     val categories = listOf("All", "Luxury", "Sports", "Cyberpunk", "Retro", "Minimal", "Art")
+
+    androidx.activity.compose.BackHandler(enabled = currentSection != StudioSection.STORE) { currentSection = StudioSection.STORE }
 
     // If Creator mode is active, display the full creator studio
     if (currentSection == StudioSection.CREATOR) {
@@ -183,20 +185,20 @@ fun WatchFaceStoreScreen(
                         color = if (isStore) AccentCyan else Color.Transparent
                     ) {
                         Row(
-                            modifier = Modifier.padding(vertical = 8.dp),
+                            modifier = Modifier.heightIn(min = 48.dp).padding(vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Icon(
                                 Icons.Default.Storefront,
                                 contentDescription = null,
-                                tint = if (isStore) Color.Black else TextWhite,
+                                tint = if (isStore) Color.White else TextWhite,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(Modifier.width(6.dp))
                             Text(
                                 "Store",
-                                color = if (isStore) Color.Black else TextWhite,
+                                color = if (isStore) Color.White else TextWhite,
                                 fontSize = 12.sp,
                                 fontWeight = if (isStore) FontWeight.Bold else FontWeight.Medium
                             )
@@ -214,7 +216,7 @@ fun WatchFaceStoreScreen(
                         color = Color.Transparent
                     ) {
                         Row(
-                            modifier = Modifier.padding(vertical = 8.dp),
+                            modifier = Modifier.heightIn(min = 48.dp).padding(vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
@@ -243,20 +245,20 @@ fun WatchFaceStoreScreen(
                         color = if (isMyCreations) AccentCyan else Color.Transparent
                     ) {
                         Row(
-                            modifier = Modifier.padding(vertical = 8.dp),
+                            modifier = Modifier.heightIn(min = 48.dp).padding(vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Icon(
                                 Icons.Default.CollectionsBookmark,
                                 contentDescription = null,
-                                tint = if (isMyCreations) Color.Black else TextWhite,
+                                tint = if (isMyCreations) Color.White else TextWhite,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(Modifier.width(6.dp))
                             Text(
                                 "My Dials",
-                                color = if (isMyCreations) Color.Black else TextWhite,
+                                color = if (isMyCreations) Color.White else TextWhite,
                                 fontSize = 12.sp,
                                 fontWeight = if (isMyCreations) FontWeight.Bold else FontWeight.Medium
                             )
@@ -390,7 +392,7 @@ fun WatchFaceStoreScreen(
                             columns = GridCells.Fixed(2),
                             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 40.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
                             items(filteredItems, key = { it.pkg.id }) { item ->
@@ -403,7 +405,7 @@ fun WatchFaceStoreScreen(
                                             return@StoreFaceCard
                                         }
                                         scope.launch {
-                                            Toast.makeText(context, "Beaming '${item.pkg.name}' to Watch…", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, "Sending '${item.pkg.name}' to your watch…", Toast.LENGTH_SHORT).show()
                                             val ok = WatchFaceSender.sendFaceToWatch(item.pkg, setActive = true)
                                             if (ok) {
                                                 Toast.makeText(context, "✓ '${item.pkg.name}' installed & active on Watch!", Toast.LENGTH_LONG).show()
@@ -464,7 +466,7 @@ private fun MyCreationsView(
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Box(
                     modifier = Modifier
@@ -487,9 +489,9 @@ private fun MyCreationsView(
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = AccentCyan)
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black)
+                    Icon(Icons.Default.Add, contentDescription = null, tint = Color.White)
                     Spacer(Modifier.width(6.dp))
-                    Text("Create Your First Dial", color = Color.Black, fontWeight = FontWeight.Bold)
+                    Text("Create Your First Dial", color = Color.White, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -498,7 +500,7 @@ private fun MyCreationsView(
             columns = GridCells.Fixed(2),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 40.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxSize()
         ) {
             items(myFaces, key = { it.id }) { face ->
@@ -524,9 +526,9 @@ private fun MyCreationsView(
                                 hours = 10,
                                 minutes = 10,
                                 seconds = 32,
-                                heartRate = 72,
-                                steps = 5420,
-                                battery = 88
+                                heartRate = -1,
+                                steps = -1,
+                                battery = -1
                             )
                         }
 
@@ -560,12 +562,12 @@ private fun MyCreationsView(
                                         return@Button
                                     }
                                     scope.launch {
-                                        Toast.makeText(context, "Beaming '${face.name}' to Watch…", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Sending '${face.name}' to your watch…", Toast.LENGTH_SHORT).show()
                                         val ok = WatchFaceSender.sendFaceToWatch(face, setActive = true)
                                         if (ok) {
                                             Toast.makeText(context, "✓ '${face.name}' active on Watch!", Toast.LENGTH_LONG).show()
                                         } else {
-                                            Toast.makeText(context, "Transfer failed. Check connection.", Toast.LENGTH_LONG).show()
+                                            Toast.makeText(context, "Could not confirm installation. Check your watch and connection.", Toast.LENGTH_LONG).show()
                                         }
                                     }
                                 },
@@ -574,9 +576,9 @@ private fun MyCreationsView(
                                 colors = ButtonDefaults.buttonColors(containerColor = AccentCyan),
                                 contentPadding = PaddingValues(horizontal = 4.dp)
                             ) {
-                                Icon(Icons.Default.SendToMobile, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
+                                Icon(Icons.Default.SendToMobile, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("Beam", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("Send", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
 
                             // Edit in Studio
@@ -642,10 +644,10 @@ private fun StoreFaceCard(
                     hours = 10,
                     minutes = 10,
                     seconds = 32,
-                    heartRate = 72,
-                    steps = 5420,
+                    heartRate = -1,
+                    steps = -1,
                     stepGoal = 10000,
-                    battery = 88
+                    battery = -1
                 )
             }
 
@@ -694,7 +696,7 @@ private fun StoreFaceCard(
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        "Beam to Watch",
+                        "Send to watch",
                         color = AccentCyan,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold
@@ -719,7 +721,6 @@ private fun WatchFaceDetailSheet(
     var sendSuccess by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    var isAmbientPreview by remember { mutableStateOf(false) }
     var simSeconds by remember { mutableIntStateOf(30) }
     var simMinutes by remember { mutableIntStateOf(10) }
     var simHours by remember { mutableIntStateOf(10) }
@@ -728,7 +729,7 @@ private fun WatchFaceDetailSheet(
     LaunchedEffect(Unit) {
         while (true) {
             val cal = Calendar.getInstance()
-            simHours = cal.get(Calendar.HOUR)
+            simHours = cal.get(Calendar.HOUR_OF_DAY)
             simMinutes = cal.get(Calendar.MINUTE)
             simSeconds = cal.get(Calendar.SECOND)
             delay(1000L)
@@ -763,9 +764,9 @@ private fun WatchFaceDetailSheet(
                         hours = simHours,
                         minutes = simMinutes,
                         seconds = simSeconds,
-                        heartRate = 78,
-                        steps = 6200,
-                        battery = 85
+                        heartRate = -1,
+                        steps = -1,
+                        battery = -1
                     )
                 }
             }
@@ -798,10 +799,9 @@ private fun WatchFaceDetailSheet(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         SpecRow("Type", item.pkg.type.replaceFirstChar { it.uppercase() })
-                        SpecRow("FPS", "Hardware 60 FPS")
                         SpecRow("Dial", if (item.pkg.dial.showTicks) "${item.pkg.dial.tickCount} Ticks (${item.pkg.dial.numberType})" else "Minimal")
                         SpecRow("Target Display", "Kolabee U8 Ultra (320x320)")
-                        SpecRow("Protocol", ".hswf v${item.pkg.schemaVersion}")
+                        SpecRow("Health fields", "Captured values on watch")
                     }
                 }
             }
@@ -847,7 +847,7 @@ private fun WatchFaceDetailSheet(
                                 delay(1200)
                                 onDismiss()
                             } else {
-                                errorMessage = "Bluetooth transmission failed. Ensure watch is in range."
+                                errorMessage = "Could not confirm installation. Check your watch and connection."
                             }
                         }
                     },
@@ -864,15 +864,15 @@ private fun WatchFaceDetailSheet(
                     if (isSending) {
                         CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.width(10.dp))
-                        Text("Beaming to Kolabee Watch…", fontWeight = FontWeight.Bold)
+                        Text("Sending to your watch…", fontWeight = FontWeight.Bold)
                     } else if (sendSuccess) {
                         Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color.White)
                         Spacer(Modifier.width(8.dp))
                         Text("Installed & Active on Watch!", fontWeight = FontWeight.Bold)
                     } else {
-                        Icon(Icons.Default.SendToMobile, contentDescription = null, tint = Color.Black)
+                        Icon(Icons.Default.SendToMobile, contentDescription = null, tint = Color.White)
                         Spacer(Modifier.width(8.dp))
-                        Text("Install & Set Active on Watch", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text("Install & Set Active on Watch", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     }
                 }
                 Spacer(Modifier.height(20.dp))

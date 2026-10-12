@@ -11,7 +11,7 @@ data class HeartRateSensorPreview(val bpm: Int, val capturedAt: Long) {
             seconds < 3600L -> "${seconds / 60L} min ago"
             else -> "${seconds / 3600L} h ago"
         }
-        return "$bpm bpm\nSensor reading · $age"
+        return "$bpm bpm\nUnverified sensor · $age"
     }
 }
 

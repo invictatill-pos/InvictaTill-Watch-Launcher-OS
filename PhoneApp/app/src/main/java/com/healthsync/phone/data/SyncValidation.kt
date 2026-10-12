@@ -13,7 +13,7 @@ object SyncValidation {
         timestamp > 0 && now > 0 && (timestamp <= now || timestamp - now <= FUTURE_TOLERANCE_MS)
 
     fun validHeartRate(bpm: Int, accuracy: Int, timestamp: Long, now: Long = System.currentTimeMillis()) =
-        bpm in 25..240 && accuracy in 0..3 && validTimestamp(timestamp, now)
+        bpm in 25..240 && accuracy in 1..3 && validTimestamp(timestamp, now)
 
     fun validSpO2(percentage: Float, timestamp: Long, now: Long = System.currentTimeMillis()) =
         percentage.isFinite() && percentage in 50f..100f && validTimestamp(timestamp, now)
@@ -34,13 +34,14 @@ object SyncValidation {
             validWorkout(start, end, distance, calories, steps, heartRate, swings, now) &&
             durationSeconds >= 0 && durationSeconds.toLong() <= (end - start) / 1000L
 
-    fun validSleep(start: Long, end: Long, deep: Int, light: Int, rem: Int, awake: Int,
-                   now: Long = System.currentTimeMillis()): Boolean {
-        if (!validTimestamp(start, now) || !validTimestamp(end, now) || end <= start) return false
-        val stages = listOf(deep, light, rem, awake)
-        val total = stages.sumOf { it.toLong() }
-        return stages.all { it >= 0 } && total > 0 && total <= (end - start) / 60_000L + 5
-    }
+    /** Motion can estimate rest duration, but cannot capture deep/REM/light sleep stages. */
+    fun validCapturedSleep(start: Long, end: Long, source: String?, estimatedMinutes: Int,
+                           stagesAvailable: Boolean, deep: Int, light: Int, rem: Int, awake: Int,
+                           now: Long = System.currentTimeMillis()): Boolean =
+        validTimestamp(start, now) && validTimestamp(end, now) && end > start &&
+            source == "WATCH_ACTIGRAPHY" && !stagesAvailable &&
+            listOf(deep, light, rem, awake).all { it == 0 } &&
+            estimatedMinutes in 1..1440 && estimatedMinutes.toLong() <= (end - start) / 60_000L
 
     /** A rejected fix must break the next line, including when it carried a segment marker. */
     fun sanitizeRoute(points: List<LatLngPoint?>?, start: Long, end: Long): List<LatLngPoint> {
@@ -88,12 +89,14 @@ object SyncValidation {
                 obj.int("accuracy") ?: return false, timestamp, now)
             MessageType.SPO2 -> {
                 val percentage = obj.number("percentage") ?: return false
-                percentage in 50.0..100.0 && validSpO2(percentage.toFloat(), timestamp, now)
+                obj.text("source") == "WATCH_SENSOR" && percentage in 50.0..100.0 && validSpO2(percentage.toFloat(), timestamp, now)
             }
             MessageType.STEPS -> validTimestamp(timestamp, now) && validSteps(
                 obj.int("steps") ?: return false, obj.number("calories") ?: return false)
-            MessageType.SLEEP -> validTimestamp(timestamp, now) && validSleep(
+            MessageType.SLEEP -> validTimestamp(timestamp, now) && validCapturedSleep(
                 obj.integer("startTime") ?: return false, obj.integer("endTime") ?: return false,
+                obj.text("source") ?: return false, obj.int("estimatedMinutes") ?: return false,
+                obj.boolean("stagesAvailable") ?: return false,
                 obj.int("deepMinutes") ?: return false, obj.int("lightMinutes") ?: return false,
                 obj.int("remMinutes") ?: return false, obj.int("awakeMinutes") ?: return false, now)
             MessageType.FALL_DETECTED -> validTimestamp(timestamp, now) && obj.text("severity") in setOf("LOW", "HIGH")
@@ -140,6 +143,7 @@ object SyncValidation {
     private fun jsonObject(json: String): JsonObject? = JsonParser.parseString(json).takeIf { it.isJsonObject }?.asJsonObject
     private fun optionalArray(obj: JsonObject, key: String) = !obj.has(key) || obj.get(key).isJsonArray
     private fun JsonObject.text(key: String): String? = get(key)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
+    private fun JsonObject.boolean(key: String): Boolean? = get(key)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }?.asBoolean
     private fun JsonObject.number(key: String): Double? = get(key)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }
         ?.asDouble?.takeIf { it.isFinite() }
     private fun JsonObject.integer(key: String): Long? = get(key)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }

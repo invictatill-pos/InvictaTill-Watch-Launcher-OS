@@ -38,6 +38,7 @@ class WorkoutSelectionActivity : AppCompatActivity() {
         setContentView(R.layout.activity_workout_selection)
         val scroll = findViewById<RoundScrollView>(R.id.workoutScroll)
         val content = findViewById<LinearLayout>(R.id.workoutList)
+        findViewById<View>(R.id.btnWorkoutBack).setOnClickListener { finish() }
         // Some standalone Android watches report a square screen even with a circular bezel.
         // Keep the list inside an inscribed circle without relying on isScreenRound.
         scroll.addOnLayoutChangeListener { _, left, top, right, bottom, _, _, _, _ ->

@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -52,8 +53,7 @@ class MainActivity : ComponentActivity() {
 
     private val requiredPermissions: Array<String>
         get() {
-            val perms = mutableListOf(Manifest.permission.READ_PHONE_STATE, Manifest.permission.READ_CONTACTS)
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) perms += Manifest.permission.ANSWER_PHONE_CALLS
+            val perms = mutableListOf<String>()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 perms += Manifest.permission.BLUETOOTH_CONNECT
                 perms += Manifest.permission.BLUETOOTH_SCAN
@@ -81,14 +81,26 @@ class MainActivity : ComponentActivity() {
                         requestMissingPermissions()
                     })
                 } else {
-                    MainAppContent(onRequestPermissions = { requestMissingPermissions() })
+                    MainAppContent(onRequestPermissions = { requestMissingPermissions() },
+                        onRequestOptionalPermissions = { requestMissingPermissions(includeCalls = true) })
                 }
             }
         }
     }
 
-    private fun requestMissingPermissions() {
-        val missing = requiredPermissions.filter {
+    override fun onResume() {
+        super.onResume()
+        if (!getSharedPreferences("app_prefs", MODE_PRIVATE).getBoolean("first_launch", true)) startServicesIfPossible()
+    }
+
+    private fun requestMissingPermissions(includeCalls: Boolean = false) {
+        val requested = requiredPermissions.toMutableList()
+        if (includeCalls) {
+            requested += Manifest.permission.READ_PHONE_STATE
+            requested += Manifest.permission.READ_CONTACTS
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) requested += Manifest.permission.ANSWER_PHONE_CALLS
+        }
+        val missing = requested.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
         if (missing.isNotEmpty()) permissionLauncher.launch(missing.toTypedArray())
@@ -98,7 +110,7 @@ class MainActivity : ComponentActivity() {
     private fun startServicesIfPossible() {
         val bluetoothGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
             ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
-        if (bluetoothGranted) {
+        if (bluetoothGranted && !com.healthsync.phone.data.PhonePreferences(this).connectionPaused) {
             try { ContextCompat.startForegroundService(this, Intent(this, BluetoothSyncService::class.java)) }
             catch (e: Exception) { android.util.Log.e("MainActivity", "Bluetooth service could not start", e) }
         }
@@ -112,8 +124,8 @@ class MainActivity : ComponentActivity() {
 // ── Navigation ────────────────────────────────────────────────────────────────
 
 sealed class Screen(val route: String, val label: String, val icon: ImageVector) {
-    object Dashboard : Screen("dashboard", "Dashboard", Icons.Default.Dashboard)
-    object Workouts : Screen("workouts", "Workouts", Icons.Default.DirectionsRun)
+    object Dashboard : Screen("dashboard", "Today", Icons.Default.Dashboard)
+    object Workouts : Screen("workouts", "Training", Icons.Default.DirectionsRun)
     object Notifications : Screen("notifications", "Alerts", Icons.Default.Notifications)
     object Device : Screen("device", "Device", Icons.Default.Watch)
     object Settings : Screen("settings", "Settings", Icons.Default.Settings)
@@ -123,7 +135,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
 val bottomScreens = listOf(Screen.Dashboard, Screen.Workouts, Screen.WatchFaces, Screen.Device, Screen.Settings)
 
 @Composable
-fun MainAppContent(onRequestPermissions: () -> Unit = {}) {
+fun MainAppContent(onRequestPermissions: () -> Unit = {}, onRequestOptionalPermissions: () -> Unit = onRequestPermissions) {
     val navController = rememberNavController()
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = currentBackStackEntry?.destination
@@ -152,14 +164,15 @@ fun MainAppContent(onRequestPermissions: () -> Unit = {}) {
         modifier = Modifier.background(BgDeep),
         containerColor = BgDeep,
         bottomBar = {
-            if (currentDestination?.route?.startsWith("workout_details") != true) Surface(color = BgSurface, shadowElevation = 10.dp) {
+            if (currentDestination?.route?.startsWith("workout_details") != true) Surface(color = BgSurface, shadowElevation = 3.dp, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp), border = BorderStroke(1.dp, BorderSubtle)) {
                 NavigationBar(
                     containerColor = BgSurface,
                     tonalElevation = 0.dp,
                     modifier = Modifier.heightIn(min = 76.dp)
                 ) {
                     bottomScreens.forEach { screen ->
-                        val selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
+                        val selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true ||
+                            (screen == Screen.Settings && currentDestination?.route == Screen.Notifications.route)
                         NavigationBarItem(
                             selected = selected,
                             onClick = {
@@ -181,7 +194,7 @@ fun MainAppContent(onRequestPermissions: () -> Unit = {}) {
                                 Text(
                                     screen.label,
                                     color = if (selected) AccentCyan else TextDim,
-                                    fontSize = 10.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
                                 )
                             },
@@ -212,16 +225,17 @@ fun MainAppContent(onRequestPermissions: () -> Unit = {}) {
                 DashboardScreen(
                     viewModel = viewModel,
                     onWorkoutClick = { workout -> navController.navigate("workout_details/${workout.id}") },
-                    onDeviceClick = { navController.navigate(Screen.Device.route) },
-                    onWatchFacesClick = { navController.navigate(Screen.WatchFaces.route) },
-                    onNotificationsClick = { navController.navigate(Screen.Notifications.route) }
+                    onDeviceClick = { navController.navigate(Screen.Device.route) { launchSingleTop = true } },
+                    onWatchFacesClick = { navController.navigate(Screen.WatchFaces.route) { launchSingleTop = true } },
+                    onNotificationsClick = { navController.navigate(Screen.Notifications.route) { launchSingleTop = true } },
+                    onWorkoutsClick = { navController.navigate(Screen.Workouts.route) { launchSingleTop = true } }
                 )
             }
             composable(Screen.Workouts.route) {
                 val viewModel: DashboardViewModel = hiltViewModel()
                 WorkoutsScreen(viewModel = viewModel, onWorkoutClick = { workout ->
                     navController.navigate("workout_details/${workout.id}")
-                })
+                }, onDeviceClick = { navController.navigate(Screen.Device.route) { launchSingleTop = true } })
             }
             composable("workout_details/{workoutId}") { entry ->
                 val viewModel: DashboardViewModel = hiltViewModel()
@@ -229,7 +243,8 @@ fun MainAppContent(onRequestPermissions: () -> Unit = {}) {
                 val workoutId = entry.arguments?.getString("workoutId")?.toLongOrNull()
                 val workout = uiState.recentWorkouts.firstOrNull { it.id == workoutId }
                 if (workout != null) {
-                    WorkoutDetailsScreen(workout = workout, onBack = { navController.popBackStack() })
+                    val heartRates by remember(workout.id) { viewModel.workoutHeartRates(workout) }.collectAsState(initial = emptyList())
+                    WorkoutDetailsScreen(workout = workout, heartRates = heartRates, onBack = { navController.popBackStack() })
                 } else {
                     Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                         if (uiState.isLoading) CircularProgressIndicator(color = AccentCyan)
@@ -240,7 +255,7 @@ fun MainAppContent(onRequestPermissions: () -> Unit = {}) {
                     }
                 }
             }
-            composable(Screen.Notifications.route) { NotificationsScreen() }
+            composable(Screen.Notifications.route) { NotificationsScreen(onBack = { navController.popBackStack() }) }
             composable(Screen.Device.route) {
                 DeviceScreen(
                     onRequestPermissions = onRequestPermissions,
@@ -253,7 +268,8 @@ fun MainAppContent(onRequestPermissions: () -> Unit = {}) {
             }
             composable(Screen.Settings.route) {
                 SettingsScreen(
-                    onRequestPermissions = onRequestPermissions,
+                    onRequestPermissions = onRequestOptionalPermissions,
+                    onOpenNotifications = { navController.navigate(Screen.Notifications.route) { launchSingleTop = true } },
                     updateViewModel = updateViewModel
                 )
             }
@@ -266,12 +282,13 @@ fun MainAppContent(onRequestPermissions: () -> Unit = {}) {
 @Composable
 fun OnboardingScreen(onComplete: () -> Unit) {
     var currentPage by rememberSaveable { mutableIntStateOf(0) }
+    BackHandler(enabled = currentPage > 0) { currentPage-- }
 
     val pages = listOf(
-        OnboardingPage("HealthSync", "Your phone and watch now share one clean health cockpit for vitals, training, calls, and notifications.", Icons.Default.Favorite, MetricHeart),
-        OnboardingPage("Live Vitals", "Check heart rate, SpO2, steps, sleep, and workout data without digging through separate screens.", Icons.Default.MonitorHeart, AccentCyan),
+        OnboardingPage("HealthSync", "Your captured health readings, workouts and watch connection, together in one place.", Icons.Default.Favorite, MetricHeart),
+        OnboardingPage("Captured Vitals", "Readings appear only after your watch sensor captures them. Unavailable sensors stay empty. Calories and motion-based rest duration are labeled estimates.", Icons.Default.MonitorHeart, AccentCyan),
         OnboardingPage("Wrist Ready", "Mirror important alerts and calls to the watch with quick, glanceable controls.", Icons.Default.NotificationsActive, AccentBlue),
-        OnboardingPage("Daily Progress", "Keep goals, trends, and workout history in a polished view built for everyday use.", Icons.Default.EmojiEvents, MetricSteps),
+        OnboardingPage("Daily Progress", "Set a step goal and follow your recorded activity, one day at a time.", Icons.Default.EmojiEvents, MetricSteps),
         OnboardingPage("You’re in control", "Nearby devices connects your watch. Phone permission enables call alerts. Notification access is optional and can be enabled in Settings. Your health history stays on this phone.", Icons.Default.Security, AccentCyan)
     )
 

@@ -3,6 +3,7 @@ package com.healthsync.watch.ui.shell
 import android.content.Intent
 import android.content.Context
 import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.BatteryManager
 import android.os.Handler
@@ -15,6 +16,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.healthsync.watch.data.WatchPreferences
 import com.healthsync.watch.service.BluetoothClientService
 import com.healthsync.watch.service.SensorCollectorService
@@ -23,6 +25,12 @@ import com.healthsync.watch.ui.ChronoWatchFaceView
 import com.healthsync.watch.ui.RoundScrollView
 import com.healthsync.watch.ui.WatchFaceCatalog
 import com.healthsync.watch.ui.WatchOptionsActivity
+import com.healthsync.watch.ui.WatchVisualStyle
+import com.healthsync.watch.ui.WorkoutHistoryStore
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Calendar
 
 class FacesPanel(private val activity: AppCompatActivity, private val onClose: () -> Unit, private val onSelected: () -> Unit) {
@@ -30,6 +38,9 @@ class FacesPanel(private val activity: AppCompatActivity, private val onClose: (
     private val previews = mutableListOf<View>()
     private val handler = Handler(Looper.getMainLooper())
     private var resumed = false
+    private var totalsJob:Job?=null
+    private var calories=-1.0
+    private var distanceKm=-1.0
     private val previewTick = object : Runnable {
         override fun run() {
             if (!resumed) return
@@ -44,13 +55,14 @@ class FacesPanel(private val activity: AppCompatActivity, private val onClose: (
         setPadding((diameter * .17f).toInt(), (diameter * .16f).toInt(), (diameter * .17f).toInt(), (diameter * .17f).toInt())
     }
     val view: View = RoundScrollView(activity).apply {
-        setBackgroundColor(Color.BLACK)
+        background = WatchVisualStyle.screenBackground()
         addView(content)
         isFillViewport = true
     }
 
     init {
         val allEntries = WatchFaceCatalog.allEntries(activity)
+        button("‹ Back") { onClose() }
         label("Watch faces", 23f)
         label("${allEntries.size} faces · ${WatchFaceCatalog.ambientEntries.size} dim styles", 11f)
 
@@ -103,7 +115,9 @@ class FacesPanel(private val activity: AppCompatActivity, private val onClose: (
         content.addView(TextView(activity).apply {
             text = value
             textSize = size
-            setTextColor(Color.WHITE)
+            setTextColor(if(size >= 20f) WatchVisualStyle.TEXT else WatchVisualStyle.MUTED)
+            typeface=Typeface.create(if(size >= 15f) "sans-serif-medium" else "sans-serif",Typeface.NORMAL)
+            includeFontPadding=false; setLineSpacing(dp(2).toFloat(),1f)
             gravity = Gravity.CENTER
             setPadding(0, dp(6), 0, dp(10))
         })
@@ -115,14 +129,12 @@ class FacesPanel(private val activity: AppCompatActivity, private val onClose: (
             textSize = 15f
             setTextColor(0xFFC4EBD6.toInt())
             gravity = Gravity.CENTER
-            minimumHeight = dp(46)
+            minimumHeight = dp(48)
+            typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
             isClickable = true
             isFocusable = true
             setPadding(dp(12), dp(10), dp(12), dp(10))
-            background = GradientDrawable().apply {
-                cornerRadius = dp(23).toFloat()
-                setColor(0xFF14221B.toInt())
-            }
+            background = WatchVisualStyle.button(activity)
             setOnClickListener {
                 performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
                 action()
@@ -132,7 +144,7 @@ class FacesPanel(private val activity: AppCompatActivity, private val onClose: (
 
     private fun refreshPreviews() {
         val time = Calendar.getInstance()
-        val steps = SensorCollectorService.latestSteps.coerceAtLeast(0)
+        val steps = if(SensorCollectorService.hasCapturedStepsToday()) SensorCollectorService.latestSteps.coerceAtLeast(0) else -1
         val heart = SensorCollectorService.watchFaceHeartRate(time.timeInMillis)
         val linked = BluetoothClientService.isConnected
         val battery = runCatching {
@@ -149,7 +161,7 @@ class FacesPanel(private val activity: AppCompatActivity, private val onClose: (
                 preview.setHeartRateTime(heart.capturedAt)
                 preview.setHeartRateUnverified(heart.sensorReading)
                 preview.updateTime(time)
-                preview.setHealthData(heart.bpm, steps, prefs.stepGoal, 0.0, 0.0)
+                preview.setHealthData(heart.bpm, steps, prefs.stepGoal, calories, distanceKm)
                 preview.setBluetoothConnected(linked)
                 preview.setBatteryLevel(battery)
             }
@@ -157,7 +169,7 @@ class FacesPanel(private val activity: AppCompatActivity, private val onClose: (
                 preview.setHeartRateTime(heart.capturedAt)
                 preview.setHeartRateUnverified(heart.sensorReading)
                 preview.updateTime(time)
-                preview.setHealthData(heart.bpm, steps, prefs.stepGoal, 0, 0f)
+                preview.setHealthData(heart.bpm, steps, prefs.stepGoal, calories.toInt(), distanceKm.toFloat())
                 preview.setBluetoothConnected(linked)
                 preview.setBatteryLevel(battery)
             }
@@ -167,6 +179,7 @@ class FacesPanel(private val activity: AppCompatActivity, private val onClose: (
                 preview.updateTime(time)
                 preview.setHeartRate(heart.bpm)
                 preview.setSteps(steps, prefs.stepGoal)
+                preview.setCalories(calories); preview.setDistance(distanceKm)
                 preview.setBluetoothConnected(linked)
                 preview.setBatteryLevel(battery)
             }
@@ -183,7 +196,7 @@ class FacesPanel(private val activity: AppCompatActivity, private val onClose: (
                 preview.setHeartRateTime(heart.capturedAt)
                 preview.setHeartRateUnverified(heart.sensorReading)
                 preview.updateTime(time)
-                preview.setHealthData(heart.bpm, steps, prefs.stepGoal, 0.0, 0.0)
+                preview.setHealthData(heart.bpm, steps, prefs.stepGoal, calories, distanceKm)
                 preview.setBluetoothConnected(linked)
                 preview.setBatteryLevel(battery)
             }
@@ -192,6 +205,15 @@ class FacesPanel(private val activity: AppCompatActivity, private val onClose: (
 
     fun onResume() {
         resumed = true
+        totalsJob?.cancel()
+        totalsJob=activity.lifecycleScope.launch {
+            val now=System.currentTimeMillis()
+            val midnight=Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY,0); set(Calendar.MINUTE,0); set(Calendar.SECOND,0); set(Calendar.MILLISECOND,0) }.timeInMillis
+            val sessions=withContext(Dispatchers.IO) { WorkoutHistoryStore.read(activity.applicationContext).filter { it.start_time in midnight..now } }
+            calories=sessions.sumOf { it.calories.takeIf { value -> value.isFinite() && value>=0 } ?: 0.0 }
+            distanceKm=sessions.sumOf { it.distance_m.takeIf { value -> value.isFinite() && value>=0 }?.toDouble() ?: 0.0 }/1000.0
+            refreshPreviews()
+        }
         handler.removeCallbacks(previewTick)
         refreshPreviews()
         handler.postDelayed(previewTick, 1_000L)
@@ -199,6 +221,7 @@ class FacesPanel(private val activity: AppCompatActivity, private val onClose: (
 
     fun onPause() {
         resumed = false
+        totalsJob?.cancel()
         handler.removeCallbacks(previewTick)
     }
 

@@ -58,10 +58,10 @@ class CasioWatchFaceView @JvmOverloads constructor(
         updateContentDescription()
         if (!isAmbient) invalidate()
     }
-    private var steps = 0
+    private var steps = -1
     private var stepGoal = 10000
-    private var activeCalories = 0
-    private var activeDistanceKm = 0f
+    private var activeCalories = -1
+    private var activeDistanceKm = -1f
     private var isBtConnected = false
     private var batteryPct = -1
 
@@ -551,7 +551,7 @@ class CasioWatchFaceView @JvmOverloads constructor(
 
         // Right complication: Steps odometer
         textPaint.textAlign = Paint.Align.RIGHT
-        val stepDisplay = String.format(Locale.getDefault(), "STP %05d", steps.coerceAtMost(99999))
+        val stepDisplay = "STP "+StepDisplayLabels.display(String.format(Locale.getDefault(),"%05d",steps.coerceAtMost(99999)),steps)
         canvas.drawText(stepDisplay, lcdLeft + lcdWidth - 12f * density, metricsY1, textPaint)
 
         // Mini 10-Segment LCD Step Goal Progress Bar
@@ -576,10 +576,10 @@ class CasioWatchFaceView @JvmOverloads constructor(
         textPaint.textSize = 8.5f * density
         textPaint.color = secondaryTextColor
         textPaint.textAlign = Paint.Align.LEFT
-        canvas.drawText("${activeCalories}KCAL", lcdLeft + 12f * density, metricsY2, textPaint)
+        canvas.drawText(if(activeCalories>=0) "${activeCalories}KCAL EST" else "— KCAL EST", lcdLeft + 12f * density, metricsY2, textPaint)
 
         textPaint.textAlign = Paint.Align.RIGHT
-        canvas.drawText(String.format(Locale.getDefault(), "%.1fKM", activeDistanceKm), lcdLeft + lcdWidth - 12f * density, metricsY2, textPaint)
+        canvas.drawText(if(activeDistanceKm>=0f) String.format(Locale.getDefault(), "%.1fKM EST", activeDistanceKm) else "— KM EST", lcdLeft + lcdWidth - 12f * density, metricsY2, textPaint)
 
         // 9. Corner Legend Labels (Bezel buttons)
         val legendPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {

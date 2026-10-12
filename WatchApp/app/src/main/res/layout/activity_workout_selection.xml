@@ -2,7 +2,7 @@
 <com.healthsync.watch.ui.RoundScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/workoutScroll"
     android:layout_width="match_parent" android:layout_height="match_parent"
-    android:background="#030806" android:fillViewport="true"
+    android:background="@drawable/watch_screen_bg" android:fillViewport="true"
     android:paddingStart="32dp" android:paddingEnd="32dp" android:clipToPadding="true"
     android:scrollbars="vertical" android:scrollbarStyle="insideOverlay"
     android:fadeScrollbars="false" android:scrollbarSize="2dp">
@@ -10,10 +10,12 @@
         android:layout_width="match_parent" android:layout_height="wrap_content"
         android:orientation="vertical" android:gravity="center_horizontal"
         android:paddingTop="40dp" android:paddingBottom="40dp">
+        <Button android:id="@+id/btnWorkoutBack" style="@style/WatchAction" android:layout_width="match_parent" android:layout_height="44dp"
+            android:text="‹ Back" android:textColor="#A7BDB2" android:backgroundTint="#11201B" android:layout_marginBottom="12dp" />
         <TextView style="@style/WatchText" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="Choose workout" android:textSize="17sp" android:textStyle="bold" android:gravity="center" />
+            android:text="Choose workout" android:textSize="22sp" android:fontFamily="sans-serif-medium" android:gravity="center" />
         <TextView style="@style/WatchLabel" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="Swipe up for all 8 ↓" android:gravity="center"
+            android:text="Choose an activity to start" android:gravity="center"
             android:layout_marginTop="5dp" android:layout_marginBottom="10dp" />
         <Button android:id="@+id/btnSportWalk" style="@style/WatchAction"
             android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginBottom="6dp"

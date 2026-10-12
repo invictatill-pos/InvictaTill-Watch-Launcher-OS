@@ -115,7 +115,7 @@ fun WatchFaceCreatorScreen(
     LaunchedEffect(liveTicking) {
         while (liveTicking) {
             val cal = Calendar.getInstance()
-            tickHours = cal.get(Calendar.HOUR)
+            tickHours = cal.get(Calendar.HOUR_OF_DAY)
             tickMinutes = cal.get(Calendar.MINUTE)
             tickSeconds = cal.get(Calendar.SECOND)
             delay(1000L)
@@ -172,7 +172,7 @@ fun WatchFaceCreatorScreen(
                     IconButton(onClick = { isAmbientPreview = !isAmbientPreview }) {
                         Icon(
                             if (isAmbientPreview) Icons.Default.Brightness7 else Icons.Default.Brightness4,
-                            contentDescription = "Toggle Ambient Preview",
+                            contentDescription = if (isAmbientPreview) "Show active layout" else "Show ambient layout",
                             tint = if (isAmbientPreview) AccentCyan else TextDim
                         )
                     }
@@ -235,7 +235,7 @@ fun WatchFaceCreatorScreen(
                                     showSuccessDialog = true
                                     onFaceSaved(finalFace)
                                 } else {
-                                    errorMessage = "Transfer failed. Check Bluetooth pairing and retry."
+                                    errorMessage = "Installation was not confirmed by the watch. Check the connection and try again."
                                 }
                             }
                         },
@@ -245,13 +245,13 @@ fun WatchFaceCreatorScreen(
                         enabled = !isBeaming
                     ) {
                         if (isBeaming) {
-                            CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                             Spacer(Modifier.width(8.dp))
-                            Text("Beaming…", color = Color.Black, fontWeight = FontWeight.Bold)
+                            Text("Sending…", color = Color.White, fontWeight = FontWeight.Bold)
                         } else {
-                            Icon(Icons.Default.SendToMobile, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.SendToMobile, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Beam to Watch", color = Color.Black, fontWeight = FontWeight.Bold)
+                            Text("Send to watch", color = Color.White, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -288,9 +288,10 @@ fun WatchFaceCreatorScreen(
                             hours = tickHours,
                             minutes = tickMinutes,
                             seconds = tickSeconds,
-                            heartRate = testHeartRate.toInt(),
-                            steps = testSteps.toInt(),
-                            battery = testBattery.toInt()
+                            heartRate = if (showTestBench) testHeartRate.toInt() else -1,
+                            steps = if (showTestBench) testSteps.toInt() else -1,
+                            battery = if (showTestBench) testBattery.toInt() else -1,
+                            ambientLayout = isAmbientPreview
                         )
                     }
 
@@ -300,9 +301,15 @@ fun WatchFaceCreatorScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
-                            text = if (isAmbientPreview) "Ambient / AOD View" else "Live 60 FPS Watch Simulation",
+                            text = when {
+                                isAmbientPreview -> "Ambient layout · design preview"
+                                showTestBench -> "Design preview · example values"
+                                else -> "Design preview · health fields unavailable"
+                            },
                             color = TextDim,
-                            fontSize = 12.sp
+                            fontSize = 12.sp,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 2
                         )
                         TextButton(
                             onClick = { showTestBench = !showTestBench },
@@ -316,7 +323,7 @@ fun WatchFaceCreatorScreen(
 
                     // Simulated Case Style Chips
                     Row(
-                        modifier = Modifier.padding(top = 4.dp),
+                        modifier = Modifier.padding(top = 4.dp).horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         WatchCaseStyle.values().forEach { case ->
@@ -324,7 +331,7 @@ fun WatchFaceCreatorScreen(
                             FilterChip(
                                 selected = isSel,
                                 onClick = { selectedCaseStyle = case },
-                                label = { Text(case.label, fontSize = 10.sp) },
+                                label = { Text(case.label, fontSize = 11.sp) },
                                 leadingIcon = {
                                     Box(
                                         modifier = Modifier
@@ -355,7 +362,7 @@ fun WatchFaceCreatorScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text("Interactive Telemetry Simulator", color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    Text("Example values for design testing", color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text("Live Ticking", color = TextDim, fontSize = 11.sp)
                                         Spacer(Modifier.width(6.dp))
@@ -384,7 +391,7 @@ fun WatchFaceCreatorScreen(
                                 // Steps Slider
                                 Column {
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        Text("Step Progress", color = TextDim, fontSize = 12.sp)
+                                        Text("Example step progress", color = TextDim, fontSize = 12.sp)
                                         Text("${testSteps.toInt()} Steps", color = AccentCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                     Slider(
@@ -398,7 +405,7 @@ fun WatchFaceCreatorScreen(
                                 // Heart Rate Slider
                                 Column {
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        Text("Heart Rate (BPM)", color = TextDim, fontSize = 12.sp)
+                                        Text("Example heart rate (BPM)", color = TextDim, fontSize = 12.sp)
                                         Text("${testHeartRate.toInt()} BPM", color = StatusError, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                     Slider(
@@ -459,12 +466,12 @@ fun WatchFaceCreatorScreen(
                                 Icon(
                                     tab.icon,
                                     contentDescription = null,
-                                    tint = if (isSelected) Color.Black else TextWhite,
+                                    tint = if (isSelected) Color.White else TextWhite,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Text(
                                     tab.label,
-                                    color = if (isSelected) Color.Black else TextWhite,
+                                    color = if (isSelected) Color.White else TextWhite,
                                     fontSize = 13.sp,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                                 )
@@ -555,7 +562,7 @@ fun WatchFaceCreatorScreen(
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Default.CheckCircle, contentDescription = null, tint = StatusSuccess)
-                    Text("Dial Beamed Successfully!", color = TextWhite)
+                    Text("Watch face installed", color = TextWhite)
                 }
             },
             text = {
@@ -570,7 +577,7 @@ fun WatchFaceCreatorScreen(
                     onClick = { showSuccessDialog = false },
                     colors = ButtonDefaults.buttonColors(containerColor = AccentCyan)
                 ) {
-                    Text("Done", color = Color.Black, fontWeight = FontWeight.Bold)
+                    Text("Done", color = Color.White, fontWeight = FontWeight.Bold)
                 }
             },
             containerColor = BgCard
@@ -683,9 +690,9 @@ private fun BackgroundControl(
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = AccentCyan)
             ) {
-                Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = Color.Black)
+                Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = Color.White)
                 Spacer(Modifier.width(8.dp))
-                Text("Pick Photo from Gallery", color = Color.Black, fontWeight = FontWeight.Bold)
+                Text("Pick Photo from Gallery", color = Color.White, fontWeight = FontWeight.Bold)
             }
             if (bg.imageBase64 != null) {
                 TextButton(
@@ -758,9 +765,9 @@ private fun DialControl(
 
     // Number Type
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-        Text("Numeral Markers", color = TextWhite, fontSize = 14.sp)
+        Text("Numeral Markers", color = TextWhite, fontSize = 14.sp, modifier = Modifier.weight(1f))
         Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            modifier = Modifier.weight(1.6f).horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             listOf(
@@ -791,7 +798,7 @@ private fun DialControl(
         accentSwatches.forEach { hex ->
             Box(
                 modifier = Modifier
-                    .size(32.dp)
+                    .size(48.dp)
                     .clip(CircleShape)
                     .background(Color(android.graphics.Color.parseColor(hex)))
                     .border(2.dp, if (dial.majorTickColorHex.equals(hex, ignoreCase = true)) AccentCyan else BorderSubtle, CircleShape)
@@ -824,7 +831,7 @@ private fun HandsControl(
     if (hands != null) {
         // Hand Shape
         Text("Hand Silhouette Shape:", color = TextDim, fontSize = 12.sp)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("sword" to "Sword", "baton" to "Baton", "needle" to "Needle", "arrow" to "Arrow").forEach { (shape, label) ->
                 FilterChip(
                     selected = hands.hourHand.shape == shape,
@@ -852,7 +859,7 @@ private fun HandsControl(
                 val currentSec = hands.secondHand?.colorHex ?: "#FF3366"
                 Box(
                     modifier = Modifier
-                        .size(30.dp)
+                        .size(48.dp)
                         .clip(CircleShape)
                         .background(Color(android.graphics.Color.parseColor(hex)))
                         .border(2.dp, if (currentSec.equals(hex, ignoreCase = true)) AccentCyan else BorderSubtle, CircleShape)
@@ -988,7 +995,7 @@ private fun ComplicationsControl(
                     FilterChip(
                         selected = complications.heartRate.style == st,
                         onClick = { onChange(complications.copy(heartRate = complications.heartRate.copy(style = st))) },
-                        label = { Text(label, fontSize = 10.sp) }
+                        label = { Text(label, fontSize = 11.sp) }
                     )
                 }
             }
@@ -1017,7 +1024,7 @@ private fun ComplicationsControl(
                     FilterChip(
                         selected = complications.steps.style == st,
                         onClick = { onChange(complications.copy(steps = complications.steps.copy(style = st))) },
-                        label = { Text(label, fontSize = 10.sp) }
+                        label = { Text(label, fontSize = 11.sp) }
                     )
                 }
             }

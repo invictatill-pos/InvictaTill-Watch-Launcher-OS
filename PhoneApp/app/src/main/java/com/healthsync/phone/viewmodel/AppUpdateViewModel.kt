@@ -6,240 +6,149 @@ import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.healthsync.phone.data.PhonePreferences
-import com.healthsync.phone.data.update.AppUpdateManager
-import com.healthsync.phone.data.update.AppVersionInfo
-import com.healthsync.phone.data.update.UpdateManifest
-import com.healthsync.phone.data.update.UpdateStatus
+import com.healthsync.phone.data.update.*
 import com.healthsync.phone.service.BluetoothSyncService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.io.File
 import javax.inject.Inject
 
 @HiltViewModel
-class AppUpdateViewModel @Inject constructor(
-    application: Application
-) : AndroidViewModel(application) {
-
+class AppUpdateViewModel @Inject constructor(application: Application) : AndroidViewModel(application) {
     private val _status = MutableStateFlow<UpdateStatus>(UpdateStatus.Idle)
-    val status: StateFlow<UpdateStatus> = _status.asStateFlow()
-
+    val status = _status.asStateFlow()
     private val _manifest = MutableStateFlow<UpdateManifest?>(null)
-    val manifest: StateFlow<UpdateManifest?> = _manifest.asStateFlow()
-
+    val manifest = _manifest.asStateFlow()
     private val _phoneUpdateInfo = MutableStateFlow<AppVersionInfo?>(null)
-    val phoneUpdateInfo: StateFlow<AppVersionInfo?> = _phoneUpdateInfo.asStateFlow()
-
+    val phoneUpdateInfo = _phoneUpdateInfo.asStateFlow()
     private val _watchUpdateInfo = MutableStateFlow<AppVersionInfo?>(null)
-    val watchUpdateInfo: StateFlow<AppVersionInfo?> = _watchUpdateInfo.asStateFlow()
-
+    val watchUpdateInfo = _watchUpdateInfo.asStateFlow()
     private val _showDialog = MutableStateFlow(false)
-    val showDialog: StateFlow<Boolean> = _showDialog.asStateFlow()
-
+    val showDialog = _showDialog.asStateFlow()
     private val _dialogUpdateInfo = MutableStateFlow<AppVersionInfo?>(null)
-    val dialogUpdateInfo: StateFlow<AppVersionInfo?> = _dialogUpdateInfo.asStateFlow()
-
+    val dialogUpdateInfo = _dialogUpdateInfo.asStateFlow()
     private val _isWatchUpdate = MutableStateFlow(false)
-    val isWatchUpdate: StateFlow<Boolean> = _isWatchUpdate.asStateFlow()
+    val isWatchUpdate = _isWatchUpdate.asStateFlow()
+    private var downloadedPhone: Pair<AppVersionInfo, File>? = null
 
-    fun checkForUpdates(silent: Boolean = false) {
+    private fun busy() = _status.value is UpdateStatus.Checking || _status.value is UpdateStatus.Downloading ||
+        _status.value is UpdateStatus.TransferringToWatch
+
+    private fun watchCode(): Int = BluetoothSyncService.connectedWatchVersionCode.value ?: PhonePreferences(getApplication()).lastKnownWatchVersionCode
+
+    @Suppress("DEPRECATION")
+    private fun phoneCode(): Int {
+        val context = getApplication<Application>()
+        val installed = context.packageManager.getPackageInfo(context.packageName, 0)
+        return if (Build.VERSION.SDK_INT >= 28) installed.longVersionCode.toInt() else installed.versionCode
+    }
+
+    fun checkForUpdates(silent: Boolean = false) = check(silent, watchOnly = false, pushWatch = false, context = null)
+    fun checkWatchUpdateManually() = check(silent = false, watchOnly = true, pushWatch = false, context = null)
+
+    private fun check(silent: Boolean, watchOnly: Boolean, pushWatch: Boolean, context: Context?) {
+        if (busy()) return
+        _status.value = UpdateStatus.Checking
         viewModelScope.launch {
-            if (!silent) _status.value = UpdateStatus.Checking
             val fetched = AppUpdateManager.fetchManifest()
-            _manifest.value = fetched
             if (fetched == null) {
-                if (!silent) _status.value = UpdateStatus.Error(AppUpdateManager.lastError ?: "Unable to reach update server.")
+                _status.value = if (silent) UpdateStatus.Idle else UpdateStatus.Error(AppUpdateManager.lastError ?: "Unable to reach update server")
                 return@launch
             }
-
-            val context = getApplication<Application>()
-            val currentPhoneCode = try {
-                val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-                if (Build.VERSION.SDK_INT >= 28) pInfo.longVersionCode.toInt() else @Suppress("DEPRECATION") pInfo.versionCode
-            } catch (_: Exception) { 0 }
-
-            val currentWatchCode = BluetoothSyncService.connectedWatchVersionCode.value ?: PhonePreferences(context).lastKnownWatchVersionCode
-
-            val phoneNeedsUpdate = fetched.phone.versionCode > currentPhoneCode
-            val watchNeedsUpdate = fetched.watch.versionCode > currentWatchCode
-
-            _phoneUpdateInfo.value = if (phoneNeedsUpdate) fetched.phone else null
-            _watchUpdateInfo.value = if (watchNeedsUpdate) fetched.watch else null
-
-            // 1. Show Phone update dialog if available
-            if (phoneNeedsUpdate) {
-                _dialogUpdateInfo.value = fetched.phone
-                _isWatchUpdate.value = false
-                _status.value = UpdateStatus.UpdateAvailable(fetched.phone, isWatch = false)
-                if (!silent) _showDialog.value = true
-                return@launch
-            }
-
-            // 2. Show Watch update dialog if watch needs update and phone is current
-            if (watchNeedsUpdate) {
-                _dialogUpdateInfo.value = fetched.watch
-                _isWatchUpdate.value = true
-                _status.value = UpdateStatus.UpdateAvailable(fetched.watch, isWatch = true)
-                if (!silent) _showDialog.value = true
-                return@launch
-            }
-
-            if (!silent) {
-                _status.value = UpdateStatus.UpToDate
-            } else {
-                _status.value = UpdateStatus.Idle
-            }
-        }
-    }
-
-    fun checkWatchUpdateManually() {
-        viewModelScope.launch {
-            _status.value = UpdateStatus.Checking
-            val fetched = AppUpdateManager.fetchManifest()
             _manifest.value = fetched
-            if (fetched == null) {
-                _status.value = UpdateStatus.Error(AppUpdateManager.lastError ?: "Unable to reach update server.")
+            _phoneUpdateInfo.value = fetched.phone.takeIf { it.versionCode > phoneCode() }
+            _watchUpdateInfo.value = fetched.watch.takeIf { it.versionCode > watchCode() }
+            val info = if (pushWatch) fetched.watch else if (watchOnly) _watchUpdateInfo.value else _phoneUpdateInfo.value ?: _watchUpdateInfo.value
+            if (info == null) {
+                _status.value = if (silent) UpdateStatus.Idle else UpdateStatus.UpToDate
                 return@launch
             }
-
-            val context = getApplication<Application>()
-            val currentWatchCode = BluetoothSyncService.connectedWatchVersionCode.value ?: PhonePreferences(context).lastKnownWatchVersionCode
-            if (fetched.watch.versionCode > currentWatchCode) {
-                _watchUpdateInfo.value = fetched.watch
-                _dialogUpdateInfo.value = fetched.watch
-                _isWatchUpdate.value = true
-                _status.value = UpdateStatus.UpdateAvailable(fetched.watch, isWatch = true)
-                _showDialog.value = true
-            } else {
-                _watchUpdateInfo.value = null
-                _status.value = UpdateStatus.UpToDate
-            }
+            val isWatch = pushWatch || watchOnly || _phoneUpdateInfo.value == null
+            _status.value = UpdateStatus.Idle
+            select(info, isWatch, show = !silent || pushWatch)
+            if (pushWatch) startUpdate(context)
         }
     }
 
-    fun updatePhone(context: Context? = null) {
-        val info = _phoneUpdateInfo.value ?: _manifest.value?.phone ?: return
-        _dialogUpdateInfo.value = info
-        _isWatchUpdate.value = false
-        _status.value = UpdateStatus.UpdateAvailable(info, isWatch = false)
-        _showDialog.value = true
-        val targetContext = context ?: getApplication<Application>()
-        startUpdate(targetContext)
-    }
-
-    fun updateWatch(context: Context? = null) {
-        val info = _watchUpdateInfo.value ?: _manifest.value?.watch ?: return
-        _dialogUpdateInfo.value = info
-        _isWatchUpdate.value = true
-        _status.value = UpdateStatus.UpdateAvailable(info, isWatch = true)
-        _showDialog.value = true
-        val targetContext = context ?: getApplication<Application>()
-        startUpdate(targetContext)
-    }
-
-    fun forcePushWatchUpdate(context: Context? = null) {
-        val targetContext = context ?: getApplication<Application>()
-        val info = _manifest.value?.watch
-        if (info != null) {
-            _dialogUpdateInfo.value = info
-            _isWatchUpdate.value = true
-            _status.value = UpdateStatus.UpdateAvailable(info, isWatch = true)
-            _showDialog.value = true
-            startUpdate(targetContext)
-        } else {
-            viewModelScope.launch {
-                _status.value = UpdateStatus.Checking
-                val fetched = AppUpdateManager.fetchManifest()
-                _manifest.value = fetched
-                if (fetched != null) {
-                    _dialogUpdateInfo.value = fetched.watch
-                    _isWatchUpdate.value = true
-                    _status.value = UpdateStatus.UpdateAvailable(fetched.watch, isWatch = true)
-                    _showDialog.value = true
-                    startUpdate(targetContext)
-                } else {
-                    _status.value = UpdateStatus.Error("Unable to fetch watch update package.")
-                }
-            }
-        }
-    }
-
-    fun promptUpdate(info: AppVersionInfo, isWatch: Boolean) {
+    private fun select(info: AppVersionInfo, isWatch: Boolean, show: Boolean = true) {
         _dialogUpdateInfo.value = info
         _isWatchUpdate.value = isWatch
         _status.value = UpdateStatus.UpdateAvailable(info, isWatch)
-        _showDialog.value = true
+        _showDialog.value = show
+    }
+
+    fun updatePhone(context: Context? = null) {
+        if (busy()) return
+        val info = _phoneUpdateInfo.value ?: return
+        select(info, false)
+        startUpdate(context)
+    }
+
+    fun updateWatch(context: Context? = null) {
+        if (busy()) return
+        val info = _watchUpdateInfo.value ?: return
+        select(info, true)
+        startUpdate(context)
+    }
+
+    fun forcePushWatchUpdate(context: Context? = null) {
+        if (busy()) return
+        check(silent = false, watchOnly = true, pushWatch = true, context = context)
+    }
+
+    fun promptUpdate(info: AppVersionInfo, isWatch: Boolean) {
+        if (!busy()) select(info, isWatch)
     }
 
     fun startUpdate(context: Context? = null) {
+        if (busy()) return
         val targetContext = context ?: getApplication<Application>()
-        val info = _dialogUpdateInfo.value ?: _phoneUpdateInfo.value ?: _watchUpdateInfo.value ?: _manifest.value?.let { if (_isWatchUpdate.value) it.watch else it.phone } ?: return
-        _dialogUpdateInfo.value = info
+        val info = _dialogUpdateInfo.value ?: return
         val isWatch = _isWatchUpdate.value
-
-        // Prevent redundant parallel downloads
-        val current = _status.value
-        if (current is UpdateStatus.Downloading || current is UpdateStatus.TransferringToWatch) {
+        if (isWatch && !BluetoothSyncService.connectionState.value.isConnected) {
+            _status.value = UpdateStatus.Error("Connect your watch before sending its update")
             return
         }
-
+        if (isWatch && info.versionCode < watchCode()) {
+            _status.value = UpdateStatus.Error("The connected watch already has a newer app version")
+            return
+        }
+        val savedPhone = downloadedPhone?.takeIf { !isWatch && it.first == info && it.second.exists() }
+        if (savedPhone != null) {
+            _status.value = UpdateStatus.ReadyToInstall(savedPhone.second)
+            if (AppUpdateManager.installApk(targetContext, savedPhone.second)) _showDialog.value = false
+            return
+        }
+        _status.value = UpdateStatus.Downloading(0, 0, 0)
         viewModelScope.launch {
+            val file = AppUpdateManager.downloadApk(targetContext, info, isWatch) { percent, downloaded, total ->
+                _status.value = UpdateStatus.Downloading(percent, downloaded, total)
+            }
+            if (file == null) {
+                _status.value = UpdateStatus.Error(AppUpdateManager.lastError ?: "Could not download verified update")
+                return@launch
+            }
             if (isWatch) {
-                if (!BluetoothSyncService.connectionState.value.isConnected) {
-                    _status.value = UpdateStatus.Error("Please connect your watch via Bluetooth before sending update.")
-                    return@launch
+                val expectsVerification = (BluetoothSyncService.connectedWatchVersionCode.value ?: 0) >= 26
+                _status.value = UpdateStatus.TransferringToWatch(0, 0, 1)
+                val sent = AppUpdateManager.streamApkToWatchViaBluetooth(file, info.versionName, info.versionCode) { percent, chunk, total ->
+                    _status.value = UpdateStatus.TransferringToWatch(percent, chunk, total)
                 }
-
-                _status.value = UpdateStatus.Downloading(0, 0, 0)
-                val file = AppUpdateManager.downloadApk(targetContext, info.apkUrl, "watch-update-${info.versionName}.apk") { pct, dl, total ->
-                    _status.value = UpdateStatus.Downloading(pct, dl, total)
-                }
-
-                if (file == null) {
-                    _status.value = UpdateStatus.Error(AppUpdateManager.lastError ?: "Failed to download watch update package.")
-                    return@launch
-                }
-
-                _status.value = UpdateStatus.TransferringToWatch(0, 0, 100)
-                val success = AppUpdateManager.streamApkToWatchViaBluetooth(file, info.versionName, info.versionCode) { pct, current, total ->
-                    _status.value = UpdateStatus.TransferringToWatch(pct, current, total)
-                }
-
-                if (success) {
-                    _showDialog.value = false
-                    _status.value = UpdateStatus.Idle
-                } else {
-                    _status.value = UpdateStatus.Error(AppUpdateManager.lastError ?: "Bluetooth transmission interrupted.")
-                }
+                _status.value = if (sent) UpdateStatus.WatchInstallRequired(expectsVerification)
+                    else UpdateStatus.Error(AppUpdateManager.lastError ?: "Watch update transfer interrupted")
             } else {
-                _status.value = UpdateStatus.Downloading(0, 0, 0)
-                val file = AppUpdateManager.downloadApk(targetContext, info.apkUrl, "phone-update-${info.versionName}.apk") { pct, dl, total ->
-                    _status.value = UpdateStatus.Downloading(pct, dl, total)
-                }
-
-                if (file == null) {
-                    _status.value = UpdateStatus.Error(AppUpdateManager.lastError ?: "Failed to download phone update package.")
-                    return@launch
-                }
-
+                downloadedPhone = info to file
                 _status.value = UpdateStatus.ReadyToInstall(file)
-                val launched = AppUpdateManager.installApk(targetContext, file)
-                if (launched) {
-                    _showDialog.value = false
-                    _status.value = UpdateStatus.Idle
-                } else {
-                    _status.value = UpdateStatus.Error("Could not launch package installer. Please check Unknown Sources permission.")
-                }
+                if (AppUpdateManager.installApk(targetContext, file)) _showDialog.value = false
             }
         }
     }
 
     fun dismissDialog() {
+        if (busy()) return
         _showDialog.value = false
-        if (_status.value !is UpdateStatus.Downloading && _status.value !is UpdateStatus.TransferringToWatch) {
-            _status.value = UpdateStatus.Idle
-        }
+        if (_status.value !is UpdateStatus.ReadyToInstall && _status.value !is UpdateStatus.WatchInstallRequired) _status.value = UpdateStatus.Idle
     }
 }

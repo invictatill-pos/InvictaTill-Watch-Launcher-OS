@@ -59,13 +59,15 @@ data class WatchFaceInstallPayload(
     val id: String,
     val name: String,
     val jsonContent: String,
-    val setActive: Boolean = true
+    val setActive: Boolean = true,
+    val requestId: String = ""
 )
 
 data class WatchFaceAckPayload(
     val id: String,
     val success: Boolean,
-    val message: String = ""
+    val message: String = "",
+    val requestId: String = ""
 )
 
 data class OtaStartPayload(
@@ -73,7 +75,8 @@ data class OtaStartPayload(
     val versionCode: Int,
     val fileSize: Long,
     val totalChunks: Int,
-    val sha256: String = ""
+    val sha256: String = "",
+    val transferId: String = ""
 )
 
 data class OtaChunkPayload(
@@ -81,18 +84,23 @@ data class OtaChunkPayload(
     val totalChunks: Int,
     val dataBase64: String,
     val offset: Long = 0L,
-    val chunkSize: Int = 8192
+    val chunkSize: Int = 8192,
+    val transferId: String = ""
 )
 
 data class OtaCompletePayload(
     val success: Boolean,
-    val sha256: String = ""
+    val sha256: String = "",
+    val transferId: String = ""
 )
 
 data class OtaProgressPayload(
     val receivedChunks: Int,
     val totalChunks: Int,
-    val percent: Int
+    val percent: Int,
+    val transferId: String = "",
+    val status: String = "RECEIVING",
+    val message: String = ""
 )
 
 data class PhoneControlPayload(val requestId: Long = 0L, val action: String = "STATE")
@@ -201,7 +209,8 @@ data class StepsPayload(
 )
 
 data class SpO2Payload(
-    val percentage: Float
+    val percentage: Float,
+    val source: String = "WATCH_SENSOR"
 )
 
 data class SleepPayload(
@@ -210,7 +219,10 @@ data class SleepPayload(
     val deepMinutes: Int,
     val lightMinutes: Int,
     val remMinutes: Int,
-    val awakeMinutes: Int
+    val awakeMinutes: Int,
+    val source: String = "WATCH_ACTIGRAPHY",
+    val estimatedMinutes: Int = 0,
+    val stagesAvailable: Boolean = false
 )
 
 data class FallDetectedPayload(
@@ -234,7 +246,9 @@ data class WorkoutPayload(
     val steps: Int,
     val swings: Int = 0,
     val route: List<LatLngPoint> = emptyList(),
-    val durationSeconds: Int = 0
+    val durationSeconds: Int = 0,
+    val distanceSource: String = "UNKNOWN",
+    val caloriesEstimated: Boolean = true
 )
 
 // ── Batched Sync Protocol Models ──────────────────────────────────────────────
@@ -256,7 +270,9 @@ data class WorkoutSessionPayload(
     val step_count: Int,
     val swings: Int = 0,
     val avg_hr: Int,
-    val route_json: String = "[]" // Serialized List<LatLngPoint> for GPS map
+    val route_json: String = "[]", // Serialized List<LatLngPoint> for GPS map
+    val distance_source: String = "UNKNOWN",
+    val calories_estimated: Boolean = true
 )
 
 data class BatchedSyncPayload(
@@ -278,7 +294,9 @@ data class WatchSettingsPayload(
     val stepGoal: Int = 10_000,
     val userWeightKg: Double = 70.0,
     val userHeightCm: Int = 170,
-    val sensorSettingsRevision: Long = 0L
+    val sensorSettingsRevision: Long = 0L,
+    val userWeightConfigured: Boolean = false,
+    val userHeightConfigured: Boolean = false
 )
 
 /** Bidirectional interval snapshot; profile settings remain phone-owned. */
@@ -314,7 +332,8 @@ data class StepBucketEntity(
 data class SpO2Entity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val percentage: Float,
-    val timestamp: Long
+    val timestamp: Long,
+    @ColumnInfo(defaultValue = "'LEGACY_UNVERIFIED'") val source: String = "LEGACY_UNVERIFIED"
 )
 
 @Entity(tableName = "sleep")
@@ -325,7 +344,10 @@ data class SleepEntity(
     val deepMinutes: Int,
     val lightMinutes: Int,
     val remMinutes: Int,
-    val awakeMinutes: Int
+    val awakeMinutes: Int,
+    @ColumnInfo(defaultValue = "'LEGACY_UNVERIFIED'") val source: String = "LEGACY_UNVERIFIED",
+    @ColumnInfo(defaultValue = "0") val estimatedMinutes: Int = 0,
+    @ColumnInfo(defaultValue = "0") val stagesAvailable: Boolean = false
 )
 
 @Entity(tableName = "notification_history")
@@ -350,5 +372,7 @@ data class WorkoutEntity(
     val steps: Int,
     val swingsCount: Int = 0,
     val routeJson: String, // Serialized List<LatLngPoint>
-    @ColumnInfo(defaultValue = "0") val durationSeconds: Int = 0
+    @ColumnInfo(defaultValue = "0") val durationSeconds: Int = 0,
+    @ColumnInfo(defaultValue = "'UNKNOWN'") val distanceSource: String = "UNKNOWN",
+    @ColumnInfo(defaultValue = "1") val caloriesEstimated: Boolean = true
 )

@@ -29,8 +29,8 @@ class SyncValidationTest {
     }
 
     @Test fun rejectsUnreliableAndNoContactHeartRateBeforeReplayDedup() {
-        for (accuracy in listOf(-1, 4)) assertFalse(SyncValidation.validHeartRate(72, accuracy, 900_000, 1_000_000))
-        for (accuracy in 0..3) assertTrue(SyncValidation.validHeartRate(72, accuracy, 900_000, 1_000_000))
+        for (accuracy in listOf(-1, 0, 4)) assertFalse(SyncValidation.validHeartRate(72, accuracy, 900_000, 1_000_000))
+        for (accuracy in 1..3) assertTrue(SyncValidation.validHeartRate(72, accuracy, 900_000, 1_000_000))
         assertFalse(SyncValidation.validHeartRate(0, 3, 900_000, 1_000_000))
         assertFalse(SyncValidation.validHeartRate(241, 3, 900_000, 1_000_000))
         assertFalse(SyncValidation.validHeartRate(72, 3, 1_300_001, 1_000_000))
@@ -44,6 +44,12 @@ class SyncValidationTest {
         assertFalse(SyncValidation.validSpO2(98f, 0, 1_000_000))
     }
 
+    @Test fun incomingOxygenMustCarryExplicitSensorProvenance() {
+        assertFalse(SyncValidation.validIncomingHealthPayload(MessageType.SPO2, """{"percentage":98}""", 900_000, 1_000_000))
+        assertFalse(SyncValidation.validIncomingHealthPayload(MessageType.SPO2, """{"percentage":98,"source":"MANUAL"}""", 900_000, 1_000_000))
+        assertTrue(SyncValidation.validIncomingHealthPayload(MessageType.SPO2, """{"percentage":98,"source":"WATCH_SENSOR"}""", 900_000, 1_000_000))
+    }
+
     @Test fun rejectsNegativeOrImpossibleActiveDurationInsteadOfClampingIt() {
         fun valid(activity: String?, seconds: Int) = SyncValidation.validWorkoutRecord(
             activity, 600_000, 900_000, seconds, 0f, 0.0, 0, 0, 0, 1_000_000)
@@ -55,13 +61,6 @@ class SyncValidationTest {
         assertFalse(SyncValidation.validWorkout(600_000, 600_000, 0f, 0.0, 0, 0, 0, 1_000_000))
     }
 
-    @Test fun rejectsSleepWithNoStagesNegativeStagesOrMoreStagesThanElapsed() {
-        assertFalse(SyncValidation.validSleep(100_000, 700_000, 0, 0, 0, 0, 1_000_000))
-        assertFalse(SyncValidation.validSleep(100_000, 700_000, 5, -1, 3, 0, 1_000_000))
-        assertFalse(SyncValidation.validSleep(100_000, 700_000, 20, 0, 0, 0, 1_000_000))
-        assertTrue(SyncValidation.validSleep(100_000, 700_000, 5, 3, 2, 0, 1_000_000))
-    }
-
     @Test fun rawHeartRateRejectsMissingNullStringAndFractionalRequiredValues() {
         val invalid = listOf("{}", "null", "[]", """{"bpm":72}""",
             """{"bpm":72,"accuracy":null}""", """{"bpm":"72","accuracy":3}""",
@@ -69,7 +68,7 @@ class SyncValidationTest {
         for (json in invalid) assertFalse(json, SyncValidation.validIncomingHealthPayload(MessageType.HEART_RATE, json, 900_000, 1_000_000))
         assertTrue(SyncValidation.validIncomingHealthPayload(MessageType.HEART_RATE,
             """{"bpm":72,"accuracy":3}""", 900_000, 1_000_000))
-        assertTrue(SyncValidation.validIncomingHealthPayload(MessageType.HEART_RATE,
+        assertFalse(SyncValidation.validIncomingHealthPayload(MessageType.HEART_RATE,
             """{"bpm":72,"accuracy":0}""", 900_000, 1_000_000))
     }
 

@@ -118,12 +118,12 @@ try {
     $workspaceDirectory = Split-Path -Parent $PSScriptRoot
     if ([string]::IsNullOrWhiteSpace($ApkPath)) {
         $apkCandidates = @(
-            (Join-Path $workspaceDirectory 'dist\HealthSync-Watch-2.3.2-Android8.apk'),
-            (Join-Path $workspaceDirectory 'HealthSync-Watch-2.3.2-Android8.apk'),
-            (Join-Path $PSScriptRoot 'HealthSync-Watch-2.3.2-Android8.apk')
+            (Join-Path $workspaceDirectory 'dist\HealthSync-Watch.apk'),
+            (Join-Path $workspaceDirectory 'HealthSync-Watch-2.7.0-Android8.apk'),
+            (Join-Path $PSScriptRoot 'HealthSync-Watch-2.7.0-Android8.apk')
         )
         $ApkPath = $apkCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
-        if (-not $ApkPath) { throw 'Watch APK not found. Pass -ApkPath with the full path to HealthSync-Watch-2.3.2-Android8.apk.' }
+        if (-not $ApkPath) { throw 'Watch APK not found. Pass -ApkPath with the full path to the current HealthSync Watch APK.' }
     }
     $resolvedApk = (Resolve-Path -LiteralPath $ApkPath).ProviderPath
     if ([System.IO.Path]::GetExtension($resolvedApk) -ne '.apk') { throw 'ApkPath must point to an APK file.' }

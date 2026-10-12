@@ -12,6 +12,8 @@ import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.unit.dp
+import com.healthsync.phone.ui.theme.AccentCyan
+import com.healthsync.phone.ui.theme.MetricSpO2
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
@@ -21,7 +23,7 @@ fun RadarChart(
     modifier: Modifier = Modifier,
     values: List<Float>, // Values between 0f and 1f
     labels: List<String>,
-    color: Color = Color(0xFF00E676)
+    color: Color = AccentCyan
 ) {
     Canvas(modifier = modifier.fillMaxSize()) {
         val radius = min(size.width, size.height) / 2f * 0.75f
@@ -97,7 +99,7 @@ fun RadarChart(
 fun SimpleAreaGraph(
     modifier: Modifier = Modifier,
     data: List<Float>,
-    lineColor: Color = Color(0xFF2979FF)
+    lineColor: Color = MetricSpO2
 ) {
     Canvas(modifier = modifier.fillMaxSize()) {
         if (data.isEmpty()) return@Canvas

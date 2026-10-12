@@ -1,11 +1,26 @@
 <resources>
     <style name="Theme.WatchApp" parent="Theme.MaterialComponents.NoActionBar">
-        <item name="android:windowBackground">#060810</item>
+        <item name="android:windowBackground">@drawable/watch_screen_bg</item>
         <item name="android:windowFullscreen">true</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">#060810</item>
-        <item name="colorPrimary">#00E5FF</item>
-        <item name="colorPrimaryVariant">#7C4DFF</item>
-        <item name="colorAccent">#30D158</item>
+        <item name="android:navigationBarColor">#030806</item>
+        <item name="android:colorBackground">#030806</item>
+        <item name="android:textColorPrimary">#EAF7F0</item>
+        <item name="android:textColorSecondary">#A7BDB2</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="colorPrimary">#8CE7C8</item>
+        <item name="colorPrimaryVariant">#294339</item>
+        <item name="colorOnPrimary">#06110B</item>
+        <item name="colorSecondary">#8CE7C8</item>
+        <item name="colorSecondaryVariant">#294339</item>
+        <item name="colorOnSecondary">#06110B</item>
+        <item name="colorAccent">#8CE7C8</item>
+        <item name="colorSurface">#11201B</item>
+        <item name="colorOnSurface">#EAF7F0</item>
+        <item name="colorOnBackground">#EAF7F0</item>
+        <item name="colorError">#FF8395</item>
+        <item name="colorOnError">#06110B</item>
+        <item name="colorControlNormal">#A7BDB2</item>
+        <item name="colorControlActivated">#8CE7C8</item>
     </style>
 </resources>

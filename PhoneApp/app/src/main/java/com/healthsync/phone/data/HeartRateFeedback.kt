@@ -15,7 +15,7 @@ data class UnverifiedHeartRatePreview(val bpm: Int, val capturedAt: Long)
 private const val SENSOR_PREVIEW_MAX_AGE_MS = 86_400_000L
 private const val SENSOR_PREVIEW_FUTURE_TOLERANCE_MS = 5_000L
 private val SENSOR_PREVIEW_STATUSES = setOf("unreliable_accuracy", "measuring", "requesting", "idle", "disabled",
-    "no_contact", "no_events", "invalid_samples", "sensor_error", "service_unavailable", "permission_required", "missing_sensor")
+    "no_contact", "no_events", "invalid_samples", "sensor_error", "service_unavailable", "permission_required", "background_permission_required", "missing_sensor")
 
 private fun validSensorPreviewTime(timestamp: Long, now: Long): Boolean =
     timestamp > 0L && now > 0L &&
@@ -44,7 +44,7 @@ internal fun validatedHeartRateStatus(payload: HeartRateStatusPayload?, now: Lon
     val status = payload?.status?.trim()?.lowercase(Locale.ROOT) ?: return null
     if (status !in setOf("missing_sensor", "permission_required", "measuring", "reading", "no_contact",
             "sensor_error", "service_unavailable", "disabled", "idle", "no_events", "invalid_samples",
-            "unreliable_accuracy")) return null
+            "unreliable_accuracy", "background_permission_required")) return null
     if (payload.bpm != -1 && payload.bpm !in 25..240) return null
     if (payload.readingTime != 0L && !SyncValidation.validTimestamp(payload.readingTime, now)) return null
     if (payload.bpm in 25..240 && payload.readingTime <= 0L) return null
@@ -95,6 +95,7 @@ fun heartRateFeedbackText(feedback: HeartRateFeedback?, connected: Boolean,
             "measuring" -> "Measuring"
             "disabled" -> "Automatic off"
             "permission_required" -> "Allow watch Sensors"
+            "background_permission_required" -> "Open Health on watch or allow all-time Sensors"
             "missing_sensor" -> "Sensor unavailable"
             "service_unavailable" -> "Open Health on watch"
             "sensor_error" -> "Refresh could not start"
@@ -102,7 +103,7 @@ fun heartRateFeedbackText(feedback: HeartRateFeedback?, connected: Boolean,
             "no_events", "invalid_samples" -> "No new reading"
             else -> "Sensor reading"
         }
-        return "$prefix · ${sensorPreviewAge(it, now)}"
+        return "$prefix · unverified signal · ${sensorPreviewAge(it, now)}"
     }
     val status = feedback?.status
     if (status in setOf("requesting", "measuring") && feedback != null &&
@@ -112,6 +113,7 @@ fun heartRateFeedbackText(feedback: HeartRateFeedback?, connected: Boolean,
         "measuring" -> "Measuring · keep wrist still"
         "missing_sensor" -> "Heart-rate sensor unavailable on watch"
         "permission_required" -> "Allow Sensors in watch settings"
+        "background_permission_required" -> "Open Health on watch or allow all-time Sensors"
         "no_contact" -> "No reading · adjust watch and retry"
         "no_events" -> "Sensor sent no data · open Health on watch"
         "invalid_samples" -> "Sensor data rejected · check measurement details"

@@ -34,6 +34,8 @@ import com.healthsync.watch.ui.WatchHistoryActivity
 import com.healthsync.watch.ui.WatchOptionsActivity
 import com.healthsync.watch.ui.WorkoutHistoryStore
 import com.healthsync.watch.ui.WorkoutSelectionActivity
+import com.healthsync.watch.ui.WatchVisualStyle
+import com.healthsync.watch.ui.WorkoutMeasurementLabels
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -53,7 +55,7 @@ class FitnessPanel(
     private val onOpenSettings: () -> Unit
 ) {
     private val accent = 0xFF8CE7C8.toInt()
-    private val muted = 0xFF9CAFA7.toInt()
+    private val muted = WatchVisualStyle.MUTED
     private val preferences = WatchPreferences(activity)
     private val handler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -66,6 +68,7 @@ class FitnessPanel(
     private var savedSessions = 0
     private var liveDuration = 0L
     private var liveDistance = 0f
+    private var liveDistanceSource = "UNKNOWN"
     private var lastHistoryDate = ""
     private var lastHistoryLoad = 0L
     private val content = LinearLayout(activity).apply {
@@ -76,12 +79,13 @@ class FitnessPanel(
         setPadding(side, end, side, end)
     }
     val view: View = RoundScrollView(activity).apply {
-        setBackgroundColor(Color.BLACK)
+        background = WatchVisualStyle.screenBackground()
         isFillViewport = true
         addView(content, ViewGroup.LayoutParams(-1, -2))
     }
     private val battery: TextView
     private val ring = StepGoalRing(activity)
+    private val stepStatus: TextView
     private val minutes: TextView
     private val distance: TextView
     private val calories: TextView
@@ -97,6 +101,7 @@ class FitnessPanel(
             if (intent?.action == WorkoutTrackingService.ACTION_UPDATE) {
                 liveDuration = intent.getLongExtra(WorkoutTrackingService.EXTRA_DURATION, 0L).coerceAtLeast(0L)
                 liveDistance = intent.getFloatExtra(WorkoutTrackingService.EXTRA_DISTANCE, 0f).takeIf { it.isFinite() && it >= 0 } ?: 0f
+                liveDistanceSource = intent.getStringExtra(WorkoutTrackingService.EXTRA_DISTANCE_SOURCE) ?: "UNKNOWN"
             }
             if (intent?.action == "com.healthsync.watch.WORKOUT_SAVED") loadHistory()
             refresh()
@@ -112,9 +117,11 @@ class FitnessPanel(
     }
 
     init {
-        text(content, "Activity", 25f, Color.WHITE, true).gravity = Gravity.CENTER
+        action("‹ Back", muted, onClose)
+        text(content, "Health & activity", 23f, Color.WHITE, true).gravity = Gravity.CENTER
         battery = text(content, "Today", 11f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(7), 0, dp(8)) }
         content.addView(ring, LinearLayout.LayoutParams(-1, dp(184)))
+        stepStatus = text(content,"Waiting for step capture",11f,muted).apply { gravity=Gravity.CENTER; setPadding(dp(4),0,dp(4),dp(8)) }
         val stats = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
         minutes = metric(stats, "Exercise", 0xFFFFBC6A.toInt())
         distance = metric(stats, "Workout distance", 0xFF9FC3FF.toInt())
@@ -140,14 +147,14 @@ class FitnessPanel(
         content.addView(liveCard, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
         workoutAction = action("Start a workout", accent) {
             if (WorkoutTrackingService.isActive) openCurrentWorkout() else launch(WorkoutSelectionActivity::class.java)
-        }
+        }.apply { setTextColor(0xFF06110B.toInt()); background=WatchVisualStyle.button(activity,primary=true) }
+        section("WORKOUTS & HEALTH")
         action("Workout history", 0xFF9FC3FF.toInt()) { launch(WatchHistoryActivity::class.java) }
         action("Health measurements", 0xFFFF8999.toInt()) { openHealth() }
-        action("Sleep Analysis", 0xFF5C6BC0.toInt()) { launch(com.healthsync.watch.ui.SleepActivity::class.java) }
-        action("Blood Oxygen (SpO2)", 0xFFFF3D00.toInt()) { launch(com.healthsync.watch.ui.SpO2Activity::class.java) }
-        action("Stress & Breathing", 0xFF00E5FF.toInt()) { launch(com.healthsync.watch.ui.StressActivity::class.java) }
-        action("Compass & Altitude", 0xFF00E676.toInt()) { launch(com.healthsync.watch.ui.CompassActivity::class.java) }
-        action("Water Hydration", 0xFF00B0FF.toInt()) { launch(com.healthsync.watch.ui.HydrationActivity::class.java) }
+        action("Sleep & rest estimate", 0xFF9FA8DA.toInt()) { launch(com.healthsync.watch.ui.SleepActivity::class.java) }
+        action("Blood oxygen · SpO₂", 0xFFFFA58A.toInt()) { launch(com.healthsync.watch.ui.SpO2Activity::class.java) }
+        action("Guided breathing", 0xFF00E5FF.toInt()) { launch(com.healthsync.watch.ui.StressActivity::class.java) }
+        action("Water log", 0xFF00B0FF.toInt()) { launch(com.healthsync.watch.ui.HydrationActivity::class.java) }
         action("Activity settings", muted, onOpenSettings)
         action("Back to clock", muted, onClose).background = shape(Color.TRANSPARENT)
         refresh()
@@ -206,11 +213,13 @@ class FitnessPanel(
         val level = (activity.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager)
             ?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)?.takeIf { it in 0..100 }
         battery.text = "Today${level?.let { " · Watch $it%" } ?: ""}"
-        ring.update(SensorCollectorService.latestSteps.coerceAtLeast(0), preferences.stepGoal)
+        ring.update(if(SensorCollectorService.hasCapturedStepsToday()) SensorCollectorService.latestSteps.coerceAtLeast(0) else -1, preferences.stepGoal)
+        stepStatus.text=SensorCollectorService.stepStatusText(activity)
         minutes.text = "$savedMinutes min"
-        distance.text = String.format(Locale.getDefault(), "%.2f km", savedDistance / 1000.0)
+        distance.text = String.format(Locale.getDefault(), "%.2f km*", savedDistance / 1000.0)
+        distance.contentDescription = "${distance.text}. Recorded workouts; may include step-based distance estimates. Open workout history for each source."
         calories.text = "${savedCalories.toLong()} kcal estimated"
-        sessionInfo.text = "$savedSessions saved ${if (savedSessions == 1) "workout" else "workouts"} today"
+        sessionInfo.text = "$savedSessions saved ${if (savedSessions == 1) "workout" else "workouts"} today\n* Distance may include step estimates"
         heartRate.text = SensorCollectorService.heartRateValueText()
         heartStatus.text = SensorCollectorService.heartRateStatusText(activity)
         liveCard.visibility = if (WorkoutTrackingService.isActive) View.VISIBLE else View.GONE
@@ -218,7 +227,7 @@ class FitnessPanel(
         if (WorkoutTrackingService.isActive) {
             liveTitle.text = "${WorkoutTrackingService.activeActivityType} · ${if (WorkoutTrackingService.currentlyPaused) "Paused" else "Active"}"
             val seconds = liveDuration / 1000L
-            liveInfo.text = String.format(Locale.getDefault(), "%d:%02d · %.2f km", seconds / 60L, seconds % 60L, liveDistance / 1000f)
+            liveInfo.text = String.format(Locale.getDefault(), "%d:%02d", seconds / 60L, seconds % 60L) + " · " + WorkoutMeasurementLabels.distanceValue(liveDistance, liveDistanceSource)
             liveCard.contentDescription = "${liveTitle.text}, ${liveInfo.text}. Tap to open current workout"
         }
     }
@@ -241,7 +250,7 @@ class FitnessPanel(
     private fun dateKey() = Calendar.getInstance().let { "${it.get(Calendar.YEAR)}-${it.get(Calendar.DAY_OF_YEAR)}" }
     private fun toast(message: String) = Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
     private fun panel() = LinearLayout(activity).apply {
-        orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(14), dp(14), dp(14)); background = shape(0xFF151D19.toInt())
+        orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(14), dp(14), dp(14)); background = shape(WatchVisualStyle.SURFACE)
     }
     private fun metric(parent: LinearLayout, title: String, color: Int): TextView {
         val box = panel().apply { gravity = Gravity.CENTER }
@@ -251,30 +260,34 @@ class FitnessPanel(
         return value
     }
     private fun action(title: String, color: Int, click: () -> Unit) = TextView(activity).apply {
-        text = title; textSize = 14f; setTextColor(color); setTypeface(null, Typeface.BOLD)
+        text = title; textSize = 14f; setTextColor(color); typeface = Typeface.create("sans-serif-medium",Typeface.NORMAL)
         gravity = Gravity.CENTER; minHeight = dp(48); setPadding(dp(9), dp(12), dp(9), dp(12))
-        background = shape(0xFF18221D.toInt()); isFocusable = true
+        background = WatchVisualStyle.button(activity); isFocusable = true
         setOnClickListener { performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY); click() }
         content.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
     }
     private fun text(parent: LinearLayout, title: String, size: Float, color: Int, bold: Boolean = false) = TextView(activity).apply {
         text = title; textSize = size; setTextColor(color); includeFontPadding = false
-        if (bold) setTypeface(null, Typeface.BOLD)
+        typeface = Typeface.create(if(bold) "sans-serif-medium" else "sans-serif",Typeface.NORMAL)
+        setLineSpacing(dp(2).toFloat(),1f)
         parent.addView(this, LinearLayout.LayoutParams(-1, -2))
     }
-    private fun shape(color: Int) = GradientDrawable().apply { setColor(color); cornerRadius = dp(20).toFloat() }
+    private fun section(title: String) = text(content,title,10f,accent,true).apply {
+        gravity=Gravity.CENTER; letterSpacing=.06f; setPadding(0,dp(16),0,dp(4))
+    }
+    private fun shape(color: Int) = WatchVisualStyle.surface(activity,color)
     private fun dp(value: Int) = (value * activity.resources.displayMetrics.density).roundToInt()
 }
 
 private class StepGoalRing(context: Context) : View(context) {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val bounds = RectF()
-    private var steps = 0
+    private var steps = -1
     private var goal = 10_000
     fun update(value: Int, target: Int) {
         if (steps == value && goal == target) return
         steps = value; goal = target.coerceAtLeast(1)
-        contentDescription = "$steps of $goal steps today"
+        contentDescription = if(steps>=0) "$steps of $goal steps today" else "Steps unavailable; goal $goal steps"
         invalidate()
     }
     override fun onDraw(canvas: Canvas) {
@@ -287,7 +300,7 @@ private class StepGoalRing(context: Context) : View(context) {
         paint.color = 0xFF8CE7C8.toInt(); canvas.drawArc(bounds, -90f, 360f * (steps.toFloat() / goal).coerceIn(0f, 1f), false, paint)
         paint.style = Paint.Style.FILL; paint.textAlign = Paint.Align.CENTER; paint.color = Color.WHITE
         paint.typeface = Typeface.create("sans-serif", Typeface.BOLD); paint.textSize = radius * .44f
-        canvas.drawText(NumberFormat.getIntegerInstance().format(steps), cx, cy + radius * .035f, paint)
+        canvas.drawText(if(steps>=0) NumberFormat.getIntegerInstance().format(steps) else "—", cx, cy + radius * .035f, paint)
         paint.typeface = Typeface.create("sans-serif", Typeface.NORMAL); paint.textSize = radius * .14f; paint.color = 0xFF9CAFA7.toInt()
         canvas.drawText("of ${NumberFormat.getIntegerInstance().format(goal)} steps", cx, cy + radius * .31f, paint)
         if (steps >= goal) {

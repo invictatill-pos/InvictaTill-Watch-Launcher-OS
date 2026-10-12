@@ -11,6 +11,7 @@ import android.os.Looper
 import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
+import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
@@ -40,6 +41,9 @@ open class InCallActivity : AppCompatActivity() {
             window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
         }
         setContentView(R.layout.activity_in_call)
+        val display=resources.displayMetrics
+        findViewById<LinearLayout>(R.id.inCallContent).setPadding((display.widthPixels*.14f).toInt(),
+            (display.heightPixels*.16f).toInt(),(display.widthPixels*.14f).toInt(),(display.heightPixels*.16f).toInt())
         ContextCompat.registerReceiver(this, receiver, IntentFilter(WatchCallBridge.ACTION_CHANGED), ContextCompat.RECEIVER_NOT_EXPORTED)
         findViewById<View>(R.id.btnEndCall).setOnClickListener { WatchCallBridge.send("END"); render() }
         findViewById<View>(R.id.btnMute).setOnClickListener {
@@ -65,6 +69,7 @@ open class InCallActivity : AppCompatActivity() {
             call.statusText == "Calling…" || call.statusText == "On hold" -> call.statusText
             else -> "CALL ACTIVE"
         }
+        findViewById<TextView>(R.id.tvCallStatus).setTextColor(if(state.error!=null) 0xFFFF8395.toInt() else WatchVisualStyle.ACCENT)
         val seconds = WatchCallPolicy.durationSeconds(call.startedAt, System.currentTimeMillis())
         findViewById<TextView>(R.id.tvCallTimer).text = if (call.startedAt <= 0L) "Active" else
             if (seconds >= 3600) String.format(Locale.getDefault(), "%d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60)
@@ -77,7 +82,7 @@ open class InCallActivity : AppCompatActivity() {
         }
         findViewById<TextView>(R.id.tvMuteIcon).text = if (call.muted) "🔇" else "🎤"
         findViewById<TextView>(R.id.tvMuteLabel).text = if (call.muted) "Unmute" else "Mute"
-        findViewById<CardView>(R.id.btnMute).setCardBackgroundColor(if (call.muted) 0xFF32131C.toInt() else 0xFF14231C.toInt())
+        findViewById<CardView>(R.id.btnMute).setCardBackgroundColor(if (call.muted) 0xFF32131C.toInt() else WatchVisualStyle.SURFACE)
         findViewById<TextView>(R.id.tvSpeakerLabel).text = if (call.audioRoute == "SPEAKER") "To phone" else "Speaker"
         findViewById<TextView>(R.id.tvWatchAudioLabel).text = if (call.audioRoute == "BLUETOOTH") "Use phone audio" else "Use watch audio"
         enable(R.id.btnEndCall, WatchCallPolicy.canSend(call, state.connected, pending, "END"))

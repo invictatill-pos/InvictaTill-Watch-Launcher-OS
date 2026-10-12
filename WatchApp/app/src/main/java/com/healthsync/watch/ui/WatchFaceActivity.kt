@@ -108,8 +108,8 @@ class WatchFaceActivity : AppCompatActivity() {
     private var wakeGestureInProgress = false
     private var interactiveBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
     private var interactiveSystemUiVisibility: Int? = null
-    private var dailyCalories = 0
-    private var dailyDistanceKm = 0f
+    private var dailyCalories = -1
+    private var dailyDistanceKm = -1f
     private var gestureStartX = 0f
     private var gestureStartY = 0f
     private var gestureStartTime = 0L
@@ -708,7 +708,7 @@ class WatchFaceActivity : AppCompatActivity() {
         bauhausWatchFaceView.setHeartRateUnverified(heart.sensorReading)
         dynamicWatchFaceView.setHeartRateTime(heart.capturedAt)
         dynamicWatchFaceView.setHeartRateUnverified(heart.sensorReading)
-        val steps = SensorCollectorService.latestSteps.coerceAtLeast(0)
+        val steps = if(SensorCollectorService.hasCapturedStepsToday()) SensorCollectorService.latestSteps.coerceAtLeast(0) else -1
         val stepGoal = preferences.stepGoal.coerceAtLeast(1)
         val connected = BluetoothClientService.isConnected
         val battery = getBatteryPercentage()
@@ -773,11 +773,11 @@ class WatchFaceActivity : AppCompatActivity() {
                 set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
             }.timeInMillis
             val sessions = withContext(Dispatchers.IO) {
-                WorkoutHistoryStore.read(applicationContext).filter { it.start_time >= startOfDay }
+                WorkoutHistoryStore.read(applicationContext).filter { it.start_time >= startOfDay && it.start_time <= System.currentTimeMillis() }
             }
             val activeMins = (sessions.sumOf { it.duration_sec.toLong() } / 60)
-            dailyDistanceKm = (sessions.sumOf { it.distance_m.toDouble() } / 1000).toFloat()
-            dailyCalories = sessions.sumOf { it.calories }.toInt()
+            dailyDistanceKm = (sessions.sumOf { it.distance_m.takeIf { distance -> distance.isFinite() && distance >= 0 }?.toDouble() ?: 0.0 } / 1000).toFloat()
+            dailyCalories = sessions.sumOf { it.calories.takeIf { calories -> calories.isFinite() && calories >= 0 } ?: 0.0 }.toInt()
 
             val heart = SensorCollectorService.watchFaceHeartRate()
             chronoWatchFaceView.setHeartRateTime(heart.capturedAt)
@@ -787,15 +787,15 @@ class WatchFaceActivity : AppCompatActivity() {
             circularWatchFaceView.setHeartRateTime(heart.capturedAt)
             circularWatchFaceView.setHeartRateUnverified(heart.sensorReading)
             chronoWatchFaceView.setHealthData(heart.bpm,
-                SensorCollectorService.latestSteps.coerceAtLeast(0),
+                if(SensorCollectorService.hasCapturedStepsToday()) SensorCollectorService.latestSteps.coerceAtLeast(0) else -1,
                 preferences.stepGoal.coerceAtLeast(1),
                 dailyCalories, dailyDistanceKm)
             dynamicWatchFaceView.setHealthData(heart.bpm,
-                SensorCollectorService.latestSteps.coerceAtLeast(0),
+                if(SensorCollectorService.hasCapturedStepsToday()) SensorCollectorService.latestSteps.coerceAtLeast(0) else -1,
                 preferences.stepGoal.coerceAtLeast(1),
                 dailyCalories, dailyDistanceKm)
             circularWatchFaceView.setHealthData(heart.bpm,
-                SensorCollectorService.latestSteps.coerceAtLeast(0),
+                if(SensorCollectorService.hasCapturedStepsToday()) SensorCollectorService.latestSteps.coerceAtLeast(0) else -1,
                 preferences.stepGoal.coerceAtLeast(1), dailyCalories, dailyDistanceKm)
         }
     }

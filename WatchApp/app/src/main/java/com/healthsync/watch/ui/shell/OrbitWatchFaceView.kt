@@ -3,6 +3,7 @@ package com.healthsync.watch.ui.shell
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
+import com.healthsync.watch.ui.StepDisplayLabels
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
@@ -36,7 +37,7 @@ class OrbitWatchFaceView @JvmOverloads constructor(context: Context, attrs: Attr
     private var aodStyle = "face"
     private val ambientRenderer = WatchAmbientRenderer()
     private var wallpaper = false
-    private var steps = 0
+    private var steps = -1
     private var goal = 10_000
     private var heart = -1
     private var heartMeasuredAt = 0L
@@ -105,7 +106,7 @@ class OrbitWatchFaceView @JvmOverloads constructor(context: Context, attrs: Attr
     }
 
     fun setData(steps: Int, goal: Int, heart: Int, battery: Int, linked: Boolean, unread: Int, workout: Boolean) {
-        this.steps = steps.coerceAtLeast(0)
+        this.steps = steps.coerceAtLeast(-1)
         this.goal = goal.coerceAtLeast(1)
         this.heart = heart
         this.battery = battery
@@ -117,7 +118,7 @@ class OrbitWatchFaceView @JvmOverloads constructor(context: Context, attrs: Attr
     }
 
     private fun updateContentDescription() {
-        contentDescription = "${DateFormat.getTimeFormat(context).format(now.time)}. $steps steps. " +
+        contentDescription = "${DateFormat.getTimeFormat(context).format(now.time)}. ${StepDisplayLabels.spoken(steps)}. " +
             (when {
                 heart <= 0 -> "Heart rate unavailable. "
                 heartUnverified -> "$heart beats per minute, sensor reading. "
@@ -204,7 +205,7 @@ class OrbitWatchFaceView @JvmOverloads constructor(context: Context, attrs: Attr
 
     private fun time() = SimpleDateFormat(if (DateFormat.is24HourFormat(context)) "HH:mm" else "h:mm", Locale.getDefault()).format(now.time)
     private fun date() = SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(now.time).uppercase(Locale.getDefault())
-    private fun compactSteps() = if (steps >= 10_000) String.format(Locale.getDefault(), "%.1fk", steps / 1000f) else numberFormat.format(steps)
+    private fun compactSteps() = StepDisplayLabels.display(if(steps >= 10_000) String.format(Locale.getDefault(),"%.1fk",steps/1000f) else numberFormat.format(steps),steps)
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (ambient) return false

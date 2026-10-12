@@ -2,317 +2,274 @@ package com.healthsync.phone.data.update
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Base64
 import android.util.Log
 import androidx.core.content.FileProvider
 import com.google.gson.Gson
-import com.healthsync.phone.data.model.MessageType
-import com.healthsync.phone.data.model.OtaChunkPayload
-import com.healthsync.phone.data.model.OtaCompletePayload
-import com.healthsync.phone.data.model.OtaStartPayload
-import com.healthsync.phone.data.model.SyncMessage
+import com.healthsync.phone.data.model.*
 import com.healthsync.phone.service.BluetoothSyncService
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.first
 import java.io.File
 import java.io.FileOutputStream
-import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
+import java.util.UUID
 
 object AppUpdateManager {
     private const val TAG = "AppUpdateManager"
     const val DEFAULT_MANIFEST_URL = "https://raw.githubusercontent.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/main/version.json"
     const val CDN_MANIFEST_URL = "https://cdn.jsdelivr.net/gh/invictatill-pos/InvictaTill-Watch-Launcher-OS@main/version.json"
-    const val FALLBACK_MANIFEST_URL = "https://cdn.jsdelivr.net/gh/invictatill-pos/InvictaTill-Watch-Launcher-OS@main/version.json"
-    private const val GITHUB_RELEASES_API = "https://api.github.com/repos/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/latest"
-
+    const val FALLBACK_MANIFEST_URL = CDN_MANIFEST_URL
+    private const val RELEASE_MANIFEST_URL = "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/latest/download/version.json"
+    private val gson = Gson()
     var lastError: String? = null
         private set
 
-    private val gson = Gson()
-
-    /** Fetches remote version manifest from raw GitHub, jsDelivr CDN, or GitHub Releases API */
+    /** Release metadata contains real Android version codes; never derive them from a tag. */
     suspend fun fetchManifest(manifestUrl: String = DEFAULT_MANIFEST_URL): UpdateManifest? = withContext(Dispatchers.IO) {
         lastError = null
-        val ts = System.currentTimeMillis()
-        val candidates = listOf(
-            "$DEFAULT_MANIFEST_URL?t=$ts",
-            "$CDN_MANIFEST_URL?t=$ts",
-            manifestUrl,
-            DEFAULT_MANIFEST_URL,
-            CDN_MANIFEST_URL
-        ).distinct()
-
+        val timestamp = System.currentTimeMillis()
+        val candidates = listOf(manifestUrl, DEFAULT_MANIFEST_URL, CDN_MANIFEST_URL, RELEASE_MANIFEST_URL).distinct()
         for (candidate in candidates) {
+            currentCoroutineContext().ensureActive()
+            var connection: HttpURLConnection? = null
             try {
-                val url = URL(candidate)
-                val connection = url.openConnection() as HttpURLConnection
-                connection.instanceFollowRedirects = true
-                connection.connectTimeout = 8_000
-                connection.readTimeout = 8_000
-                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Android; Mobile; rv:120.0) Gecko/120.0 Firefox/120.0")
-                connection.setRequestProperty("Accept", "application/json, text/plain, */*")
-                connection.setRequestProperty("Cache-Control", "no-cache, no-store, must-revalidate")
-                connection.setRequestProperty("Pragma", "no-cache")
-                connection.requestMethod = "GET"
-
-                if (connection.responseCode in 200..299) {
-                    val json = connection.inputStream.bufferedReader().use { it.readText() }
-                    
-                    // 1. Try Gson
-                    try {
-                        val parsed = gson.fromJson(json, UpdateManifest::class.java)
-                        if (parsed?.phone != null && parsed.phone.versionCode > 0) {
-                            return@withContext parsed
-                        }
-                    } catch (ge: Exception) {
-                        Log.w(TAG, "Gson parse error: ${ge.message}")
-                    }
-
-                    // 2. Android framework JSONObject parser (immune to R8 obfuscation)
-                    try {
-                        val root = org.json.JSONObject(json)
-                        val phoneObj = root.optJSONObject("phone")
-                        val watchObj = root.optJSONObject("watch")
-                        val phoneInfo = AppVersionInfo(
-                            versionCode = phoneObj?.optInt("versionCode", 0) ?: 0,
-                            versionName = phoneObj?.optString("versionName", "") ?: "",
-                            apkUrl = phoneObj?.optString("apkUrl", "") ?: "",
-                            changelog = phoneObj?.optString("changelog", "") ?: "",
-                            forceUpdate = phoneObj?.optBoolean("forceUpdate", false) ?: false,
-                            sha256 = phoneObj?.optString("sha256", "") ?: ""
-                        )
-                        val watchInfo = AppVersionInfo(
-                            versionCode = watchObj?.optInt("versionCode", 0) ?: 0,
-                            versionName = watchObj?.optString("versionName", "") ?: "",
-                            apkUrl = watchObj?.optString("apkUrl", "") ?: "",
-                            changelog = watchObj?.optString("changelog", "") ?: "",
-                            forceUpdate = watchObj?.optBoolean("forceUpdate", false) ?: false,
-                            sha256 = watchObj?.optString("sha256", "") ?: ""
-                        )
-                        return@withContext UpdateManifest(phone = phoneInfo, watch = watchInfo)
-                    } catch (je: Exception) {
-                        Log.w(TAG, "JSONObject parse error: ${je.message}")
-                    }
-                } else {
-                    lastError = "Server HTTP ${connection.responseCode} ($candidate)"
-                    Log.w(TAG, "Failed to fetch from $candidate: HTTP ${connection.responseCode}")
+                val separator = if ('?' in candidate) "&" else "?"
+                connection = openConnection("$candidate${separator}t=$timestamp", 8_000)
+                val body = connection.inputStream.use { input ->
+                    val bytes = input.readBytesBounded(UpdatePolicy.MAX_MANIFEST_BYTES)
+                    bytes.toString(Charsets.UTF_8)
                 }
-            } catch (e: Exception) {
-                lastError = "${e.javaClass.simpleName}: ${e.message}"
-                Log.w(TAG, "Error fetching from $candidate: ${e.message}")
-            }
+                val parsed = gson.fromJson(body, UpdateManifest::class.java)
+                if (!UpdatePolicy.validManifest(parsed)) throw java.io.IOException("Update metadata is incomplete or unverified")
+                lastError = null
+                return@withContext parsed
+            } catch (cancelled: CancellationException) { throw cancelled
+            } catch (error: Exception) {
+                lastError = error.message ?: "Unable to read update metadata"
+                Log.w(TAG, "Update check failed: ${error.message}")
+            } finally { connection?.disconnect() }
         }
-
-        // 3. Fallback: Query GitHub Releases API directly if raw manifest endpoints were blocked
-        try {
-            val apiUrl = URL(GITHUB_RELEASES_API)
-            val apiConn = apiUrl.openConnection() as HttpURLConnection
-            apiConn.connectTimeout = 8_000
-            apiConn.readTimeout = 8_000
-            apiConn.setRequestProperty("User-Agent", "HealthSync-Phone-App")
-            apiConn.setRequestProperty("Accept", "application/vnd.github.v3+json")
-            if (apiConn.responseCode in 200..299) {
-                val apiJson = apiConn.inputStream.bufferedReader().use { it.readText() }
-                val releaseObj = org.json.JSONObject(apiJson)
-                val tagName = releaseObj.optString("tag_name", "").removePrefix("v")
-                val body = releaseObj.optString("body", "")
-                val assets = releaseObj.optJSONArray("assets")
-                var phoneApkUrl = ""
-                var watchApkUrl = ""
-                if (assets != null) {
-                    for (i in 0 until assets.length()) {
-                        val asset = assets.getJSONObject(i)
-                        val name = asset.optString("name", "")
-                        val dl = asset.optString("browser_download_url", "")
-                        if (name.contains("Phone", ignoreCase = true) && name.endsWith(".apk")) phoneApkUrl = dl
-                        if (name.contains("Watch", ignoreCase = true) && name.endsWith(".apk")) watchApkUrl = dl
-                    }
-                }
-                if (phoneApkUrl.isNotBlank() || watchApkUrl.isNotBlank()) {
-                    val parts = tagName.split(".")
-                    val derivedCode = (parts.getOrNull(0)?.toIntOrNull() ?: 2) * 10 + (parts.getOrNull(1)?.toIntOrNull() ?: 4)
-                    return@withContext UpdateManifest(
-                        phone = AppVersionInfo(versionCode = derivedCode, versionName = tagName, apkUrl = phoneApkUrl, changelog = body),
-                        watch = AppVersionInfo(versionCode = derivedCode + 6, versionName = tagName, apkUrl = watchApkUrl, changelog = body)
-                    )
-                }
-            }
-        } catch (apiErr: Exception) {
-            Log.w(TAG, "GitHub Releases API fallback failed: ${apiErr.message}")
-        }
-
         null
     }
 
-    /** Downloads an APK file from given URL with progress reporting */
+    private suspend fun java.io.InputStream.readBytesBounded(limit: Int): ByteArray {
+        val output = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(8192)
+        while (true) {
+            currentCoroutineContext().ensureActive()
+            val count = read(buffer)
+            if (count < 0) break
+            if (output.size() + count > limit) throw java.io.IOException("Update metadata exceeds size limit")
+            output.write(buffer, 0, count)
+        }
+        return output.toByteArray()
+    }
+
+    private fun openConnection(address: String, timeout: Int = 15_000): HttpURLConnection {
+        var current = URL(address)
+        repeat(6) {
+            require(UpdatePolicy.secureUrl(current.toString())) { "Update requires a secure HTTPS address" }
+            val connection = current.openConnection() as HttpURLConnection
+            connection.instanceFollowRedirects = false
+            connection.connectTimeout = timeout
+            connection.readTimeout = 30_000
+            connection.setRequestProperty("User-Agent", "HealthSync-Phone")
+            connection.setRequestProperty("Cache-Control", "no-cache")
+            val status = try { connection.responseCode } catch (error: Exception) {
+                connection.disconnect(); throw error
+            }
+            if (status in listOf(301, 302, 303, 307, 308)) {
+                val next = connection.getHeaderField("Location")
+                connection.disconnect()
+                if (next.isNullOrBlank()) throw java.io.IOException("Update redirect is missing its destination")
+                current = URL(current, next)
+            } else {
+                if (status !in 200..299) {
+                    connection.disconnect()
+                    throw java.io.IOException("Update server returned HTTP $status")
+                }
+                return connection
+            }
+        }
+        throw java.io.IOException("Too many update redirects")
+    }
+
+    /** Only a complete file matching the selected manifest and Android package is returned. */
     suspend fun downloadApk(
         context: Context,
-        apkUrl: String,
-        fileName: String,
+        info: AppVersionInfo,
+        isWatch: Boolean,
         onProgress: (percent: Int, bytesDownloaded: Long, totalBytes: Long) -> Unit
     ): File? = withContext(Dispatchers.IO) {
+        lastError = null
+        var connection: HttpURLConnection? = null
+        val directory = File(context.cacheDir, "ota_updates").apply { mkdirs() }
+        val target = File(directory, if (isWatch) "watch-update.apk" else "phone-update.apk")
+        val partial = File(directory, target.name + ".part")
         try {
-            var currentUrl = apkUrl
-            var connection: HttpURLConnection
-            var redirects = 0
-
-            // Follow redirects (GitHub Releases redirect to AWS S3)
-            while (true) {
-                val url = URL(currentUrl)
-                connection = url.openConnection() as HttpURLConnection
-                connection.instanceFollowRedirects = false
-                connection.connectTimeout = 15_000
-                connection.readTimeout = 30_000
-                connection.setRequestProperty("User-Agent", "HealthSync-Phone-App")
-
-                val status = connection.responseCode
-                if (status in 300..399) {
-                    val newUrl = connection.getHeaderField("Location") ?: break
-                    currentUrl = newUrl
-                    redirects++
-                    if (redirects > 5) break
-                } else break
-            }
-
-            if (connection.responseCode !in 200..299) {
-                lastError = "Download server returned HTTP ${connection.responseCode}"
-                Log.e(TAG, "Download failed: HTTP ${connection.responseCode} for $currentUrl")
-                return@withContext null
-            }
-
+            require(UpdatePolicy.validInfo(info)) { "Update metadata is incomplete or unverified" }
+            connection = openConnection(info.apkUrl)
             val totalLength = connection.contentLength.toLong()
-            val otaDir = File(context.cacheDir, "ota_updates").apply { mkdirs() }
-            val targetFile = File(otaDir, fileName)
-            if (targetFile.exists()) targetFile.delete()
-
+            require(totalLength <= UpdatePolicy.MAX_APK_BYTES) { "Update package exceeds size limit" }
+            var downloaded = 0L
             connection.inputStream.use { input ->
-                FileOutputStream(targetFile).use { output ->
+                FileOutputStream(partial).use { output ->
                     val buffer = ByteArray(8192)
-                    var bytesRead: Int
-                    var downloaded: Long = 0
-
-                    while (input.read(buffer).also { bytesRead = it } != -1) {
-                        output.write(buffer, 0, bytesRead)
-                        downloaded += bytesRead
-                        val pct = if (totalLength > 0) ((downloaded * 100) / totalLength).toInt() else -1
-                        onProgress(pct, downloaded, totalLength)
+                    while (true) {
+                        currentCoroutineContext().ensureActive()
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        downloaded += count
+                        require(downloaded <= UpdatePolicy.MAX_APK_BYTES) { "Update package exceeds size limit" }
+                        output.write(buffer, 0, count)
+                        onProgress(if (totalLength > 0) ((downloaded * 100 / totalLength).toInt()).coerceIn(0, 99) else -1, downloaded, totalLength)
                     }
+                    output.fd.sync()
                 }
             }
-            return@withContext targetFile
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to download APK: ${e.message}", e)
+            require(downloaded > 0 && (totalLength <= 0 || downloaded == totalLength)) { "Update download was incomplete" }
+            require(calculateSha256(partial).equals(info.sha256, true)) { "Update checksum did not match; retry the download" }
+            verifyPackage(context, partial, info, if (isWatch) "com.healthsync.watch" else context.packageName)
+            target.delete()
+            require(partial.renameTo(target)) { "Could not save verified update" }
+            onProgress(100, downloaded, downloaded)
+            target
+        } catch (cancelled: CancellationException) {
+            partial.delete()
+            throw cancelled
+        } catch (error: Exception) {
+            partial.delete()
+            lastError = error.message ?: "Unable to download verified update"
+            Log.w(TAG, "Update download failed: ${error.message}")
             null
+        } finally { connection?.disconnect() }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun verifyPackage(context: Context, file: File, info: AppVersionInfo, expectedPackage: String) {
+        val flags = if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES
+        val archive = context.packageManager.getPackageArchiveInfo(file.absolutePath, flags)
+            ?: throw IllegalArgumentException("Downloaded file is not an Android app")
+        val code = if (Build.VERSION.SDK_INT >= 28) archive.longVersionCode else archive.versionCode.toLong()
+        require(archive.packageName == expectedPackage && code == info.versionCode.toLong() && archive.versionName == info.versionName) {
+            "Update package does not match its advertised app/version"
+        }
+        if (expectedPackage == context.packageName) {
+            val installed = context.packageManager.getPackageInfo(context.packageName, flags)
+            val installedCode = if (Build.VERSION.SDK_INT >= 28) installed.longVersionCode else installed.versionCode.toLong()
+            require(code >= installedCode) { "An older phone version cannot replace the installed app" }
+            val actualSigners = if (Build.VERSION.SDK_INT >= 28) archive.signingInfo?.apkContentsSigners else archive.signatures
+            val installedSigners = if (Build.VERSION.SDK_INT >= 28) installed.signingInfo?.apkContentsSigners else installed.signatures
+            require(!actualSigners.isNullOrEmpty() && !installedSigners.isNullOrEmpty() && actualSigners.toSet() == installedSigners.toSet()) {
+                "Update signing certificate differs from the installed app"
+            }
         }
     }
 
-    /** Triggers the Android native PackageInstaller dialog using FileProvider */
-    fun installApk(context: Context, apkFile: File): Boolean {
-        return try {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                if (!context.packageManager.canRequestPackageInstalls()) {
-                    try {
-                        val manageIntent = Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                            data = android.net.Uri.parse("package:${context.packageName}")
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        context.startActivity(manageIntent)
-                    } catch (_: Exception) { }
-                }
-            }
-
-            val authority = "${context.packageName}.fileprovider"
-            val uri = FileProvider.getUriForFile(context, authority, apkFile)
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "application/vnd.android.package-archive")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(intent)
-            true
-        } catch (e: Exception) {
-            lastError = e.message
-            Log.e(TAG, "Failed to launch installer intent: ${e.message}", e)
+    fun installApk(context: Context, apkFile: File): Boolean = try {
+        if (!context.packageManager.canRequestPackageInstalls()) {
+            context.startActivity(Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                android.net.Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            lastError = "Allow HealthSync to install updates, return here, then tap Install."
             false
+        } else {
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", apkFile)
+            context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
+            true
         }
+    } catch (error: Exception) {
+        lastError = error.message ?: "Unable to open Android installer"
+        false
     }
 
-    /** Streams a Watch APK chunk-by-chunk to the connected Watch via Bluetooth RFCOMM */
+    /** Sends bytes, then awaits correlated verification on updated watches. Android still confirms installation. */
     suspend fun streamApkToWatchViaBluetooth(
         apkFile: File,
         versionName: String,
         versionCode: Int,
         onProgress: (percent: Int, currentChunk: Int, totalChunks: Int) -> Unit
     ): Boolean = withContext(Dispatchers.IO) {
-        if (!apkFile.exists() || apkFile.length() == 0L) return@withContext false
-        val bytes = apkFile.readBytes()
-        val sha256 = calculateSha256(bytes)
-        val chunkSize = 4096 // 4 KB chunks for safe, rock-solid RFCOMM buffer throughput
-        val totalChunks = (bytes.size + chunkSize - 1) / chunkSize
-
-        Log.i(TAG, "Starting Watch OTA: $versionName (build $versionCode), ${bytes.size} bytes across $totalChunks chunks (SHA-256: $sha256)")
-
-        // 1. Send OTA_START
-        val startPayload = OtaStartPayload(versionName, versionCode, bytes.size.toLong(), totalChunks, sha256)
-        val started = BluetoothSyncService.sendStreamingSyncMessage(
-            SyncMessage(MessageType.OTA_START, payload = gson.toJson(startPayload))
-        )
-        if (!started) {
-            Log.w(TAG, "Bluetooth not connected; unable to start OTA")
-            return@withContext false
-        }
-        delay(400) // Allow watch to allocate RandomAccessFile and prepare buffers
-
-        // 2. Stream OTA chunks with gentle, robust RFCOMM pacing
-        for (i in 0 until totalChunks) {
-            val start = i * chunkSize
-            val end = minOf(start + chunkSize, bytes.size)
-            val chunkBytes = bytes.copyOfRange(start, end)
-            val base64 = Base64.encodeToString(chunkBytes, Base64.NO_WRAP)
-            val chunkPayload = OtaChunkPayload(
-                chunkIndex = i,
-                totalChunks = totalChunks,
-                dataBase64 = base64,
-                offset = start.toLong(),
-                chunkSize = chunkSize
-            )
-
-            val sent = BluetoothSyncService.sendStreamingSyncMessage(
-                SyncMessage(MessageType.OTA_CHUNK, payload = gson.toJson(chunkPayload))
-            )
-            if (!sent) {
-                Log.e(TAG, "Bluetooth transmission failed at chunk $i of $totalChunks")
-                return@withContext false
+        lastError = null
+        val transferId = UUID.randomUUID().toString()
+        var started = false
+        var completed = false
+        var checksum = ""
+        try {
+            require(apkFile.length() in 1..UpdatePolicy.MAX_APK_BYTES) { "Verified watch update file is missing" }
+            val size = apkFile.length()
+            val sha256 = calculateSha256(apkFile)
+            checksum = sha256
+            val chunkSize = 4096
+            val totalChunks = ((size + chunkSize - 1) / chunkSize).toInt()
+            suspend fun send(type: MessageType, payload: Any) {
+                currentCoroutineContext().ensureActive()
+                val sent = BluetoothSyncService.sendStreamingSyncMessage(SyncMessage(type, payload = gson.toJson(payload)))
+                currentCoroutineContext().ensureActive()
+                check(sent) {
+                    "Bluetooth connection interrupted; reconnect and retry"
+                }
             }
-
-            val pct = ((i + 1) * 100) / totalChunks
-            onProgress(pct, i + 1, totalChunks)
-
-            // Pacing: 35ms per 4KB chunk (~100 KB/s), perfectly matching RFCOMM hardware bandwidth
-            delay(35)
-            // Periodic buffer drain pause every 25 chunks (~100 KB)
-            if (i > 0 && i % 25 == 0) {
-                delay(120)
+            send(MessageType.OTA_START, OtaStartPayload(versionName, versionCode, size, totalChunks, sha256, transferId))
+            started = true
+            delay(400)
+            apkFile.inputStream().use { input ->
+                for (index in 0 until totalChunks) {
+                    currentCoroutineContext().ensureActive()
+                    val bytes = ByteArray(minOf(chunkSize.toLong(), size - index.toLong() * chunkSize).toInt())
+                    var filled = 0
+                    while (filled < bytes.size) {
+                        val read = input.read(bytes, filled, bytes.size - filled)
+                        check(read > 0) { "Watch update file changed during transfer" }
+                        filled += read
+                    }
+                    val result = BluetoothSyncService.otaProgress.value
+                    check(result?.transferId != transferId || result.status != "ERROR") { result?.message ?: "Watch rejected update" }
+                    send(MessageType.OTA_CHUNK, OtaChunkPayload(index, totalChunks, Base64.encodeToString(bytes, Base64.NO_WRAP), index.toLong() * chunkSize, chunkSize, transferId))
+                    onProgress(((index + 1) * 100) / totalChunks, index + 1, totalChunks)
+                    delay(35)
+                    if (index > 0 && index % 25 == 0) delay(120)
+                }
+            }
+            send(MessageType.OTA_COMPLETE, OtaCompletePayload(true, sha256, transferId))
+            val supportsResult = (BluetoothSyncService.connectedWatchVersionCode.value ?: 0) >= 26
+            if (supportsResult) {
+                val result = withTimeoutOrNull(30_000) {
+                    BluetoothSyncService.otaProgress.first { it?.transferId == transferId && it.status in setOf("READY", "ERROR") }
+                }
+                check(result?.status == "READY") { result?.message ?: "Watch verification was not confirmed. Check the watch before retrying." }
+            }
+            completed = true
+            true
+        } catch (cancelled: CancellationException) { throw cancelled
+        } catch (error: Exception) {
+            lastError = error.message ?: "Watch update transfer failed"
+            false
+        } finally {
+            if (started && !completed) withContext(NonCancellable) {
+                withTimeoutOrNull(2_000L) {
+                    BluetoothSyncService.sendStreamingSyncMessage(SyncMessage(MessageType.OTA_COMPLETE,
+                        payload = gson.toJson(OtaCompletePayload(false, checksum, transferId))))
+                }
             }
         }
-
-        // 3. Send OTA_COMPLETE
-        delay(400)
-        val completePayload = OtaCompletePayload(true, sha256)
-        val finished = BluetoothSyncService.sendStreamingSyncMessage(
-            SyncMessage(MessageType.OTA_COMPLETE, payload = gson.toJson(completePayload))
-        )
-        Log.i(TAG, "Watch OTA streaming completed: $totalChunks chunks delivered (finishSignal=$finished)")
-        finished
     }
 
-    private fun calculateSha256(bytes: ByteArray): String {
+    private fun calculateSha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
-        val hash = digest.digest(bytes)
-        return hash.joinToString("") { "%02x".format(it) }
+        file.inputStream().use { input ->
+            val buffer = ByteArray(8192)
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                digest.update(buffer, 0, count)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 }

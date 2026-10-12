@@ -109,6 +109,7 @@ class BluetoothSyncService : android.app.Service() {
         }
 
         suspend fun sendWatchFaceToWatch(payload: WatchFaceInstallPayload): Boolean {
+            _watchFaceAck.value = null
             val msg = SyncMessage(
                 type = MessageType.WATCH_FACE_INSTALL,
                 payload = Gson().toJson(payload)
@@ -164,13 +165,16 @@ class BluetoothSyncService : android.app.Service() {
             } catch (e: Exception) { Log.e(TAG, "sendCall error: ${e.message}") }
         }
 
-        fun sendSettingsToWatch(context: Context, payload: com.healthsync.phone.data.model.WatchSettingsPayload) {
+        fun sendSettingsToWatch(context: Context, payload: com.healthsync.phone.data.model.WatchSettingsPayload): Boolean {
+            if (PhonePreferences(context).connectionPaused || !_connectionState.value.isConnected || sharedWriter == null) return false
             try {
                 // An explicit Apply is a new user decision, even when the displayed choices match.
-                val snapshot = PhonePreferences(context.applicationContext).updateSensorIntervalsLocally(
+                val prefs = PhonePreferences(context.applicationContext)
+                val snapshot = prefs.updateSensorIntervalsLocally(
                     payload.hrIntervalMs, payload.spo2IntervalMs, forceRevision = true)
                 val revised = payload.copy(hrIntervalMs = snapshot.hrIntervalMs, spo2IntervalMs = snapshot.spo2IntervalMs,
-                    sensorSettingsRevision = snapshot.revision)
+                    sensorSettingsRevision = snapshot.revision, userWeightConfigured = prefs.hasUserWeight,
+                    userHeightConfigured = prefs.hasUserHeight)
                 ContextCompat.startForegroundService(
                     context,
                     Intent(context, BluetoothSyncService::class.java).apply {
@@ -178,7 +182,8 @@ class BluetoothSyncService : android.app.Service() {
                         putExtra(EXTRA_PAYLOAD, Gson().toJson(revised))
                     }
                 )
-            } catch (e: Exception) { Log.e(TAG, "sendSettings error: ${e.message}") }
+                return true
+            } catch (e: Exception) { Log.e(TAG, "sendSettings error: ${e.message}"); return false }
         }
 
         fun sendForceMeasureHrToWatch(context: Context): Boolean {
@@ -207,7 +212,8 @@ class BluetoothSyncService : android.app.Service() {
             }
         }
 
-        fun sendForceMeasureSpO2ToWatch(context: Context) {
+        fun sendForceMeasureSpO2ToWatch(context: Context): Boolean {
+            if (PhonePreferences(context).connectionPaused || !_connectionState.value.isConnected || sharedWriter == null) return false
             try {
                 ContextCompat.startForegroundService(
                     context,
@@ -215,7 +221,8 @@ class BluetoothSyncService : android.app.Service() {
                         action = ACTION_FORCE_MEASURE_SPO2
                     }
                 )
-            } catch (e: Exception) { Log.e(TAG, "sendForceMeasureSpO2 error: ${e.message}") }
+                return true
+            } catch (e: Exception) { Log.e(TAG, "sendForceMeasureSpO2 error: ${e.message}"); return false }
         }
 
     }
@@ -246,8 +253,8 @@ class BluetoothSyncService : android.app.Service() {
     override fun onCreate() {
         super.onCreate()
         activeInstance = this
-        _connectedWatchVersionName.value = preferences.lastKnownWatchVersion
-        _connectedWatchVersionCode.value = preferences.lastKnownWatchVersionCode
+        _connectedWatchVersionName.value = null
+        _connectedWatchVersionCode.value = null
         remoteControls = PhoneRemoteControls(this) { state ->
             sendRaw(SyncMessage(MessageType.PHONE_CONTROL_STATE, payload = gson.toJson(state)))
         }
@@ -423,7 +430,7 @@ class BluetoothSyncService : android.app.Service() {
             val intervals = preferences.sensorIntervals()
             sendRaw(SyncMessage(MessageType.SETTINGS_UPDATE, payload = gson.toJson(WatchSettingsPayload(
                 intervals.hrIntervalMs, intervals.spo2IntervalMs, preferences.stepGoal, preferences.userWeightKg,
-                preferences.userHeightCm, intervals.revision))))
+                preferences.userHeightCm, intervals.revision, preferences.hasUserWeight, preferences.hasUserHeight))))
             HealthNotificationListenerService.resyncNotifications(applicationContext)
             // Reconcile alerts after a disconnect, including an end event missed offline.
             WatchInCallService.refresh()
@@ -648,9 +655,10 @@ class BluetoothSyncService : android.app.Service() {
     private fun updateState(state: ConnectionInfo) {
         val newConnection = state.isConnected && !_connectionState.value.isConnected
         if (!state.isConnected) {
-            _connectedWatchVersionCode.value = preferences.lastKnownWatchVersionCode
-            _connectedWatchVersionName.value = preferences.lastKnownWatchVersion
+            _connectedWatchVersionCode.value = null
+            _connectedWatchVersionName.value = null
             _otaProgress.value = null
+            _watchFaceAck.value = null
         }
         _heartRateFeedback.update {
             if (newConnection) null else currentHeartRateFeedback(it, state.isConnected, System.currentTimeMillis())

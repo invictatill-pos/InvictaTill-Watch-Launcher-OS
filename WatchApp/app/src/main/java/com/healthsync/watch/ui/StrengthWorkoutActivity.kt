@@ -71,6 +71,10 @@ class StrengthWorkoutActivity : AppCompatActivity() {
         tvRestTimer = findViewById(R.id.tvRestTimer)
         tvTotalReps = findViewById(R.id.tvTotalReps)
         btnRest = findViewById(R.id.btnRest)
+        findViewById<View>(R.id.btnStrengthHome).setOnClickListener {
+            startActivity(Intent(this, WatchFaceActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+            finish()
+        }
         workoutStartMs = WorkoutTrackingService.activeStartTime.takeIf { it > 0 } ?: System.currentTimeMillis()
         if (WorkoutTrackingService.isActive && uiPrefs.getLong("session", 0) == workoutStartMs) {
             currentSet = uiPrefs.getInt("set", 1)
@@ -167,13 +171,10 @@ class StrengthWorkoutActivity : AppCompatActivity() {
         tvReps.text = (totalReps - setStartReps).coerceAtLeast(0).toString()
         tvTotalReps.text = "$totalReps total reps"
         val nowMs = System.currentTimeMillis()
-        val heart = SensorCollectorService.watchFaceHeartRate(nowMs)
-        val unit = if (heart.bpm > 0) HeartRatePolicy.complicationUnit(heart.capturedAt, nowMs) else "BPM"
-        val label = if (unit == "BPM") "bpm" else unit
-        tvLiveHr.text = if (heart.bpm > 0) "♥ ${heart.bpm} $label" else "♥ -- bpm"
-        tvLiveHr.contentDescription = if (heart.bpm > 0) {
-            "${heart.bpm} beats per minute${if (heart.sensorReading) ", sensor reading" else ""}. " +
-                HeartRatePolicy.ageLabel(heart.capturedAt, nowMs)
+        val bpm = SensorCollectorService.freshBpm(nowMs)
+        tvLiveHr.text = if (bpm > 0) "♥ $bpm bpm" else "♥ -- bpm"
+        tvLiveHr.contentDescription = if (bpm > 0) {
+            "$bpm beats per minute. " + HeartRatePolicy.ageLabel(SensorCollectorService.latestBpmTimeMs, nowMs)
         } else "Heart rate unavailable"
         if (resting) {
             val sec = ((restDeadline - SystemClock.elapsedRealtime()).coerceAtLeast(0) + 999L) / 1000
@@ -205,7 +206,7 @@ class StrengthWorkoutActivity : AppCompatActivity() {
             putExtra(WorkoutSummaryActivity.EXTRA_SETS, currentSet)
             putExtra("summary_duration_ms", durationMs)
             putExtra("summary_calories", calories)
-            putExtra("summary_hr", SensorCollectorService.freshBpm())
+            putExtra("summary_hr", 0) // The saved session supplies the real average, not the last sample.
             putExtra("summary_start_ms", workoutStartMs)
             putExtra("summary_await_save", true)
         })

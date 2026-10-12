@@ -32,6 +32,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.healthsync.watch.ui.RoundScrollView
+import com.healthsync.watch.ui.WatchVisualStyle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -55,7 +56,7 @@ class AppGridPanel(
     private val muted = 0xFFB0BCB8.toInt()
     private val prefs = activity.getSharedPreferences("watch_shell_apps", Context.MODE_PRIVATE)
     private val icons = LruCache<String, Drawable.ConstantState>(48)
-    private val root = FrameLayout(activity).apply { setBackgroundColor(Color.BLACK) }
+    private val root = FrameLayout(activity).apply { background=WatchVisualStyle.screenBackground() }
     val view: View get() = root
     private var tab = Tab.ALL
     private var allApps = emptyList<Entry>()
@@ -69,11 +70,12 @@ class AppGridPanel(
     private var sheet: View? = null
     private val builtins = listOf(
         Entry("@health", "Health", icon = android.R.drawable.ic_menu_myplaces),
-        Entry("@sleep", "Sleep", icon = android.R.drawable.ic_lock_idle_alarm),
+        Entry("@sleep", "Sleep & rest", icon = android.R.drawable.ic_lock_idle_alarm),
         Entry("@spo2", "SpO2", icon = android.R.drawable.ic_menu_compass),
-        Entry("@stress", "Stress", icon = android.R.drawable.ic_popup_sync),
+        Entry("@stress", "Breathing", icon = android.R.drawable.ic_popup_sync),
         Entry("@compass", "Compass", icon = android.R.drawable.ic_menu_directions),
-        Entry("@hydration", "Water", icon = android.R.drawable.ic_menu_agenda),
+        Entry("@hydration", "Water log", icon = android.R.drawable.ic_menu_agenda),
+        Entry("@faces", "Watch faces", icon = android.R.drawable.ic_menu_gallery),
         Entry("@music", "Music", icon = android.R.drawable.ic_media_play),
         Entry("@notifications", "Notifications", icon = android.R.drawable.ic_dialog_email),
         Entry("@tools", "Tools", icon = android.R.drawable.ic_menu_recent_history),
@@ -224,6 +226,7 @@ class AppGridPanel(
             "@stress" -> { remember(entry); activity.startActivity(Intent(activity, com.healthsync.watch.ui.StressActivity::class.java)) }
             "@compass" -> { remember(entry); activity.startActivity(Intent(activity, com.healthsync.watch.ui.CompassActivity::class.java)) }
             "@hydration" -> { remember(entry); activity.startActivity(Intent(activity, com.healthsync.watch.ui.HydrationActivity::class.java)) }
+            "@faces" -> { remember(entry); onNavigate("faces") }
             "@music" -> { remember(entry); onNavigate("media") }
             "@notifications" -> { remember(entry); onNavigate("notifications") }
             "@tools" -> { remember(entry); onUtilities() }
@@ -246,13 +249,13 @@ class AppGridPanel(
         closeSheet()
         val content = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
-            setBackgroundColor(Color.BLACK)
+            background=WatchVisualStyle.screenBackground()
             val side = (activity.resources.displayMetrics.widthPixels * .16f).roundToInt()
             val end = (activity.resources.displayMetrics.heightPixels * .17f).roundToInt()
             setPadding(side, end, side, end)
         }
         val overlay = RoundScrollView(activity).apply {
-            setBackgroundColor(Color.BLACK); isFillViewport = true
+            background=WatchVisualStyle.screenBackground(); isFillViewport = true
             addView(content, ViewGroup.LayoutParams(-1, -2))
         }
         content.addView(text(entry.label, 18f, Color.WHITE).apply { maxLines = 2 }, LinearLayout.LayoutParams(-1, -2))
@@ -279,7 +282,7 @@ class AppGridPanel(
     }
 
     private fun dp(value: Int) = (value * activity.resources.displayMetrics.density).roundToInt()
-    private fun rounded(color: Int, radius: Int = 24) = GradientDrawable().apply { setColor(color); cornerRadius = dp(radius).toFloat() }
+    private fun rounded(color: Int, radius: Int = 24) = WatchVisualStyle.surface(activity,color,radius)
     private fun touchBackground(color: Int = 0xFF18251F.toInt()) = StateListDrawable().apply {
         addState(intArrayOf(android.R.attr.state_pressed), rounded(0xFF355747.toInt()))
         addState(intArrayOf(), rounded(color))
@@ -299,7 +302,7 @@ class AppGridPanel(
         fun bind() {
             content.removeAllViews()
             val title = LinearLayout(activity).apply { gravity = Gravity.CENTER_VERTICAL }
-            title.addView(chip("‹") { onClose() }.apply { textSize = 25f }, LinearLayout.LayoutParams(dp(44), dp(44)))
+            title.addView(chip("‹") { onClose() }.apply { textSize = 25f; contentDescription = "Back" }, LinearLayout.LayoutParams(dp(44), dp(44)))
             title.addView(text("Apps", 22f, Color.WHITE), LinearLayout.LayoutParams(0, dp(44), 1f))
             title.addView(View(activity), LinearLayout.LayoutParams(dp(44), dp(44)))
             content.addView(title)

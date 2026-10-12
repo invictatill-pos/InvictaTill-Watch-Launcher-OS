@@ -31,6 +31,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
+import com.healthsync.watch.ui.WatchVisualStyle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.healthsync.watch.data.WatchPreferences
@@ -55,7 +56,7 @@ class QuickControlsPanel(
     private val surface = 0xFF17211D.toInt()
     private val controls = WatchSystemControls(activity)
     private val preferences = WatchPreferences(activity)
-    private val root = FrameLayout(activity).apply { setBackgroundColor(Color.BLACK) }
+    private val root = FrameLayout(activity).apply { background=WatchVisualStyle.screenBackground() }
     val view: View = root
 
     /** The clock shell can immediately reapply its AOD/interactive brightness policy. */
@@ -97,7 +98,7 @@ class QuickControlsPanel(
         val scroll = RoundScrollView(activity).apply {
             isFillViewport = true
             clipToPadding = false
-            setBackgroundColor(Color.BLACK)
+            background=WatchVisualStyle.screenBackground()
         }
         scroll.addView(content, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         root.addView(scroll, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -344,7 +345,7 @@ class QuickControlsPanel(
         }
         content.addView(pill("Android sound", Glyph.GEAR) { controls.openSoundSettings() }, fullWidth().apply { topMargin = dp(10) })
         content.addView(pill("Back", Glyph.DOWN) { closeDetail() }, fullWidth().apply { topMargin = dp(6) })
-        val scroll = RoundScrollView(activity).apply { setBackgroundColor(Color.BLACK); isFillViewport = true }
+        val scroll = RoundScrollView(activity).apply { background=WatchVisualStyle.screenBackground(); isFillViewport = true }
         scroll.addView(content, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         detail = scroll
         root.addView(scroll, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -428,7 +429,9 @@ class QuickControlsPanel(
     }
 
     private fun fullWidth() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-    private fun rounded(color: Int, radius: Int) = GradientDrawable().apply { setColor(color); cornerRadius = dp(radius).toFloat() }
+    private fun rounded(color: Int, radius: Int) = if(color==Color.TRANSPARENT)
+        GradientDrawable().apply { setColor(color); cornerRadius=dp(radius).toFloat() }
+        else WatchVisualStyle.surface(activity,color,radius)
     private fun haptic(view: View, long: Boolean = false) { view.performHapticFeedback(if (long) HapticFeedbackConstants.LONG_PRESS else HapticFeedbackConstants.VIRTUAL_KEY) }
     private fun dp(value: Int) = (value * activity.resources.displayMetrics.density).roundToInt()
 
