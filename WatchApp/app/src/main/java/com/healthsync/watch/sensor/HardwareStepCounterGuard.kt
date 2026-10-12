@@ -10,12 +10,12 @@ internal class HardwareStepCounterGuard(initialCount: Int = -1, initialTimeMs: L
     private var resetCandidate: Int? = null
 
     /** null rejects a frame; zero establishes/confirms a baseline without adding any steps. */
-    fun sample(raw: Float, maximumRange: Float, capturedAtMs: Long, nowElapsedMs: Long, registeredAtMs: Long): Int? {
+    fun sample(raw: Float, maximumRange: Float, capturedAtMs: Long, nowElapsedMs: Long, registeredAtMs: Long, maxLatencyMs: Long = 5_000L): Int? {
         val value = raw.toDouble()
         if (!value.isFinite() || value < 0.0 || value > Int.MAX_VALUE.toDouble() || value != kotlin.math.floor(value) ||
             (maximumRange.isFinite() && maximumRange > 0f && raw > maximumRange) ||
             registeredAtMs <= 0 || capturedAtMs < registeredAtMs || capturedAtMs <= lastSeenMs ||
-            nowElapsedMs - capturedAtMs !in 0L..5_000L) return null
+            nowElapsedMs - capturedAtMs !in 0L..maxLatencyMs) return null
         val count = raw.toInt()
         lastSeenMs = capturedAtMs
         if (baselineCount < 0) { rebase(count, capturedAtMs); return 0 }

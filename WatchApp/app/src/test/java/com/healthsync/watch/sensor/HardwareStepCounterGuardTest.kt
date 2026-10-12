@@ -54,4 +54,12 @@ class HardwareStepCounterGuardTest {
         assertNull(guard.sample(101f, 1000f, 2000L, 2000L, 2001L))
         assertEquals(100, guard.baselineCount)
     }
+
+    @Test fun batchedScreenOffDeliverySucceedsWithExtendedLatency() {
+        val guard = HardwareStepCounterGuard(100, 1000L)
+        // 45 seconds batch latency during screen-off sleep
+        val delta = guard.sample(150f, 1_000_000f, 40_000L, 85_000L, 500L, maxLatencyMs = 120_000L)
+        assertEquals(50, delta)
+        assertEquals(150, guard.baselineCount)
+    }
 }

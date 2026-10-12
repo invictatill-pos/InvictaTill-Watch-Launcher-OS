@@ -82,6 +82,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.healthsync.phone.data.model.ConnectionInfo
 import com.healthsync.phone.data.model.SleepEntity
 import com.healthsync.phone.data.model.WorkoutEntity
+import com.healthsync.phone.data.RecoveryScoreEngine
+import com.healthsync.phone.data.DailyRecoveryResult
+import com.healthsync.phone.data.RecoveryTier
+import kotlin.math.roundToInt
 import com.healthsync.phone.service.BluetoothSyncService
 import com.healthsync.phone.data.heartRateFeedbackText
 import com.healthsync.phone.data.activeHeartRateSensorPreview
@@ -180,6 +184,13 @@ fun DashboardScreen(
         )
     }
 
+    val restingHr = if (uiState.heartRate24h.isNotEmpty()) uiState.heartRate24h.minOf { it.bpm } else (uiState.latestHeartRate?.bpm ?: 0)
+    val yesterdaySteps = uiState.stepsLast7Days.dropLast(1).lastOrNull()?.steps ?: 0
+    val yesterdayCalories = uiState.stepsLast7Days.dropLast(1).lastOrNull()?.calories ?: 0.0
+    val recoveryResult = remember(uiState.latestSleep, restingHr, yesterdaySteps, yesterdayCalories) {
+        RecoveryScoreEngine.calculate(uiState.latestSleep, restingHr, yesterdaySteps, yesterdayCalories)
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -218,6 +229,10 @@ fun DashboardScreen(
                 goal = uiState.stepGoal,
                 activeMinutes = estimateActiveMinutes(uiState)
             )
+        }
+
+        item {
+            DailyRecoveryCard(recovery = recoveryResult)
         }
 
         item {
@@ -574,21 +589,230 @@ private fun readingAge(timestamp: Long?, currentTime: Long): String {
 }
 
 @Composable
-private fun SleepCard(sleep: SleepEntity, history: List<SleepEntity>) {
-    val total = ((sleep.endTime - sleep.startTime) / 60000).coerceAtLeast(0)
+private fun DailyRecoveryCard(recovery: DailyRecoveryResult) {
+    val tierColor = Color(recovery.tier.colorHex)
+    val animatedScore by animateFloatAsState(
+        targetValue = recovery.score.toFloat(),
+        animationSpec = tween(durationMillis = 1000, easing = EaseOutCubic),
+        label = "recoveryScore"
+    )
 
     HealthCard {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            SectionTitle("Sleep", SimpleDateFormat("EEE, MMM d", Locale.getDefault()).format(Date(sleep.endTime)))
-            TrendBadge("${total / 60}h ${total % 60}m", MetricSleep)
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SectionTitle("Daily Readiness", recovery.tier.label)
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = tierColor.copy(alpha = 0.15f),
+                border = BorderStroke(1.dp, tierColor.copy(alpha = 0.35f))
+            ) {
+                Text(
+                    text = "${recovery.score}/100",
+                    color = tierColor,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Black,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                )
+            }
         }
+
         Spacer(Modifier.height(14.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            SleepStage("Deep", sleep.deepMinutes, SleepDeep)
-            SleepStage("REM", sleep.remMinutes, SleepRem)
-            SleepStage("Light", sleep.lightMinutes, SleepLight)
-            SleepStage("Awake", sleep.awakeMinutes, SleepAwake)
+
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Circular arc progress gauge for readiness
+            Box(
+                Modifier.size(80.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Canvas(Modifier.fillMaxSize()) {
+                    val stroke = 8f
+                    val sweep = 240f
+                    val startAngle = 150f
+                    // Background track
+                    drawArc(
+                        color = Color.White.copy(alpha = 0.08f),
+                        startAngle = startAngle,
+                        sweepAngle = sweep,
+                        useCenter = false,
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke, cap = StrokeCap.Round)
+                    )
+                    // Foreground active arc
+                    drawArc(
+                        color = tierColor,
+                        startAngle = startAngle,
+                        sweepAngle = sweep * (animatedScore / 100f),
+                        useCenter = false,
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke, cap = StrokeCap.Round)
+                    )
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "${animatedScore.roundToInt()}",
+                        color = TextWhite,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                    Text(
+                        text = "SCORE",
+                        color = TextDim,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = recovery.headline,
+                    color = TextWhite,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = recovery.recommendation,
+                    color = TextSecondary,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp
+                )
+            }
         }
+
+        if (recovery.factors.isNotEmpty()) {
+            Spacer(Modifier.height(14.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                recovery.factors.take(3).forEach { factor ->
+                    Surface(
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        color = BgCardHover,
+                        border = BorderStroke(1.dp, BorderSubtle)
+                    ) {
+                        Column(
+                            Modifier.padding(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = factor.valueStr,
+                                color = if (factor.isPositive) StatusSuccess else TextWhite,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = factor.title,
+                                color = TextDim,
+                                fontSize = 10.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SleepCard(sleep: SleepEntity, history: List<SleepEntity>) {
+    val breakdown = remember(sleep) { RecoveryScoreEngine.computeSleepBreakdown(sleep) }
+    val totalMins = breakdown.totalMinutes
+
+    HealthCard {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SectionTitle("Sleep Stages", SimpleDateFormat("EEE, MMM d", Locale.getDefault()).format(Date(sleep.endTime)))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = AccentCyan.copy(alpha = 0.15f)
+                ) {
+                    Text(
+                        text = "Score ${breakdown.sleepScore}",
+                        color = AccentCyan,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                    )
+                }
+                TrendBadge("${totalMins / 60}h ${totalMins % 60}m", MetricSleep)
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+
+        // Horizontal multi-colored sleep stage distribution bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(Color(0xFF263238))
+        ) {
+            if (breakdown.deepPercent > 0.01f) {
+                Box(
+                    modifier = Modifier
+                        .weight(breakdown.deepPercent)
+                        .fillMaxHeight()
+                        .background(SleepDeep)
+                )
+            }
+            if (breakdown.remPercent > 0.01f) {
+                Box(
+                    modifier = Modifier
+                        .weight(breakdown.remPercent)
+                        .fillMaxHeight()
+                        .background(SleepRem)
+                )
+            }
+            if (breakdown.lightPercent > 0.01f) {
+                Box(
+                    modifier = Modifier
+                        .weight(breakdown.lightPercent)
+                        .fillMaxHeight()
+                        .background(SleepLight)
+                )
+            }
+            if (breakdown.awakePercent > 0.01f) {
+                Box(
+                    modifier = Modifier
+                        .weight(breakdown.awakePercent)
+                        .fillMaxHeight()
+                        .background(SleepAwake)
+                )
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            SleepStageDetail("Deep", breakdown.deepMinutes, breakdown.deepPercent, SleepDeep)
+            SleepStageDetail("REM", breakdown.remMinutes, breakdown.remPercent, SleepRem)
+            SleepStageDetail("Light", breakdown.lightMinutes, breakdown.lightPercent, SleepLight)
+            SleepStageDetail("Awake", breakdown.awakeMinutes, breakdown.awakePercent, SleepAwake)
+        }
+
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "${breakdown.efficiencyPercent}% Sleep Efficiency · ${(breakdown.deepPercent * 100).roundToInt()}% Deep restoration",
+            color = TextDim,
+            fontSize = 11.sp
+        )
+
         if (history.isNotEmpty()) {
             Spacer(Modifier.height(14.dp))
             SleepStackedBarChart(history, Modifier.fillMaxWidth().height(104.dp))
@@ -597,12 +821,12 @@ private fun SleepCard(sleep: SleepEntity, history: List<SleepEntity>) {
 }
 
 @Composable
-private fun SleepStage(label: String, mins: Int, color: Color) {
+private fun SleepStageDetail(label: String, mins: Int, percent: Float, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.size(8.dp).clip(CircleShape).background(color))
         Spacer(Modifier.height(5.dp))
         Text("${mins / 60}h ${mins % 60}m", color = TextWhite, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        Text(label, color = TextDim, fontSize = 10.sp)
+        Text("${(percent * 100).roundToInt()}% · $label", color = TextDim, fontSize = 10.sp)
     }
 }
 

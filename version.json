@@ -1,18 +1,18 @@
 {
   "phone": {
-    "versionCode": 16,
-    "versionName": "2.4.0",
+    "versionCode": 17,
+    "versionName": "2.5.0",
     "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/latest/download/HealthSync-Phone.apk",
-    "changelog": "• Watch Face Creator Studio: Frame simulator (Titanium Ultra, Steel, Matte Black), interactive live ticking & sensor test bench, dark photo tinting, hand styles & complication designs\n• 50+ Curated Watch Faces in Online Store across Luxury, Sports, Cyberpunk, Retro, Minimal, and Art\n• 5 Native Interactive Watch Faces: Orbit Pro, Chrono Ultra, Retro Illuminator, Cyberpunk HUD, and Bauhaus Minimal\n• Instant 1-tap update execution and shared ViewModel state across Settings and Device screens",
+    "changelog": "• Clinical Heart Rate Zones: 5-zone breakdown (Warm Up, Fat Burn, Aerobic Cardio, Anaerobic, VO2 Peak) with time-in-zone & training effect insights\n• Pace-Gradient GPS Route Visualizer: Dynamic speed-dependent Canvas polyline with start/finish pins and km split markers\n• Sleep Stages & Daily Readiness Score: Deep, Light, REM, and Awake sleep breakdown, sleep quality index, and 0–100 Daily Readiness gauge with personalized recovery guidance\n• Watch Face Creator Studio & 50+ Curated Online Dials with instant 1-tap updates",
     "forceUpdate": false,
-    "sha256": "64a4a2bc9ebab7214dfabfae4a66efba7f4ed6ec09f738dd6fb75e2c60f1da7f"
+    "sha256": "9b8d56885e27250afbed493a1ada5c9bbbbf94e4c155920590eab18aa6d8794f"
   },
   "watch": {
-    "versionCode": 22,
-    "versionName": "2.5.0",
+    "versionCode": 23,
+    "versionName": "2.5.1",
     "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/latest/download/HealthSync-Watch.apk",
-    "changelog": "• 5 Pre-installed Native Interactive Watch Faces: Orbit Pro (activity rings), Chrono Ultra (live subdials), Retro Illuminator (vintage LCD with cyan backlight), Cyberpunk HUD (animated ECG pulse & 4 neon color themes), and Bauhaus Minimal (Swiss glance dial)\n• Interactive touch features on dials: backlight glow, theme cycling, glance mode toggle\n• Full compatibility with HSWF dynamic face engine and live complication streaming",
+    "changelog": "• Super Accurate Step Tracking: Multi-sensor fusion with batch latency tolerance up to 120s for screen-off sleep\n• Real-time step detector support and anti-false-positive gait tracker fallback\n• User profile-calibrated METs and stride length calculation (height & weight adjusted)\n• 5 Native Interactive Watch Faces with touch backlight & theme switching",
     "forceUpdate": false,
-    "sha256": "fb50eb0116deef92ba32cb16de730a000d4c0c045d07154ed2938a3d2a19dac5"
+    "sha256": "845a221db1ca3814c9e50971aaf9741d8c00a2865bf5b53d8dbdb96037c2ab32"
   }
 }

@@ -179,6 +179,7 @@ class SensorCollectorService : Service() {
     private var lastMotionMs = -1L
     private var dayKey = ""
     private var hardwareStepsRegistered = false
+    private var stepDetectorRegistered = false
     private var hrJob: Job? = null
     private var spo2Job: Job? = null
     private val measurementJobs = mutableMapOf<MeasurementKind, Job>()
@@ -244,6 +245,7 @@ class SensorCollectorService : Service() {
         spo2Available = oxygenSensors.isNotEmpty()
 
         hardwareStepsRegistered = tryRegister(Sensor.TYPE_STEP_COUNTER, SensorManager.SENSOR_DELAY_NORMAL)
+        stepDetectorRegistered = tryRegister(Sensor.TYPE_STEP_DETECTOR, SensorManager.SENSOR_DELAY_NORMAL)
         tryRegister(Sensor.TYPE_ACCELEROMETER, 20_000)
         scheduleBootCount = WatchTimerStore.bootCount(this)
         val sameBoot = scheduleBootCount >= 0 && prefs.getInt("schedule_boot_count", -1) == scheduleBootCount
@@ -266,6 +268,7 @@ class SensorCollectorService : Service() {
         // Permissions may have been granted since creation. Repeated Home starts leave
         // registered sensors and live measurement windows alone.
         if (!hardwareStepsRegistered) hardwareStepsRegistered = tryRegister(Sensor.TYPE_STEP_COUNTER, SensorManager.SENSOR_DELAY_NORMAL)
+        if (!stepDetectorRegistered) stepDetectorRegistered = tryRegister(Sensor.TYPE_STEP_DETECTOR, SensorManager.SENSOR_DELAY_NORMAL)
         val previousAvailability = heartRateAvailable
         refreshHeartSensors()
         if (measurementJobs[MeasurementKind.HEART_RATE]?.isActive != true &&
@@ -613,15 +616,23 @@ class SensorCollectorService : Service() {
                         broadcastHr()
                     }
                 }
+                event.sensor.type == Sensor.TYPE_STEP_DETECTOR -> {
+                    if (!hardwareStepsRegistered) {
+                        resetDayIfNeeded()
+                        incrementSteps(1)
+                    }
+                }
                 event.sensor.type == Sensor.TYPE_STEP_COUNTER -> {
                     val raw = event.values[0]
                     resetDayIfNeeded()
                     val delta = hardwareStepGuard.sample(raw, event.sensor.maximumRange, nowMotion,
-                        SystemClock.elapsedRealtime(), counterRegisteredAtMs) ?: return
+                        SystemClock.elapsedRealtime(), counterRegisteredAtMs, maxLatencyMs = 120_000L) ?: return
                     lastHardwareSteps = hardwareStepGuard.baselineCount
                     prefs.edit().putInt("last_hardware_steps", lastHardwareSteps)
                         .putLong("last_hardware_time_ms", hardwareStepGuard.baselineTimeMs).apply()
-                    if (delta > 0) incrementSteps(delta)
+                    if (delta > 0) {
+                        incrementSteps(delta)
+                    }
                 }
                 event.sensor.type == Sensor.TYPE_ACCELEROMETER -> {
                     if (!validWorkoutMotionSample(event.values, event.sensor.maximumRange, nowMotion,
@@ -630,7 +641,9 @@ class SensorCollectorService : Service() {
                         return
                     }
                     lastMotionMs = nowMotion
-                    if (!hardwareStepsRegistered) stepTracker.processAccel(event.values[0], event.values[1], event.values[2], nowMotion)
+                    if (!hardwareStepsRegistered && !stepDetectorRegistered) {
+                        stepTracker.processAccel(event.values[0], event.values[1], event.values[2], nowMotion)
+                    }
                     fallDetector.process(event.values[0], event.values[1], event.values[2], nowMotion)
                 }
                 else -> if (oxygenSensors.contains(event.sensor)) {
@@ -668,8 +681,14 @@ class SensorCollectorService : Service() {
         latestLifetimeSteps += delta.toLong()
         prefs.edit().putInt("saved_steps", latestSteps).putLong("lifetime_steps", latestLifetimeSteps).apply()
         val bucket = System.currentTimeMillis() / 300_000L * 300_000L
-        WatchDatabaseHelper.getInstance(this).insertOrUpdateStepBucket(bucket, delta, delta * 0.04)
-        sendMsg(MessageType.STEPS, StepsPayload(latestSteps, latestSteps * 0.04))
+        val weightKg = watchPrefs.userWeightKg
+        val heightCm = watchPrefs.userHeightCm
+        val strideMeters = (heightCm * 0.415) / 100.0
+        val calPerStep = (weightKg * 0.00057 * strideMeters * 10.0).coerceIn(0.035, 0.075)
+        val deltaCal = delta * calPerStep
+        val totalCal = latestSteps * calPerStep
+        WatchDatabaseHelper.getInstance(this).insertOrUpdateStepBucket(bucket, delta, deltaCal)
+        sendMsg(MessageType.STEPS, StepsPayload(latestSteps, totalCal))
         broadcastSteps()
     }
 
