@@ -29,6 +29,12 @@ class AppUpdateViewModel @Inject constructor(
     private val _manifest = MutableStateFlow<UpdateManifest?>(null)
     val manifest: StateFlow<UpdateManifest?> = _manifest.asStateFlow()
 
+    private val _phoneUpdateInfo = MutableStateFlow<AppVersionInfo?>(null)
+    val phoneUpdateInfo: StateFlow<AppVersionInfo?> = _phoneUpdateInfo.asStateFlow()
+
+    private val _watchUpdateInfo = MutableStateFlow<AppVersionInfo?>(null)
+    val watchUpdateInfo: StateFlow<AppVersionInfo?> = _watchUpdateInfo.asStateFlow()
+
     private val _showDialog = MutableStateFlow(false)
     val showDialog: StateFlow<Boolean> = _showDialog.asStateFlow()
 
@@ -54,24 +60,29 @@ class AppUpdateViewModel @Inject constructor(
                 if (Build.VERSION.SDK_INT >= 28) pInfo.longVersionCode.toInt() else @Suppress("DEPRECATION") pInfo.versionCode
             } catch (_: Exception) { 0 }
 
-            // 1. Check Phone App update
-            if (fetched.phone.versionCode > currentPhoneCode) {
+            val currentWatchCode = BluetoothSyncService.connectedWatchVersionCode.value ?: PhonePreferences(context).lastKnownWatchVersionCode
+
+            val phoneNeedsUpdate = fetched.phone.versionCode > currentPhoneCode
+            val watchNeedsUpdate = fetched.watch.versionCode > currentWatchCode
+
+            _phoneUpdateInfo.value = if (phoneNeedsUpdate) fetched.phone else null
+            _watchUpdateInfo.value = if (watchNeedsUpdate) fetched.watch else null
+
+            // 1. Show Phone update dialog if available
+            if (phoneNeedsUpdate) {
                 _dialogUpdateInfo.value = fetched.phone
                 _isWatchUpdate.value = false
                 _status.value = UpdateStatus.UpdateAvailable(fetched.phone, isWatch = false)
-                _showDialog.value = true
+                if (!silent) _showDialog.value = true
                 return@launch
             }
 
-            // 2. Check Watch App update if phone is current
-            val currentWatchCode = BluetoothSyncService.connectedWatchVersionCode.value ?: PhonePreferences(context).lastKnownWatchVersionCode
-            if (fetched.watch.versionCode > currentWatchCode) {
+            // 2. Show Watch update dialog if watch needs update and phone is current
+            if (watchNeedsUpdate) {
                 _dialogUpdateInfo.value = fetched.watch
                 _isWatchUpdate.value = true
                 _status.value = UpdateStatus.UpdateAvailable(fetched.watch, isWatch = true)
-                if (!silent) {
-                    _showDialog.value = true
-                }
+                if (!silent) _showDialog.value = true
                 return@launch
             }
 
@@ -96,13 +107,54 @@ class AppUpdateViewModel @Inject constructor(
             val context = getApplication<Application>()
             val currentWatchCode = BluetoothSyncService.connectedWatchVersionCode.value ?: PhonePreferences(context).lastKnownWatchVersionCode
             if (fetched.watch.versionCode > currentWatchCode) {
+                _watchUpdateInfo.value = fetched.watch
                 _dialogUpdateInfo.value = fetched.watch
                 _isWatchUpdate.value = true
                 _status.value = UpdateStatus.UpdateAvailable(fetched.watch, isWatch = true)
                 _showDialog.value = true
             } else {
-                val vName = BluetoothSyncService.connectedWatchVersionName.value ?: "v${fetched.watch.versionName}"
+                _watchUpdateInfo.value = null
                 _status.value = UpdateStatus.UpToDate
+            }
+        }
+    }
+
+    fun updatePhone() {
+        val info = _phoneUpdateInfo.value ?: _manifest.value?.phone ?: return
+        _dialogUpdateInfo.value = info
+        _isWatchUpdate.value = false
+        _status.value = UpdateStatus.UpdateAvailable(info, isWatch = false)
+        _showDialog.value = true
+    }
+
+    fun updateWatch() {
+        val info = _watchUpdateInfo.value ?: _manifest.value?.watch ?: return
+        _dialogUpdateInfo.value = info
+        _isWatchUpdate.value = true
+        _status.value = UpdateStatus.UpdateAvailable(info, isWatch = true)
+        _showDialog.value = true
+    }
+
+    fun forcePushWatchUpdate() {
+        val info = _manifest.value?.watch
+        if (info != null) {
+            _dialogUpdateInfo.value = info
+            _isWatchUpdate.value = true
+            _status.value = UpdateStatus.UpdateAvailable(info, isWatch = true)
+            _showDialog.value = true
+        } else {
+            viewModelScope.launch {
+                _status.value = UpdateStatus.Checking
+                val fetched = AppUpdateManager.fetchManifest()
+                _manifest.value = fetched
+                if (fetched != null) {
+                    _dialogUpdateInfo.value = fetched.watch
+                    _isWatchUpdate.value = true
+                    _status.value = UpdateStatus.UpdateAvailable(fetched.watch, isWatch = true)
+                    _showDialog.value = true
+                } else {
+                    _status.value = UpdateStatus.Error("Unable to fetch watch update package.")
+                }
             }
         }
     }

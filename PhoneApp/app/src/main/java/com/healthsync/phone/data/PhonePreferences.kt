@@ -110,7 +110,7 @@ class PhonePreferences(context: Context) {
         set(v) { prefs.edit().putInt("user_height_cm", v.coerceIn(100, 230)).apply() }
 
     var lastKnownWatchVersion: String
-        get() = prefs.getString("last_known_watch_version", "2.4.4") ?: "2.4.4"
+        get() = prefs.getString("last_known_watch_version", "2.4.5") ?: "2.4.5"
         set(v) { prefs.edit().putString("last_known_watch_version", v).apply() }
 
     var lastKnownWatchVersionCode: Int

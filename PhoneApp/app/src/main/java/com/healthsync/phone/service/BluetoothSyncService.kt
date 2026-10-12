@@ -264,7 +264,6 @@ class BluetoothSyncService : android.app.Service() {
                     try {
                         wakeLock?.acquire(10_000)
                         writer.println(gson.toJson(frame.message))
-                        if (writer.checkError()) clientSocket?.close()
                     } catch (e: Exception) {
                         Log.w(TAG, "Send failed", e)
                     } finally {

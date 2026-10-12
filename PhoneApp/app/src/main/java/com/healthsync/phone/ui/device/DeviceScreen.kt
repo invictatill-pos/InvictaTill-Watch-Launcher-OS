@@ -176,9 +176,12 @@ fun DeviceScreen(
                         val liveWatchVersion by BluetoothSyncService.connectedWatchVersionName.collectAsState()
                         val watchVersion = liveWatchVersion ?: remember { PhonePreferences(context).lastKnownWatchVersion }
                         val displayWatchVersion = if (watchVersion.startsWith("v", ignoreCase = true)) watchVersion else "v$watchVersion"
-                        Text("Kolabee U8 Ultra · Firmware $displayWatchVersion is connected. Keep the watch launcher up to date via Bluetooth OTA.", color = TextDim, fontSize = 12.sp)
+                        val watchUpdateInfo by updateViewModel.watchUpdateInfo.collectAsState()
                         Surface(
-                            onClick = { updateViewModel.checkWatchUpdateManually() },
+                            onClick = {
+                                if (watchUpdateInfo != null) updateViewModel.updateWatch()
+                                else updateViewModel.checkWatchUpdateManually()
+                            },
                             modifier = Modifier.fillMaxWidth().height(40.dp),
                             shape = RoundedCornerShape(10.dp),
                             color = AccentCyan.copy(alpha = 0.12f)
@@ -186,7 +189,11 @@ fun DeviceScreen(
                             Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                                 Icon(Icons.Default.SystemUpdate, null, tint = AccentCyan, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(8.dp))
-                                Text("Check for Watch Updates", color = AccentCyan, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    if (watchUpdateInfo != null) "Update Watch (v${watchUpdateInfo!!.versionName} Available)"
+                                    else "Check for Watch Updates",
+                                    color = AccentCyan, fontSize = 13.sp, fontWeight = FontWeight.SemiBold
+                                )
                             }
                         }
                     }

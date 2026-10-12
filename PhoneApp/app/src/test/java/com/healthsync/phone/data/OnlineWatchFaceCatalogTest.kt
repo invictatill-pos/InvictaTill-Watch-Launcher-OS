@@ -65,15 +65,15 @@ class OnlineWatchFaceCatalogTest {
         assertEquals(8192, decodedChunk.chunkSize)
 
         val devInfo = DeviceInfoPayload(
-            versionName = "2.4.4",
-            versionCode = 20,
+            versionName = "2.4.5",
+            versionCode = 21,
             model = "Kolabee U8 Ultra",
             batteryPercent = 92
         )
         val devMsg = SyncMessage(MessageType.DEVICE_INFO, payload = gson.toJson(devInfo))
         val decodedDev = gson.fromJson(gson.fromJson(gson.toJson(devMsg), SyncMessage::class.java).payload, DeviceInfoPayload::class.java)
-        assertEquals("2.4.4", decodedDev.versionName)
-        assertEquals(20, decodedDev.versionCode)
+        assertEquals("2.4.5", decodedDev.versionName)
+        assertEquals(21, decodedDev.versionCode)
         assertEquals("Kolabee U8 Ultra", decodedDev.model)
         assertEquals(92, decodedDev.batteryPercent)
     }

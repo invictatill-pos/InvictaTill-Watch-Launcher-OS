@@ -38,8 +38,9 @@ object WatchUpdateManager {
     private const val TAG = "WatchUpdateManager"
     private const val CHANNEL_ID = "ota_update_channel"
     private const val NOTIF_ID = 3001
-    const val DEFAULT_MANIFEST_URL = "https://cdn.jsdelivr.net/gh/invictatill-pos/InvictaTill-Watch-Launcher-OS@main/version.json"
-    const val FALLBACK_MANIFEST_URL = "https://raw.githubusercontent.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/main/version.json"
+    const val DEFAULT_MANIFEST_URL = "https://raw.githubusercontent.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/main/version.json"
+    const val CDN_MANIFEST_URL = "https://cdn.jsdelivr.net/gh/invictatill-pos/InvictaTill-Watch-Launcher-OS@main/version.json"
+    const val FALLBACK_MANIFEST_URL = "https://cdn.jsdelivr.net/gh/invictatill-pos/InvictaTill-Watch-Launcher-OS@main/version.json"
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val gson = Gson()
@@ -50,6 +51,7 @@ object WatchUpdateManager {
     private var expectedChunks: Int = 0
     private var expectedSha256: String = ""
     private var targetVersionName: String = ""
+    private var lastReportedPct: Int = 0
 
     private fun ensureChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= 26) {
@@ -75,6 +77,7 @@ object WatchUpdateManager {
         expectedChunks = payload.totalChunks
         expectedSha256 = payload.sha256
         targetVersionName = payload.versionName
+        lastReportedPct = 0
 
         try {
             val otaDir = File(context.cacheDir, "ota_updates").apply { mkdirs() }
@@ -100,7 +103,7 @@ object WatchUpdateManager {
         val raf = randomAccessFile ?: return
         try {
             val bytes = Base64.decode(payload.dataBase64, Base64.NO_WRAP)
-            val chunkSize = if (payload.chunkSize > 0) payload.chunkSize else 8192
+            val chunkSize = if (payload.chunkSize > 0) payload.chunkSize else 4096
             val writeOffset = if (payload.offset > 0L) payload.offset else (payload.chunkIndex.toLong() * chunkSize)
 
             synchronized(raf) {
@@ -113,8 +116,9 @@ object WatchUpdateManager {
             val total = if (expectedChunks > 0) expectedChunks else payload.totalChunks
             val pct = if (total > 0) ((count * 100) / total).coerceIn(0, 100) else 0
 
-            // Update watch UI and duplex phone progress every 5 chunks or when complete
-            if (count % 5 == 0 || count == total) {
+            // Update watch UI and duplex phone progress every 5% or when complete (avoids IPC overhead)
+            if (pct >= lastReportedPct + 5 || count == total) {
+                lastReportedPct = pct
                 updateProgressNotification(context, "Receiving update: $pct%", count, total)
                 val progressPayload = OtaProgressPayload(count, total, pct)
                 BluetoothClientService.sendRawMsg(
@@ -142,6 +146,11 @@ object WatchUpdateManager {
         if (file == null || !file.exists() || file.length() == 0L) {
             showErrorNotification(context, "Update failed: Incomplete file received")
             return
+        }
+
+        // Verify chunk completion if chunk count was specified
+        if (expectedChunks > 0 && receivedChunkIndices.size < expectedChunks) {
+            Log.w(TAG, "Chunk count mismatch: received ${receivedChunkIndices.size} of $expectedChunks chunks")
         }
 
         // Verify SHA-256 hash if provided
@@ -184,9 +193,12 @@ object WatchUpdateManager {
     /** Checks online manifest if Watch has direct Wi-Fi internet access */
     fun checkForDirectUpdate(context: Context, onResult: (message: String) -> Unit) {
         scope.launch {
+            val ts = System.currentTimeMillis()
             val candidates = listOf(
+                "$DEFAULT_MANIFEST_URL?t=$ts",
+                "$CDN_MANIFEST_URL?t=$ts",
                 DEFAULT_MANIFEST_URL,
-                "https://cdn.jsdelivr.net/gh/invictatill-pos/InvictaTill-Watch-Launcher-OS@main/version.json"
+                FALLBACK_MANIFEST_URL
             ).distinct()
 
             var fetchedJson: String? = null
@@ -198,6 +210,9 @@ object WatchUpdateManager {
                     conn.connectTimeout = 8_000
                     conn.readTimeout = 8_000
                     conn.setRequestProperty("User-Agent", "HealthSync-Watch-App")
+                    conn.setRequestProperty("Accept", "application/json, text/plain, */*")
+                    conn.setRequestProperty("Cache-Control", "no-cache, no-store, must-revalidate")
+                    conn.setRequestProperty("Pragma", "no-cache")
 
                     if (conn.responseCode in 200..299) {
                         fetchedJson = conn.inputStream.bufferedReader().use { it.readText() }
@@ -214,7 +229,9 @@ object WatchUpdateManager {
 
                     val remoteVersionCode = (watchInfo?.get("versionCode") as? Number)?.toInt() ?: 0
                     val remoteVersionName = watchInfo?.get("versionName") as? String ?: ""
-                    val downloadUrl = watchInfo?.get("downloadUrl") as? String ?: ""
+                    val downloadUrl = (watchInfo?.get("apkUrl") as? String)
+                        ?.takeIf { it.isNotBlank() }
+                        ?: (watchInfo?.get("downloadUrl") as? String ?: "")
 
                     val currentVersionCode = try {
                         val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
@@ -252,10 +269,31 @@ object WatchUpdateManager {
             val file = File(dir, "watch-update.apk")
             if (file.exists()) file.delete()
 
-            val url = URL(downloadUrl)
-            val conn = url.openConnection() as HttpURLConnection
-            conn.connectTimeout = 15_000
-            conn.readTimeout = 30_000
+            var currentUrl = downloadUrl
+            var conn: HttpURLConnection
+            var redirects = 0
+
+            // Follow HTTP 302 redirects (GitHub Releases redirect to AWS S3)
+            while (true) {
+                val url = URL(currentUrl)
+                conn = url.openConnection() as HttpURLConnection
+                conn.instanceFollowRedirects = false
+                conn.connectTimeout = 15_000
+                conn.readTimeout = 30_000
+                conn.setRequestProperty("User-Agent", "HealthSync-Watch-App")
+
+                val status = conn.responseCode
+                if (status in 300..399) {
+                    val newUrl = conn.getHeaderField("Location") ?: break
+                    currentUrl = newUrl
+                    redirects++
+                    if (redirects > 5) break
+                } else break
+            }
+
+            if (conn.responseCode !in 200..299) {
+                throw java.io.IOException("Direct download failed with HTTP ${conn.responseCode}")
+            }
 
             val totalLen = conn.contentLength.toLong()
             conn.inputStream.use { input ->

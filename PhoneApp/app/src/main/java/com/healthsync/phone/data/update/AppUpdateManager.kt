@@ -24,24 +24,26 @@ import java.security.MessageDigest
 
 object AppUpdateManager {
     private const val TAG = "AppUpdateManager"
-    const val DEFAULT_MANIFEST_URL = "https://cdn.jsdelivr.net/gh/invictatill-pos/InvictaTill-Watch-Launcher-OS@main/version.json"
-    const val FALLBACK_MANIFEST_URL = "https://raw.githubusercontent.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/main/version.json"
+    const val DEFAULT_MANIFEST_URL = "https://raw.githubusercontent.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/main/version.json"
+    const val CDN_MANIFEST_URL = "https://cdn.jsdelivr.net/gh/invictatill-pos/InvictaTill-Watch-Launcher-OS@main/version.json"
+    const val FALLBACK_MANIFEST_URL = "https://cdn.jsdelivr.net/gh/invictatill-pos/InvictaTill-Watch-Launcher-OS@main/version.json"
+    private const val GITHUB_RELEASES_API = "https://api.github.com/repos/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/latest"
 
     var lastError: String? = null
         private set
 
     private val gson = Gson()
 
-    /** Fetches remote version manifest from CDN or fallback GitHub URL */
+    /** Fetches remote version manifest from raw GitHub, jsDelivr CDN, or GitHub Releases API */
     suspend fun fetchManifest(manifestUrl: String = DEFAULT_MANIFEST_URL): UpdateManifest? = withContext(Dispatchers.IO) {
         lastError = null
         val ts = System.currentTimeMillis()
         val candidates = listOf(
+            "$DEFAULT_MANIFEST_URL?t=$ts",
+            "$CDN_MANIFEST_URL?t=$ts",
             manifestUrl,
-            "https://cdn.jsdelivr.net/gh/invictatill-pos/InvictaTill-Watch-Launcher-OS@latest/version.json?t=$ts",
-            "https://raw.githubusercontent.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/main/version.json?t=$ts",
             DEFAULT_MANIFEST_URL,
-            FALLBACK_MANIFEST_URL
+            CDN_MANIFEST_URL
         ).distinct()
 
         for (candidate in candidates) {
@@ -104,6 +106,45 @@ object AppUpdateManager {
                 Log.w(TAG, "Error fetching from $candidate: ${e.message}")
             }
         }
+
+        // 3. Fallback: Query GitHub Releases API directly if raw manifest endpoints were blocked
+        try {
+            val apiUrl = URL(GITHUB_RELEASES_API)
+            val apiConn = apiUrl.openConnection() as HttpURLConnection
+            apiConn.connectTimeout = 8_000
+            apiConn.readTimeout = 8_000
+            apiConn.setRequestProperty("User-Agent", "HealthSync-Phone-App")
+            apiConn.setRequestProperty("Accept", "application/vnd.github.v3+json")
+            if (apiConn.responseCode in 200..299) {
+                val apiJson = apiConn.inputStream.bufferedReader().use { it.readText() }
+                val releaseObj = org.json.JSONObject(apiJson)
+                val tagName = releaseObj.optString("tag_name", "").removePrefix("v")
+                val body = releaseObj.optString("body", "")
+                val assets = releaseObj.optJSONArray("assets")
+                var phoneApkUrl = ""
+                var watchApkUrl = ""
+                if (assets != null) {
+                    for (i in 0 until assets.length()) {
+                        val asset = assets.getJSONObject(i)
+                        val name = asset.optString("name", "")
+                        val dl = asset.optString("browser_download_url", "")
+                        if (name.contains("Phone", ignoreCase = true) && name.endsWith(".apk")) phoneApkUrl = dl
+                        if (name.contains("Watch", ignoreCase = true) && name.endsWith(".apk")) watchApkUrl = dl
+                    }
+                }
+                if (phoneApkUrl.isNotBlank() || watchApkUrl.isNotBlank()) {
+                    val parts = tagName.split(".")
+                    val derivedCode = (parts.getOrNull(0)?.toIntOrNull() ?: 2) * 10 + (parts.getOrNull(1)?.toIntOrNull() ?: 4)
+                    return@withContext UpdateManifest(
+                        phone = AppVersionInfo(versionCode = derivedCode, versionName = tagName, apkUrl = phoneApkUrl, changelog = body),
+                        watch = AppVersionInfo(versionCode = derivedCode + 6, versionName = tagName, apkUrl = watchApkUrl, changelog = body)
+                    )
+                }
+            }
+        } catch (apiErr: Exception) {
+            Log.w(TAG, "GitHub Releases API fallback failed: ${apiErr.message}")
+        }
+
         null
     }
 
@@ -135,6 +176,12 @@ object AppUpdateManager {
                     redirects++
                     if (redirects > 5) break
                 } else break
+            }
+
+            if (connection.responseCode !in 200..299) {
+                lastError = "Download server returned HTTP ${connection.responseCode}"
+                Log.e(TAG, "Download failed: HTTP ${connection.responseCode} for $currentUrl")
+                return@withContext null
             }
 
             val totalLength = connection.contentLength.toLong()
@@ -191,7 +238,7 @@ object AppUpdateManager {
         if (!apkFile.exists() || apkFile.length() == 0L) return@withContext false
         val bytes = apkFile.readBytes()
         val sha256 = calculateSha256(bytes)
-        val chunkSize = 8 * 1024 // 8 KB chunks for smooth, reliable RFCOMM throughput
+        val chunkSize = 4096 // 4 KB chunks for safe, rock-solid RFCOMM buffer throughput
         val totalChunks = (bytes.size + chunkSize - 1) / chunkSize
 
         Log.i(TAG, "Starting Watch OTA: $versionName (build $versionCode), ${bytes.size} bytes across $totalChunks chunks (SHA-256: $sha256)")
@@ -205,9 +252,9 @@ object AppUpdateManager {
             Log.w(TAG, "Bluetooth not connected; unable to start OTA")
             return@withContext false
         }
-        delay(300)
+        delay(400) // Allow watch to allocate RandomAccessFile and prepare buffers
 
-        // 2. Stream OTA chunks with suspending backpressure
+        // 2. Stream OTA chunks with gentle, robust RFCOMM pacing
         for (i in 0 until totalChunks) {
             val start = i * chunkSize
             val end = minOf(start + chunkSize, bytes.size)
@@ -232,14 +279,16 @@ object AppUpdateManager {
             val pct = ((i + 1) * 100) / totalChunks
             onProgress(pct, i + 1, totalChunks)
 
-            // Pacing: micro-delay every 4 chunks to keep socket buffers balanced
-            if (i % 4 == 0) {
-                delay(15)
+            // Pacing: 35ms per 4KB chunk (~100 KB/s), perfectly matching RFCOMM hardware bandwidth
+            delay(35)
+            // Periodic buffer drain pause every 25 chunks (~100 KB)
+            if (i > 0 && i % 25 == 0) {
+                delay(120)
             }
         }
 
         // 3. Send OTA_COMPLETE
-        delay(200)
+        delay(400)
         val completePayload = OtaCompletePayload(true, sha256)
         val finished = BluetoothSyncService.sendStreamingSyncMessage(
             SyncMessage(MessageType.OTA_COMPLETE, payload = gson.toJson(completePayload))
