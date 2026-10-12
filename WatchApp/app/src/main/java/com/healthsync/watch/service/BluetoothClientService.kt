@@ -210,7 +210,7 @@ class BluetoothClientService : Service() {
                     val pInfo = packageManager.getPackageInfo(packageName, 0)
                     val vCode = if (Build.VERSION.SDK_INT >= 28) pInfo.longVersionCode.toInt() else @Suppress("DEPRECATION") pInfo.versionCode
                     val devInfo = DeviceInfoPayload(
-                        versionName = pInfo.versionName ?: "2.4.5",
+                        versionName = pInfo.versionName ?: "2.5.0",
                         versionCode = vCode,
                         model = "Kolabee U8 Ultra",
                         batteryPercent = try {

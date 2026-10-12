@@ -7,13 +7,16 @@ import org.junit.Test
 
 class WatchFaceCatalogTest {
     @Test fun curatedFacesAreSelectableAndBothAreNative() {
-        assertEquals(2, WatchFaceCatalog.styles.size)
+        assertEquals(5, WatchFaceCatalog.styles.size)
         assertEquals(WatchFaceCatalog.styles.size, WatchFaceCatalog.styles.toSet().size)
         assertTrue(WatchFaceCatalog.isNative("orbit"))
         assertTrue(WatchFaceCatalog.isNative("chrono"))
         assertTrue(WatchFaceCatalog.isNative("classic"))
+        assertTrue(WatchFaceCatalog.isNative("neon"))
+        assertTrue(WatchFaceCatalog.isNative("bauhaus"))
         assertFalse(WatchFaceCatalog.isNative("unknown"))
         assertEquals("orbit", WatchFaceCatalog.entry("unknown").id)
+        assertEquals("classic", WatchFaceCatalog.entry("classic").id)
     }
 
     @Test fun everyFaceHasAConcreteSupportedAmbientComposition() {
@@ -25,7 +28,9 @@ class WatchFaceCatalogTest {
         }
         assertEquals("chrono_dim", WatchFaceCatalog.ambientStyleForFace("chrono"))
         assertEquals("chrono_dim", WatchFaceCatalog.ambientStyleForFace("classic"))
+        assertEquals("chrono_dim", WatchFaceCatalog.ambientStyleForFace("bauhaus"))
         assertEquals("digital", WatchFaceCatalog.ambientStyleForFace("orbit"))
+        assertEquals("digital", WatchFaceCatalog.ambientStyleForFace("neon"))
     }
 
     @Test fun unsupportedSavedAmbientStylesRecoverToMatchingTheFace() {

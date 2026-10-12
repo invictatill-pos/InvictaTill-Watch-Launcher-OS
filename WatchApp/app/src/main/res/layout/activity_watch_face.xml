@@ -9,6 +9,27 @@
         android:layout_height="match_parent"
         android:visibility="gone" />
 
+    <!-- Pre-installed Retro Illuminator Casio LCD Watch Face -->
+    <com.healthsync.watch.ui.CasioWatchFaceView
+        android:id="@+id/casioWatchFaceView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
+    <!-- Pre-installed Cyberpunk Neon HUD Watch Face -->
+    <com.healthsync.watch.ui.NeonHudWatchFaceView
+        android:id="@+id/neonHudWatchFaceView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
+    <!-- Pre-installed Bauhaus Minimalist Luxe Watch Face -->
+    <com.healthsync.watch.ui.BauhausWatchFaceView
+        android:id="@+id/bauhausWatchFaceView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
     <!-- Dynamic Downloadable Watch Face Engine View (.hswf) -->
     <com.healthsync.watch.ui.DynamicWatchFaceView
         android:id="@+id/dynamicWatchFaceView"

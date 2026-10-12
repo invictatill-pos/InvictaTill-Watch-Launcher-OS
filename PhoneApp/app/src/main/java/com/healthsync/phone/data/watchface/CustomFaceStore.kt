@@ -111,7 +111,9 @@ class CustomFaceStore private constructor(private val context: Context) {
             createPhotoDialTemplate(),
             createExecutiveChronoTemplate(),
             createCyberNeonTemplate(),
-            createMinimalBauhausTemplate()
+            createMinimalBauhausTemplate(),
+            createSportsPaceTemplate(),
+            createRetroLcdTemplate()
         )
     }
 
@@ -315,6 +317,100 @@ class CustomFaceStore private constructor(private val context: Context) {
             ),
             complications = ComplicationsConfig(
                 battery = ComplicationWidget(enabled = true, xRatio = 0.5f, yRatio = 0.32f, style = "text_only", colorHex = "#737373")
+            )
+        )
+    }
+
+    private fun createSportsPaceTemplate(): HswfPackage {
+        return HswfPackage(
+            id = "template_sports",
+            name = "Velocity Sport",
+            author = "HealthSync Studio",
+            description = "High-energy sports performance dial with pacing arcs and bold digital clock.",
+            type = "hybrid",
+            background = BackgroundConfig(
+                type = "gradient_radial",
+                colorHex = "#05070A",
+                gradientStartHex = "#0C131E",
+                gradientEndHex = "#020305"
+            ),
+            dial = DialConfig(
+                showTicks = true,
+                tickCount = 60,
+                majorTickLength = 12f,
+                minorTickLength = 5f,
+                tickWidth = 2f,
+                majorTickColorHex = "#10B981",
+                minorTickColorHex = "#1E293B",
+                showNumbers = false
+            ),
+            hands = HandsConfig(
+                hourHand = HandStyle(lengthRatio = 0.48f, widthDp = 4.8f, colorHex = "#FFFFFF", shape = "sword", capRadius = 6f),
+                minuteHand = HandStyle(lengthRatio = 0.72f, widthDp = 3.4f, colorHex = "#10B981", shape = "sword", capRadius = 5f),
+                secondHand = HandStyle(lengthRatio = 0.85f, widthDp = 1.6f, colorHex = "#06B6D4", shape = "needle", smoothSweep = true)
+            ),
+            digitalClock = DigitalClockConfig(
+                enabled = true,
+                format = "HH:mm",
+                xRatio = 0.5f,
+                yRatio = 0.32f,
+                fontSizeSp = 28f,
+                colorHex = "#FFFFFF",
+                fontFamily = "sans"
+            ),
+            date = DateConfig(
+                enabled = true,
+                format = "EEE d",
+                xRatio = 0.5f,
+                yRatio = 0.20f,
+                fontSizeSp = 12f,
+                colorHex = "#94A3B8"
+            ),
+            complications = ComplicationsConfig(
+                heartRate = ComplicationWidget(enabled = true, xRatio = 0.28f, yRatio = 0.65f, style = "arc_gauge", colorHex = "#EF4444", accentColorHex = "#1E293B"),
+                steps = ComplicationWidget(enabled = true, xRatio = 0.72f, yRatio = 0.65f, style = "arc_gauge", colorHex = "#10B981", accentColorHex = "#1E293B"),
+                battery = ComplicationWidget(enabled = true, xRatio = 0.5f, yRatio = 0.80f, style = "text_only", colorHex = "#06B6D4")
+            )
+        )
+    }
+
+    private fun createRetroLcdTemplate(): HswfPackage {
+        return HswfPackage(
+            id = "template_retro_lcd",
+            name = "Digital Retro 1991",
+            author = "HealthSync Studio",
+            description = "Iconic slanted digital LCD matrix with authentic green phosphor look.",
+            type = "digital",
+            background = BackgroundConfig(
+                type = "solid",
+                colorHex = "#08100C"
+            ),
+            dial = DialConfig(showTicks = false, showNumbers = false),
+            hands = null,
+            digitalClock = DigitalClockConfig(
+                enabled = true,
+                format = "HH:mm",
+                xRatio = 0.5f,
+                yRatio = 0.36f,
+                fontSizeSp = 48f,
+                colorHex = "#34D399",
+                glowColorHex = "#059669",
+                isBold = true,
+                fontFamily = "monospace"
+            ),
+            date = DateConfig(
+                enabled = true,
+                format = "EEE, MMM d",
+                xRatio = 0.5f,
+                yRatio = 0.20f,
+                fontSizeSp = 13f,
+                colorHex = "#34D399",
+                hasFrame = false
+            ),
+            complications = ComplicationsConfig(
+                heartRate = ComplicationWidget(enabled = true, xRatio = 0.30f, yRatio = 0.68f, style = "arc_gauge", colorHex = "#F87171", accentColorHex = "#1E293B"),
+                steps = ComplicationWidget(enabled = true, xRatio = 0.70f, yRatio = 0.68f, style = "arc_gauge", colorHex = "#34D399", accentColorHex = "#1E293B"),
+                battery = ComplicationWidget(enabled = true, xRatio = 0.5f, yRatio = 0.52f, style = "text_only", colorHex = "#34D399")
             )
         )
     }

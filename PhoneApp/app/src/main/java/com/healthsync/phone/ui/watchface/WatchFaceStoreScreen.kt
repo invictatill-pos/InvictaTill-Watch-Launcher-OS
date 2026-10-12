@@ -66,7 +66,7 @@ fun WatchFaceStoreScreen(
     var searchQuery by remember { mutableStateOf("") }
     var selectedItemForDetail by remember { mutableStateOf<StoreItem?>(null) }
 
-    val categories = listOf("All", "Luxury", "Sports", "Minimal", "Cyberpunk")
+    val categories = listOf("All", "Luxury", "Sports", "Cyberpunk", "Retro", "Minimal", "Art")
 
     // If Creator mode is active, display the full creator studio
     if (currentSection == StudioSection.CREATOR) {

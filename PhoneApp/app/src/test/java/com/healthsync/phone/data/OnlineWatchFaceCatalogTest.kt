@@ -12,13 +12,15 @@ class OnlineWatchFaceCatalogTest {
     @Test
     fun catalogContainsAllCuratedWatchFaces() {
         val items = OnlineWatchFaceCatalog.items
-        assertTrue("Catalog should contain at least 6 dials", items.size >= 6)
+        assertTrue("Catalog should contain at least 50 dials", items.size >= 50)
 
         val categories = items.map { it.category }.distinct()
         assertTrue("Contains Luxury category", categories.contains("Luxury"))
         assertTrue("Contains Sports category", categories.contains("Sports"))
         assertTrue("Contains Minimal category", categories.contains("Minimal"))
         assertTrue("Contains Cyberpunk category", categories.contains("Cyberpunk"))
+        assertTrue("Contains Retro category", categories.contains("Retro"))
+        assertTrue("Contains Art category", categories.contains("Art"))
     }
 
     @Test
@@ -65,15 +67,15 @@ class OnlineWatchFaceCatalogTest {
         assertEquals(8192, decodedChunk.chunkSize)
 
         val devInfo = DeviceInfoPayload(
-            versionName = "2.4.5",
-            versionCode = 21,
+            versionName = "2.5.0",
+            versionCode = 22,
             model = "Kolabee U8 Ultra",
             batteryPercent = 92
         )
         val devMsg = SyncMessage(MessageType.DEVICE_INFO, payload = gson.toJson(devInfo))
         val decodedDev = gson.fromJson(gson.fromJson(gson.toJson(devMsg), SyncMessage::class.java).payload, DeviceInfoPayload::class.java)
-        assertEquals("2.4.5", decodedDev.versionName)
-        assertEquals(21, decodedDev.versionCode)
+        assertEquals("2.5.0", decodedDev.versionName)
+        assertEquals(22, decodedDev.versionCode)
         assertEquals("Kolabee U8 Ultra", decodedDev.model)
         assertEquals(92, decodedDev.batteryPercent)
     }

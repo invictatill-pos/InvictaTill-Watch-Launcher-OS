@@ -9,8 +9,11 @@ object WatchFaceCatalog {
                      val native: Boolean = true, val clockShortcuts: Boolean = true)
 
     val nativeEntries = listOf(
-        Entry("orbit", "Orbit", "Mint goal arc with health complications", native = true, clockShortcuts = true),
-        Entry("chrono", "Chrono Ultra", "Luxury sports chronograph with luminous hands & live subdials", native = true, clockShortcuts = true)
+        Entry("orbit", "Orbit Pro", "Mint activity goal arc with live complications", native = true, clockShortcuts = true),
+        Entry("chrono", "Chrono Ultra", "Luxury sports chronograph with luminous hands & live subdials", native = true, clockShortcuts = true),
+        Entry("classic", "Retro Illuminator", "Vintage digital LCD with cyan backlight & health odometer", native = true, clockShortcuts = false),
+        Entry("neon", "Cyberpunk HUD", "Futuristic matrix with ECG pulse wave & 4 neon themes", native = true, clockShortcuts = true),
+        Entry("bauhaus", "Bauhaus Minimal", "Swiss luxury executive dial with fine batons & date aperture", native = true, clockShortcuts = true)
     )
     val entries = nativeEntries
     val styles get() = nativeEntries.map { it.id }
@@ -32,12 +35,11 @@ object WatchFaceCatalog {
         return list
     }
 
-    fun isNative(style: String) = nativeEntries.any { it.id == style } || style == "classic"
+    fun isNative(style: String) = nativeEntries.any { it.id == style }
 
     fun isDynamic(style: String) = style.startsWith("dynamic_")
 
     fun entry(style: String, context: Context? = null): Entry {
-        if (style == "classic") return nativeEntries[1]
         val direct = nativeEntries.firstOrNull { it.id == style }
         if (direct != null) return direct
 
@@ -62,7 +64,7 @@ object WatchFaceCatalog {
     fun normalizeAmbientStyle(value: String) = value.takeIf { it in ambientStyles } ?: "face"
 
     fun ambientStyleForFace(style: String) = when (style) {
-        "chrono", "classic" -> "chrono_dim"
+        "chrono", "classic", "bauhaus" -> "chrono_dim"
         else -> "digital"
     }
 }

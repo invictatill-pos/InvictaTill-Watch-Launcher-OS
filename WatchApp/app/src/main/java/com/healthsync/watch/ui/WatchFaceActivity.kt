@@ -68,6 +68,9 @@ class WatchFaceActivity : AppCompatActivity() {
     }
 
     private lateinit var chronoWatchFaceView: ChronoWatchFaceView
+    private lateinit var casioWatchFaceView: CasioWatchFaceView
+    private lateinit var neonHudWatchFaceView: NeonHudWatchFaceView
+    private lateinit var bauhausWatchFaceView: BauhausWatchFaceView
     private lateinit var dynamicWatchFaceView: DynamicWatchFaceView
     private lateinit var circularWatchFaceView: CircularWatchFaceView
     private lateinit var orbitFace: OrbitWatchFaceView
@@ -194,6 +197,9 @@ class WatchFaceActivity : AppCompatActivity() {
         setWatchFullscreen()
 
         chronoWatchFaceView = findViewById(R.id.chronoWatchFaceView)
+        casioWatchFaceView = findViewById(R.id.casioWatchFaceView)
+        neonHudWatchFaceView = findViewById(R.id.neonHudWatchFaceView)
+        bauhausWatchFaceView = findViewById(R.id.bauhausWatchFaceView)
         dynamicWatchFaceView = findViewById(R.id.dynamicWatchFaceView)
         circularWatchFaceView = findViewById(R.id.circularWatchFaceView)
         orbitFace = findViewById(R.id.orbitWatchFace)
@@ -229,13 +235,23 @@ class WatchFaceActivity : AppCompatActivity() {
 
         // Configure Chrono watchface interactive buttons
         chronoWatchFaceView.onModeClick = {
-            val next = if (preferences.watchFaceStyle == "chrono" || preferences.watchFaceStyle == "classic") "orbit" else "chrono"
-            preferences.watchFaceStyle = next
+            preferences.watchFaceStyle = "classic"
             updateWatchFaceVisibility()
-            Toast.makeText(this, if (next == "orbit") "Orbit Face" else "Chrono Ultra Face", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Retro Illuminator Face", Toast.LENGTH_SHORT).show()
         }
         chronoWatchFaceView.onStartWorkoutClick = { launchWorkout() }
         chronoWatchFaceView.onHistoryClick = {
+            startActivity(Intent(this, WatchHistoryActivity::class.java))
+        }
+
+        // Configure Casio watchface interactive buttons
+        casioWatchFaceView.onModeClick = {
+            preferences.watchFaceStyle = "neon"
+            updateWatchFaceVisibility()
+            Toast.makeText(this, "Cyberpunk HUD Face", Toast.LENGTH_SHORT).show()
+        }
+        casioWatchFaceView.onStartWorkoutClick = { launchWorkout() }
+        casioWatchFaceView.onHistoryClick = {
             startActivity(Intent(this, WatchHistoryActivity::class.java))
         }
 
@@ -323,6 +339,9 @@ class WatchFaceActivity : AppCompatActivity() {
         circularWatchFaceView.setAmbientMode(ambient)
         orbitFace.setAmbient(ambient)
         chronoWatchFaceView.setAmbientMode(ambient)
+        casioWatchFaceView.setAmbientMode(ambient)
+        neonHudWatchFaceView.setAmbientMode(ambient)
+        bauhausWatchFaceView.setAmbientMode(ambient)
         dynamicWatchFaceView.setAmbientMode(ambient)
         window.attributes = window.attributes.apply {
             screenBrightness = if (ambient) preferences.aodBrightness else interactiveBrightness
@@ -618,6 +637,9 @@ class WatchFaceActivity : AppCompatActivity() {
         circularWatchFaceView.setAodStyle(if (preferences.aodStyle == "face")
             WatchFaceCatalog.ambientStyleForFace(style) else preferences.aodStyle)
         chronoWatchFaceView.setAodStyle(preferences.aodStyle)
+        casioWatchFaceView.setAodStyle(preferences.aodStyle)
+        neonHudWatchFaceView.setAodStyle(preferences.aodStyle)
+        bauhausWatchFaceView.setAodStyle(preferences.aodStyle)
         dynamicWatchFaceView.setAodStyle(preferences.aodStyle)
         circularWatchFaceView.visibility = View.GONE
 
@@ -634,8 +656,11 @@ class WatchFaceActivity : AppCompatActivity() {
             dynamicWatchFaceView.visibility = View.GONE
         }
 
-        orbitFace.visibility = if ((!isAmbient && style == "orbit") || (isAmbient && style == "orbit")) View.VISIBLE else View.GONE
-        chronoWatchFaceView.visibility = if (style == "chrono" || style == "classic") View.VISIBLE else View.GONE
+        orbitFace.visibility = if (style == "orbit") View.VISIBLE else View.GONE
+        chronoWatchFaceView.visibility = if (style == "chrono") View.VISIBLE else View.GONE
+        casioWatchFaceView.visibility = if (style == "classic") View.VISIBLE else View.GONE
+        neonHudWatchFaceView.visibility = if (style == "neon") View.VISIBLE else View.GONE
+        bauhausWatchFaceView.visibility = if (style == "bauhaus") View.VISIBLE else View.GONE
         shellDock.visibility = if (clockShortcuts && !isAmbient && surface == null) View.VISIBLE else View.GONE
         val wallpaper = preferences.wallpaperBackdropEnabled && !isAmbient && surface == null && style != "classic" && style != "chrono" && !isDynamic
         if (wallpaper) window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
@@ -660,6 +685,9 @@ class WatchFaceActivity : AppCompatActivity() {
         circularWatchFaceView.updateTime(nowCal)
         orbitFace.updateTime(nowCal)
         if (chronoWatchFaceView.visibility == View.VISIBLE || isAmbient) chronoWatchFaceView.updateTime(nowCal)
+        if (casioWatchFaceView.visibility == View.VISIBLE || isAmbient) casioWatchFaceView.updateTime(nowCal)
+        if (neonHudWatchFaceView.visibility == View.VISIBLE || isAmbient) neonHudWatchFaceView.updateTime(nowCal)
+        if (bauhausWatchFaceView.visibility == View.VISIBLE || isAmbient) bauhausWatchFaceView.updateTime(nowCal)
         if (dynamicWatchFaceView.visibility == View.VISIBLE || isAmbient) dynamicWatchFaceView.updateTime(nowCal)
 
         val heart = SensorCollectorService.watchFaceHeartRate(nowCal.timeInMillis)
@@ -670,6 +698,14 @@ class WatchFaceActivity : AppCompatActivity() {
         circularWatchFaceView.setHeartRateUnverified(heart.sensorReading)
         chronoWatchFaceView.setHeartRateTime(heart.capturedAt)
         chronoWatchFaceView.setHeartRateUnverified(heart.sensorReading)
+        casioWatchFaceView.setHeartRateTime(heart.capturedAt)
+        casioWatchFaceView.setHeartRateUnverified(heart.sensorReading)
+        neonHudWatchFaceView.setHeartRate(bpm)
+        neonHudWatchFaceView.setHeartRateTime(heart.capturedAt)
+        neonHudWatchFaceView.setHeartRateUnverified(heart.sensorReading)
+        bauhausWatchFaceView.setHeartRate(bpm)
+        bauhausWatchFaceView.setHeartRateTime(heart.capturedAt)
+        bauhausWatchFaceView.setHeartRateUnverified(heart.sensorReading)
         dynamicWatchFaceView.setHeartRateTime(heart.capturedAt)
         dynamicWatchFaceView.setHeartRateUnverified(heart.sensorReading)
         val steps = SensorCollectorService.latestSteps.coerceAtLeast(0)
@@ -694,10 +730,29 @@ class WatchFaceActivity : AppCompatActivity() {
         circularWatchFaceView.setBluetoothConnected(connected)
         circularWatchFaceView.setBatteryLevel(battery)
 
-        // Update Chrono Ultra Watch Face (AOD & Interactive)
+        // Update Chrono Ultra Watch Face
         chronoWatchFaceView.setHealthData(bpm, steps, stepGoal, dailyCalories, dailyDistanceKm)
         chronoWatchFaceView.setBluetoothConnected(connected)
         chronoWatchFaceView.setBatteryLevel(battery)
+
+        // Update Retro Illuminator Watch Face
+        casioWatchFaceView.setHealthData(bpm, steps, stepGoal, dailyCalories, dailyDistanceKm)
+        casioWatchFaceView.setBluetoothConnected(connected)
+        casioWatchFaceView.setBatteryLevel(battery)
+
+        // Update Cyberpunk Neon HUD Watch Face
+        neonHudWatchFaceView.setSteps(steps, stepGoal)
+        neonHudWatchFaceView.setCalories(dailyCalories.toDouble())
+        neonHudWatchFaceView.setDistance(dailyDistanceKm.toDouble())
+        neonHudWatchFaceView.setBluetoothConnected(connected)
+        neonHudWatchFaceView.setBatteryLevel(battery)
+
+        // Update Bauhaus Minimal Watch Face
+        bauhausWatchFaceView.setSteps(steps, stepGoal)
+        bauhausWatchFaceView.setCalories(dailyCalories.toDouble())
+        bauhausWatchFaceView.setDistance(dailyDistanceKm.toDouble())
+        bauhausWatchFaceView.setBluetoothConnected(connected)
+        bauhausWatchFaceView.setBatteryLevel(battery)
 
         // Update Dynamic Watch Face (.hswf)
         dynamicWatchFaceView.setHealthData(bpm, steps, stepGoal, dailyCalories, dailyDistanceKm)

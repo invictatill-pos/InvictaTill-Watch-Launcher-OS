@@ -41,7 +41,6 @@ import com.healthsync.phone.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Calendar
-import java.util.UUID
 
 enum class CreatorTab(val label: String, val icon: ImageVector) {
     TEMPLATES("Presets", Icons.Default.AutoAwesome),
@@ -52,11 +51,19 @@ enum class CreatorTab(val label: String, val icon: ImageVector) {
     COMPLICATIONS("Complications", Icons.Default.Speed)
 }
 
+enum class WatchCaseStyle(val label: String, val outerColor: Color, val innerColor: Color, val accentColor: Color) {
+    TITANIUM_ULTRA("Titanium Ultra", Color(0xFF334155), Color(0xFF1E293B), Color(0xFFF97316)),
+    STEEL_MIRROR("Silver Steel", Color(0xFF94A3B8), Color(0xFF475569), Color(0xFF38BDF8)),
+    MATTE_BLACK("Midnight Black", Color(0xFF18181B), Color(0xFF09090B), Color(0xFF10B981)),
+    ROSE_GOLD("Rose Gold", Color(0xFFB45309), Color(0xFF78350F), Color(0xFFF43F5E))
+}
+
 /**
- * Phase 5: Watch Face Creator Studio.
- * Allows users to design custom watch faces, import personal photos,
- * tweak dials, hands, and complications with real-time 1:1 Canvas preview,
- * save to local library, and beam directly to Kolabee U8 Ultra.
+ * Supercharged Watch Face Creator Studio.
+ * Allows users to design custom watch faces, import personal photos with dim filters,
+ * customize dials, hands, and complications with real-time 1:1 Canvas preview,
+ * interactive watch case frames, simulation test bench, save to local library,
+ * and beam directly to Kolabee U8 Ultra over Bluetooth.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,7 +75,6 @@ fun WatchFaceCreatorScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val connState by BluetoothSyncService.connectionState.collectAsState()
-    val faceAck by BluetoothSyncService.watchFaceAck.collectAsState()
 
     val faceStore = remember { CustomFaceStore.getInstance(context) }
     val templates = remember { faceStore.getTemplates() }
@@ -87,10 +93,11 @@ fun WatchFaceCreatorScreen(
     var selectedTab by remember { mutableStateOf(CreatorTab.TEMPLATES) }
     var isAmbientPreview by remember { mutableStateOf(false) }
     var faceNameInput by remember { mutableStateOf(editingPackage.name) }
+    var selectedCaseStyle by remember { mutableStateOf(WatchCaseStyle.TITANIUM_ULTRA) }
+    var showTestBench by remember { mutableStateOf(false) }
 
     // Transmission status
     var isBeaming by remember { mutableStateOf(false) }
-    var beamProgressText by remember { mutableStateOf("") }
     var showSuccessDialog by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
@@ -99,8 +106,14 @@ fun WatchFaceCreatorScreen(
     var tickMinutes by remember { mutableIntStateOf(10) }
     var tickHours by remember { mutableIntStateOf(10) }
 
-    LaunchedEffect(Unit) {
-        while (true) {
+    // Interactive Test Bench Values
+    var testBattery by remember { mutableFloatStateOf(85f) }
+    var testSteps by remember { mutableFloatStateOf(5840f) }
+    var testHeartRate by remember { mutableFloatStateOf(72f) }
+    var liveTicking by remember { mutableStateOf(true) }
+
+    LaunchedEffect(liveTicking) {
+        while (liveTicking) {
             val cal = Calendar.getInstance()
             tickHours = cal.get(Calendar.HOUR)
             tickMinutes = cal.get(Calendar.MINUTE)
@@ -147,7 +160,7 @@ fun WatchFaceCreatorScreen(
                 title = {
                     Column {
                         Text("Watch Face Creator", color = TextWhite, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                        Text("Design your personalized dial", color = TextDim, fontSize = 12.sp)
+                        Text("Personalized Dial Studio for Kolabee U8 Ultra", color = TextDim, fontSize = 12.sp)
                     }
                 },
                 navigationIcon = {
@@ -252,7 +265,7 @@ fun WatchFaceCreatorScreen(
             contentPadding = PaddingValues(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // ── Live Watch Preview Viewport ───────────────────────────────────────
+            // ── Live Watch Preview Viewport with Simulated Case ────────────────────
             item {
                 Column(
                     modifier = Modifier
@@ -262,11 +275,11 @@ fun WatchFaceCreatorScreen(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(230.dp)
+                            .size(236.dp)
                             .clip(CircleShape)
                             .background(Color.Black)
-                            .border(6.dp, Color(0xFF1E293B), CircleShape)
-                            .border(8.dp, Color(0xFF0F172A), CircleShape),
+                            .border(6.dp, selectedCaseStyle.innerColor, CircleShape)
+                            .border(10.dp, selectedCaseStyle.outerColor, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         DynamicFacePreview(
@@ -275,18 +288,129 @@ fun WatchFaceCreatorScreen(
                             hours = tickHours,
                             minutes = tickMinutes,
                             seconds = tickSeconds,
-                            heartRate = 75,
-                            steps = 5840,
-                            battery = 88
+                            heartRate = testHeartRate.toInt(),
+                            steps = testSteps.toInt(),
+                            battery = testBattery.toInt()
                         )
                     }
 
                     Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = if (isAmbientPreview) "Ambient / AOD View" else "Live 60 FPS Watch Simulation",
-                        color = TextDim,
-                        fontSize = 12.sp
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = if (isAmbientPreview) "Ambient / AOD View" else "Live 60 FPS Watch Simulation",
+                            color = TextDim,
+                            fontSize = 12.sp
+                        )
+                        TextButton(
+                            onClick = { showTestBench = !showTestBench },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Icon(Icons.Default.Tune, contentDescription = null, tint = AccentCyan, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(if (showTestBench) "Hide Test Bench" else "Test Bench", color = AccentCyan, fontSize = 12.sp)
+                        }
+                    }
+
+                    // Simulated Case Style Chips
+                    Row(
+                        modifier = Modifier.padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        WatchCaseStyle.values().forEach { case ->
+                            val isSel = selectedCaseStyle == case
+                            FilterChip(
+                                selected = isSel,
+                                onClick = { selectedCaseStyle = case },
+                                label = { Text(case.label, fontSize = 10.sp) },
+                                leadingIcon = {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(case.accentColor)
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // ── Interactive Simulation Test Bench (Collapsible) ───────────────────
+            if (showTestBench) {
+                item {
+                    PaddingWrapper {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = BgCard,
+                            border = BorderStroke(1.dp, AccentCyan.copy(alpha = 0.3f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Interactive Telemetry Simulator", color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text("Live Ticking", color = TextDim, fontSize = 11.sp)
+                                        Spacer(Modifier.width(6.dp))
+                                        Switch(
+                                            checked = liveTicking,
+                                            onCheckedChange = { liveTicking = it },
+                                            modifier = Modifier.height(24.dp)
+                                        )
+                                    }
+                                }
+
+                                // Battery Slider
+                                Column {
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text("Battery Level", color = TextDim, fontSize = 12.sp)
+                                        Text("${testBattery.toInt()}%", color = StatusSuccess, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    Slider(
+                                        value = testBattery,
+                                        onValueChange = { testBattery = it },
+                                        valueRange = 0f..100f,
+                                        colors = SliderDefaults.colors(thumbColor = StatusSuccess, activeTrackColor = StatusSuccess)
+                                    )
+                                }
+
+                                // Steps Slider
+                                Column {
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text("Step Progress", color = TextDim, fontSize = 12.sp)
+                                        Text("${testSteps.toInt()} Steps", color = AccentCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    Slider(
+                                        value = testSteps,
+                                        onValueChange = { testSteps = it },
+                                        valueRange = 0f..15000f,
+                                        colors = SliderDefaults.colors(thumbColor = AccentCyan, activeTrackColor = AccentCyan)
+                                    )
+                                }
+
+                                // Heart Rate Slider
+                                Column {
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text("Heart Rate (BPM)", color = TextDim, fontSize = 12.sp)
+                                        Text("${testHeartRate.toInt()} BPM", color = StatusError, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    Slider(
+                                        value = testHeartRate,
+                                        onValueChange = { testHeartRate = it },
+                                        valueRange = 40f..180f,
+                                        colors = SliderDefaults.colors(thumbColor = StatusError, activeTrackColor = StatusError)
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -500,7 +624,7 @@ private fun TemplatesControl(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(52.dp)
+                            .size(54.dp)
                             .clip(CircleShape)
                             .border(1.dp, AccentCyan.copy(alpha = 0.5f), CircleShape)
                     ) {
@@ -526,8 +650,16 @@ private fun BackgroundControl(
     Text("Dial Background", color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 16.sp)
 
     // Mode Selector
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf("photo" to "Personal Photo", "solid" to "Solid Color", "gradient_radial" to "Radial Glow", "gradient_linear" to "Linear Fade").forEach { (typeKey, label) ->
+    Row(
+        modifier = Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        listOf(
+            "photo" to "Personal Photo",
+            "solid" to "Solid Color",
+            "gradient_radial" to "Radial Glow",
+            "gradient_linear" to "Linear Fade"
+        ).forEach { (typeKey, label) ->
             val isCurrent = if (typeKey == "photo") bg.type == "image" else bg.type == typeKey
             FilterChip(
                 selected = isCurrent,
@@ -566,8 +698,8 @@ private fun BackgroundControl(
         }
     }
 
-    // Color swatches
-    Text("Theme Palette Swatches:", color = TextDim, fontSize = 12.sp)
+    // 12 Curated Theme Color Swatches
+    Text("Theme Color Palette:", color = TextDim, fontSize = 12.sp)
     val colorSwatches = listOf(
         "#0A0D12" to "Onyx Black",
         "#0F172A" to "Slate Dark",
@@ -575,13 +707,18 @@ private fun BackgroundControl(
         "#1E1B4B" to "Royal Indigo",
         "#3B0764" to "Cyber Violet",
         "#450A0A" to "Crimson Bold",
-        "#1C1917" to "Titanium Gray"
+        "#1C1917" to "Titanium Gray",
+        "#172554" to "Midnight Blue",
+        "#14532D" to "Forest Green",
+        "#701A75" to "Deep Magenta",
+        "#7C2D12" to "Burnt Amber",
+        "#042F2E" to "Dark Teal"
     )
     Row(
         modifier = Modifier.horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        colorSwatches.forEach { (hex, name) ->
+        colorSwatches.forEach { (hex, _) ->
             Box(
                 modifier = Modifier
                     .size(36.dp)
@@ -622,10 +759,13 @@ private fun DialControl(
     // Number Type
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
         Text("Numeral Markers", color = TextWhite, fontSize = 14.sp)
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
             listOf(
                 "none" to "None",
-                "arabic" to "12h",
+                "arabic" to "12h Arabic",
                 "roman" to "Roman",
                 "minimal_cardinal" to "12-3-6-9"
             ).forEach { (typeKey, label) ->
@@ -642,9 +782,12 @@ private fun DialControl(
     }
 
     // Accent Colors
-    Text("Accent Marker Color:", color = TextDim, fontSize = 12.sp)
-    val accentSwatches = listOf("#00E5FF", "#D4AF37", "#FFFFFF", "#FF3366", "#10B981", "#F59E0B")
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Text("Marker Accent Color:", color = TextDim, fontSize = 12.sp)
+    val accentSwatches = listOf("#00E5FF", "#D4AF37", "#FFFFFF", "#FF3366", "#10B981", "#F59E0B", "#E2E8F0", "#A855F7")
+    Row(
+        modifier = Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         accentSwatches.forEach { hex ->
             Box(
                 modifier = Modifier
@@ -698,6 +841,29 @@ private fun HandsControl(
             }
         }
 
+        // Second Hand Color
+        Text("Second Hand Accent Color:", color = TextDim, fontSize = 12.sp)
+        val secSwatches = listOf("#FF3366", "#EF4444", "#38BDF8", "#00E5FF", "#D4AF37", "#10B981", "#FFFFFF")
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            secSwatches.forEach { hex ->
+                val currentSec = hands.secondHand?.colorHex ?: "#FF3366"
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(CircleShape)
+                        .background(Color(android.graphics.Color.parseColor(hex)))
+                        .border(2.dp, if (currentSec.equals(hex, ignoreCase = true)) AccentCyan else BorderSubtle, CircleShape)
+                        .clickable {
+                            val sec = hands.secondHand ?: HandStyle(lengthRatio = 0.88f, widthDp = 1.8f, colorHex = hex)
+                            onChange(hands.copy(secondHand = sec.copy(colorHex = hex)))
+                        }
+                )
+            }
+        }
+
         // Second Hand Sweep
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
             Text("Smooth Sweep Seconds Hand", color = TextWhite, fontSize = 13.sp)
@@ -736,11 +902,27 @@ private fun ClockDateControl(
     }
 
     if (clock?.enabled == true) {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        // Time Formats
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
             listOf("HH:mm" to "24-Hour (14:30)", "hh:mm a" to "12-Hour (02:30 PM)", "HH:mm:ss" to "Seconds (14:30:45)").forEach { (fmt, label) ->
                 FilterChip(
                     selected = clock.format == fmt,
                     onClick = { onClockChange(clock.copy(format = fmt)) },
+                    label = { Text(label, fontSize = 11.sp) }
+                )
+            }
+        }
+
+        // Font Family
+        Text("Digital Typography Style:", color = TextDim, fontSize = 12.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("monospace" to "Tech Monospace", "sans" to "Modern Sans", "serif" to "Luxury Serif").forEach { (font, label) ->
+                FilterChip(
+                    selected = clock.fontFamily == font,
+                    onClick = { onClockChange(clock.copy(fontFamily = font)) },
                     label = { Text(label, fontSize = 11.sp) }
                 )
             }
@@ -762,6 +944,21 @@ private fun ClockDateControl(
             }
         )
     }
+
+    if (date?.enabled == true) {
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            listOf("EEE d" to "Mon 12", "EEE, MMM d" to "Mon, Oct 12", "dd/MM" to "12/10", "d" to "12 (Day Only)").forEach { (fmt, label) ->
+                FilterChip(
+                    selected = date.format == fmt,
+                    onClick = { onDateChange(date.copy(format = fmt)) },
+                    label = { Text(label, fontSize = 11.sp) }
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -772,44 +969,76 @@ private fun ComplicationsControl(
     Text("Smart Telemetry Complications", color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 16.sp)
 
     // Heart Rate Complication
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Default.Favorite, contentDescription = null, tint = StatusError, modifier = Modifier.size(18.dp))
-            Text("Live Heart Rate Gauge", color = TextWhite, fontSize = 13.sp)
-        }
-        Switch(
-            checked = complications.heartRate.enabled,
-            onCheckedChange = { en ->
-                onChange(complications.copy(heartRate = complications.heartRate.copy(enabled = en)))
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.Favorite, contentDescription = null, tint = StatusError, modifier = Modifier.size(18.dp))
+                Text("Heart Rate Sensor", color = TextWhite, fontSize = 13.sp)
             }
-        )
+            Switch(
+                checked = complications.heartRate.enabled,
+                onCheckedChange = { en ->
+                    onChange(complications.copy(heartRate = complications.heartRate.copy(enabled = en)))
+                }
+            )
+        }
+        if (complications.heartRate.enabled) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("arc_gauge" to "Arc Gauge", "subdial" to "Subdial", "text_only" to "Text Only").forEach { (st, label) ->
+                    FilterChip(
+                        selected = complications.heartRate.style == st,
+                        onClick = { onChange(complications.copy(heartRate = complications.heartRate.copy(style = st))) },
+                        label = { Text(label, fontSize = 10.sp) }
+                    )
+                }
+            }
+        }
     }
+
+    HorizontalDivider(color = BorderSubtle)
 
     // Steps Complication
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Default.DirectionsWalk, contentDescription = null, tint = AccentCyan, modifier = Modifier.size(18.dp))
-            Text("Step Goal Progress Ring", color = TextWhite, fontSize = 13.sp)
-        }
-        Switch(
-            checked = complications.steps.enabled,
-            onCheckedChange = { en ->
-                onChange(complications.copy(steps = complications.steps.copy(enabled = en)))
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.DirectionsWalk, contentDescription = null, tint = AccentCyan, modifier = Modifier.size(18.dp))
+                Text("Step Goal Progress", color = TextWhite, fontSize = 13.sp)
             }
-        )
+            Switch(
+                checked = complications.steps.enabled,
+                onCheckedChange = { en ->
+                    onChange(complications.copy(steps = complications.steps.copy(enabled = en)))
+                }
+            )
+        }
+        if (complications.steps.enabled) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("arc_gauge" to "Arc Gauge", "subdial" to "Subdial", "text_only" to "Text Only").forEach { (st, label) ->
+                    FilterChip(
+                        selected = complications.steps.style == st,
+                        onClick = { onChange(complications.copy(steps = complications.steps.copy(style = st))) },
+                        label = { Text(label, fontSize = 10.sp) }
+                    )
+                }
+            }
+        }
     }
 
+    HorizontalDivider(color = BorderSubtle)
+
     // Battery Complication
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Default.BatteryChargingFull, contentDescription = null, tint = StatusSuccess, modifier = Modifier.size(18.dp))
-            Text("Watch Battery Percentage", color = TextWhite, fontSize = 13.sp)
-        }
-        Switch(
-            checked = complications.battery.enabled,
-            onCheckedChange = { en ->
-                onChange(complications.copy(battery = complications.battery.copy(enabled = en)))
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.BatteryChargingFull, contentDescription = null, tint = StatusSuccess, modifier = Modifier.size(18.dp))
+                Text("Watch Battery Level", color = TextWhite, fontSize = 13.sp)
             }
-        )
+            Switch(
+                checked = complications.battery.enabled,
+                onCheckedChange = { en ->
+                    onChange(complications.copy(battery = complications.battery.copy(enabled = en)))
+                }
+            )
+        }
     }
 }

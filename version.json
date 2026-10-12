@@ -1,18 +1,18 @@
 {
   "phone": {
-    "versionCode": 15,
-    "versionName": "2.3.5",
+    "versionCode": 16,
+    "versionName": "2.4.0",
     "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/latest/download/HealthSync-Phone.apk",
-    "changelog": "• OTA Update System Fix: Real-time cache-busted manifest updates from GitHub\n• Paced 4 KB Bluetooth RFCOMM chunk streaming to Kolabee U8 Ultra with live progress\n• Redesigned Notification Apps: Fast modal selection dialog with search & category filters\n• Independent Watch & Phone update controls in Settings and Device screens",
+    "changelog": "• Watch Face Creator Studio: Frame simulator (Titanium Ultra, Steel, Matte Black), interactive live ticking & sensor test bench, dark photo tinting, hand styles & complication designs\n• 50+ Curated Watch Faces in Online Store across Luxury, Sports, Cyberpunk, Retro, Minimal, and Art\n• 5 Native Interactive Watch Faces: Orbit Pro, Chrono Ultra, Retro Illuminator, Cyberpunk HUD, and Bauhaus Minimal\n• Bottom navigation bar integrated with dedicated Faces Studio tab and home quick-launch banner",
     "forceUpdate": false,
-    "sha256": "6d219f77f5ca3b5ac627a1592d576869a4aefa262f0b5d146a25109b1f16e9ad"
+    "sha256": "87e1196cfdda42e9921a8abb821712fa5818686776565f9086a93a4094045c66"
   },
   "watch": {
-    "versionCode": 21,
-    "versionName": "2.4.5",
+    "versionCode": 22,
+    "versionName": "2.5.0",
     "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/latest/download/HealthSync-Watch.apk",
-    "changelog": "• Real-time OTA Receiver with safe 4 KB RandomAccessFile offset assembly\n• Follows HTTP 302 redirects for direct Wi-Fi downloads\n• Throttled notification IPC preventing smartwatch system UI slowdowns\n• Fast buffered line reader for high-reliability Bluetooth sync",
+    "changelog": "• 5 Pre-installed Native Interactive Watch Faces: Orbit Pro (activity rings), Chrono Ultra (live subdials), Retro Illuminator (vintage LCD with cyan backlight), Cyberpunk HUD (animated ECG pulse & 4 neon color themes), and Bauhaus Minimal (Swiss glance dial)\n• Interactive touch features on dials: backlight glow, theme cycling, glance mode toggle\n• Full compatibility with HSWF dynamic face engine and live complication streaming",
     "forceUpdate": false,
-    "sha256": "e8452ed02c520e64793f5446d7c4c145c3ec9d2afb1fdbb8aa8c850050311b2b"
+    "sha256": "fb50eb0116deef92ba32cb16de730a000d4c0c045d07154ed2938a3d2a19dac5"
   }
 }

@@ -120,7 +120,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     object WatchFaces : Screen("watch_faces", "Faces", Icons.Default.Palette)
 }
 
-val bottomScreens = listOf(Screen.Dashboard, Screen.Workouts, Screen.Notifications, Screen.Device, Screen.Settings)
+val bottomScreens = listOf(Screen.Dashboard, Screen.Workouts, Screen.WatchFaces, Screen.Device, Screen.Settings)
 
 @Composable
 fun MainAppContent(onRequestPermissions: () -> Unit = {}) {
@@ -209,9 +209,13 @@ fun MainAppContent(onRequestPermissions: () -> Unit = {}) {
         ) {
             composable(Screen.Dashboard.route) {
                 val viewModel: DashboardViewModel = hiltViewModel()
-                DashboardScreen(viewModel = viewModel, onWorkoutClick = { workout ->
-                    navController.navigate("workout_details/${workout.id}")
-                }, onDeviceClick = { navController.navigate(Screen.Device.route) })
+                DashboardScreen(
+                    viewModel = viewModel,
+                    onWorkoutClick = { workout -> navController.navigate("workout_details/${workout.id}") },
+                    onDeviceClick = { navController.navigate(Screen.Device.route) },
+                    onWatchFacesClick = { navController.navigate(Screen.WatchFaces.route) },
+                    onNotificationsClick = { navController.navigate(Screen.Notifications.route) }
+                )
             }
             composable(Screen.Workouts.route) {
                 val viewModel: DashboardViewModel = hiltViewModel()

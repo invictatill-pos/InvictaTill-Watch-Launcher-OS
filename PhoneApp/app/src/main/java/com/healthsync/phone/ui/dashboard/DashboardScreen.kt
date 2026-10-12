@@ -128,7 +128,9 @@ import java.util.Locale
 fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel(),
     onWorkoutClick: (WorkoutEntity) -> Unit = {},
-    onDeviceClick: () -> Unit = {}
+    onDeviceClick: () -> Unit = {},
+    onWatchFacesClick: () -> Unit = {},
+    onNotificationsClick: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val connState by BluetoothSyncService.connectionState.collectAsState()
@@ -188,7 +190,8 @@ fun DashboardScreen(
         item {
             DashboardHeader(
                 connState = connState,
-                onReconnect = onDeviceClick
+                onReconnect = onDeviceClick,
+                onNotifications = onNotificationsClick
             )
         }
 
@@ -224,6 +227,37 @@ fun DashboardScreen(
                 onMeasureSpO2 = measureOxygen,
                 onReconnect = onDeviceClick
             )
+        }
+
+        item {
+            Surface(
+                onClick = onWatchFacesClick,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                color = BgCard,
+                border = BorderStroke(1.dp, BorderSubtle)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(AccentCyan.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Watch, contentDescription = null, tint = AccentCyan, modifier = Modifier.size(24.dp))
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Watch Face Studio & Store", color = TextWhite, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Text("50+ luxury, sports & sci-fi dials + Creator Studio", color = TextDim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    Text("Explore", color = AccentCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
         }
 
         item {
@@ -324,7 +358,11 @@ private fun estimateActiveMinutes(state: DashboardUiState): Int {
 }
 
 @Composable
-private fun DashboardHeader(connState: ConnectionInfo, onReconnect: () -> Unit) {
+private fun DashboardHeader(
+    connState: ConnectionInfo,
+    onReconnect: () -> Unit,
+    onNotifications: () -> Unit
+) {
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
     val greeting = when {
         hour < 12 -> "Good morning"
@@ -345,19 +383,35 @@ private fun DashboardHeader(connState: ConnectionInfo, onReconnect: () -> Unit) 
             Text(dateStr, color = TextDim, fontSize = 13.sp)
         }
 
-        Surface(
-            onClick = onReconnect,
-            shape = RoundedCornerShape(24.dp),
-            color = if (connected) StatusSuccess.copy(alpha = 0.12f) else StatusError.copy(alpha = 0.1f),
-            border = BorderStroke(1.dp, if (connected) StatusSuccess.copy(alpha = 0.22f) else StatusError.copy(alpha = 0.22f))
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(7.dp)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Notification Alerts Bell
+            Surface(
+                onClick = onNotifications,
+                shape = CircleShape,
+                color = BgCard,
+                border = BorderStroke(1.dp, BorderSubtle),
+                modifier = Modifier.size(40.dp)
             ) {
-                Icon(Icons.Default.Watch, null, tint = if (connected) StatusSuccess else StatusError, modifier = Modifier.size(16.dp))
-                Text(if (connected) "Online" else "Offline", color = if (connected) StatusSuccess else StatusError, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Watch, contentDescription = "Alerts", tint = TextWhite, modifier = Modifier.size(18.dp))
+                }
+            }
+
+            // Connection Badge
+            Surface(
+                onClick = onReconnect,
+                shape = RoundedCornerShape(24.dp),
+                color = if (connected) StatusSuccess.copy(alpha = 0.12f) else StatusError.copy(alpha = 0.1f),
+                border = BorderStroke(1.dp, if (connected) StatusSuccess.copy(alpha = 0.22f) else StatusError.copy(alpha = 0.22f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    Icon(Icons.Default.Watch, null, tint = if (connected) StatusSuccess else StatusError, modifier = Modifier.size(16.dp))
+                    Text(if (connected) "Online" else "Offline", color = if (connected) StatusSuccess else StatusError, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }

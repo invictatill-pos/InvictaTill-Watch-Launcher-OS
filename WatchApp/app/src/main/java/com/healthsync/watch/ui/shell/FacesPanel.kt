@@ -58,7 +58,10 @@ class FacesPanel(private val activity: AppCompatActivity, private val onClose: (
             val style = entry.id
             val preview: View? = when {
                 style == "orbit" -> OrbitWatchFaceView(activity).apply { setStyle("orbit") }
-                style == "chrono" || style == "classic" -> ChronoWatchFaceView(activity)
+                style == "chrono" -> ChronoWatchFaceView(activity)
+                style == "classic" -> com.healthsync.watch.ui.CasioWatchFaceView(activity)
+                style == "neon" -> com.healthsync.watch.ui.NeonHudWatchFaceView(activity)
+                style == "bauhaus" -> com.healthsync.watch.ui.BauhausWatchFaceView(activity)
                 style.startsWith("dynamic_") -> {
                     val pkg = com.healthsync.watch.data.watchface.DynamicFaceStore.getInstance(activity).getFace(style)
                     if (pkg != null) {
@@ -147,6 +150,32 @@ class FacesPanel(private val activity: AppCompatActivity, private val onClose: (
                 preview.setHeartRateUnverified(heart.sensorReading)
                 preview.updateTime(time)
                 preview.setHealthData(heart.bpm, steps, prefs.stepGoal, 0.0, 0.0)
+                preview.setBluetoothConnected(linked)
+                preview.setBatteryLevel(battery)
+            }
+            is com.healthsync.watch.ui.CasioWatchFaceView -> {
+                preview.setHeartRateTime(heart.capturedAt)
+                preview.setHeartRateUnverified(heart.sensorReading)
+                preview.updateTime(time)
+                preview.setHealthData(heart.bpm, steps, prefs.stepGoal, 0, 0f)
+                preview.setBluetoothConnected(linked)
+                preview.setBatteryLevel(battery)
+            }
+            is com.healthsync.watch.ui.NeonHudWatchFaceView -> {
+                preview.setHeartRateTime(heart.capturedAt)
+                preview.setHeartRateUnverified(heart.sensorReading)
+                preview.updateTime(time)
+                preview.setHeartRate(heart.bpm)
+                preview.setSteps(steps, prefs.stepGoal)
+                preview.setBluetoothConnected(linked)
+                preview.setBatteryLevel(battery)
+            }
+            is com.healthsync.watch.ui.BauhausWatchFaceView -> {
+                preview.setHeartRateTime(heart.capturedAt)
+                preview.setHeartRateUnverified(heart.sensorReading)
+                preview.updateTime(time)
+                preview.setHeartRate(heart.bpm)
+                preview.setSteps(steps, prefs.stepGoal)
                 preview.setBluetoothConnected(linked)
                 preview.setBatteryLevel(battery)
             }
