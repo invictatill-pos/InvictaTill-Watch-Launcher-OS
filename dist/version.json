@@ -1,0 +1,18 @@
+{
+  "phone": {
+    "versionCode": 20,
+    "versionName": "2.7.0",
+    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.7.0/HealthSync-Phone.apk",
+    "changelog": "A refreshed cream-and-forest design, clearer navigation, readable cards and consistent controls throughout. Real captured health records with original timestamps; clearly labeled estimates and unavailable states. Removes fabricated readiness, sleep stages and workout heart-rate zones. Adds accurate workout history and exports, improved face previews, and verified updates. Install both phone and watch apps.",
+    "forceUpdate": false,
+    "sha256": "3af68e9a11b6f171d98d3099dc476a28568695f967357254e57409e7ca784740"
+  },
+  "watch": {
+    "versionCode": 26,
+    "versionName": "2.7.0",
+    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.7.0/HealthSync-Watch.apk",
+    "changelog": "A consistent dark-and-mint design across menus, settings, workouts, faces and health pages, with visible Back and Clock controls. Real sensor capture, honest missing values and clear capture status. Removes generated oxygen/stress/sleep values. Adds motion-rest estimates, guided breathing, manual hydration, reliable compass states, stricter steps/heart-rate capture and verified updates. Install both apps; unverifiable legacy live step counts restart after upgrade.",
+    "forceUpdate": false,
+    "sha256": "978112717df5f60675479878f34852b8c6cf750672b29f5bc01e3cbdedff275d"
+  }
+}

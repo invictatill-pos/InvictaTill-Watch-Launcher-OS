@@ -30,7 +30,11 @@ def signature(path):
         "v2": "Verified using v2 scheme (APK Signature Scheme v2): true" in result,
     }
 
-summary = {"version": version, "automated_validation_only": True, "modules": {}}
+run(["git", "diff", "--exit-code", "HEAD", "--", "PhoneApp", "WatchApp"])
+artifact_log = root / "build-artifacts-2.7.0.log"
+assert "BUILD SUCCESSFUL" in artifact_log.read_text(encoding="utf-16" if artifact_log.read_bytes().startswith(b"\xff\xfe") else "utf-8", errors="replace")
+summary = {"version": version, "source_revision": run(["git", "log", "-1", "--format=%H", "--", "PhoneApp", "WatchApp"]).strip(),
+           "automated_validation_only": True, "modules": {}}
 for module, variant, apk_name, previous, package, code in [
     ("PhoneApp", "release", "app-release.apk", "HealthSync-Phone-2.6.0.apk", "com.healthsync.phone", 20),
     ("WatchApp", "debug", "app-debug.apk", "HealthSync-Watch-2.6.0-Android8.apk", "com.healthsync.watch", 26),

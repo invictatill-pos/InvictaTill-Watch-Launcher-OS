@@ -1,0 +1,189 @@
+{
+  "version": "2.7.0",
+  "source_revision": "fe2a17f349ba011019e9bfc95ac14bff1aa682fb",
+  "automated_validation_only": true,
+  "modules": {
+    "PhoneApp": {
+      "gradle_build_passed": true,
+      "unit_tests": {
+        "tests": 94,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "lint": {
+        "Warning": 8,
+        "Information": 2
+      },
+      "lint_warning_ids": {
+        "DefaultLocale": 1,
+        "OldTargetApi": 1,
+        "UnusedAttribute": 1,
+        "ModifierParameter": 1,
+        "ObsoleteSdkInt": 2,
+        "StaticFieldLeak": 1,
+        "ConstantLocale": 1
+      },
+      "package": "com.healthsync.phone",
+      "version_code": 20,
+      "minimum_api": 26,
+      "target_api": 34,
+      "apk_bytes": 1681770,
+      "apk_sha256": "3af68e9a11b6f171d98d3099dc476a28568695f967357254e57409e7ca784740",
+      "signing": {
+        "verified": true,
+        "certificate_sha256": "a82dab8373c6d19741e5c9159181a2d8240dbd5b13f00765efe621fdc5d47d41",
+        "v1": false,
+        "v2": true
+      }
+    },
+    "WatchApp": {
+      "gradle_build_passed": true,
+      "unit_tests": {
+        "tests": 201,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "lint": {
+        "Warning": 375
+      },
+      "lint_warning_ids": {
+        "ApplySharedPref": 7,
+        "InlinedApi": 4,
+        "InternalInsetResource": 1,
+        "OldTargetApi": 1,
+        "UnusedAttribute": 13,
+        "UseSwitchCompatOrMaterialCode": 7,
+        "GradleDependency": 6,
+        "LockedOrientationActivity": 20,
+        "DiscouragedApi": 21,
+        "DataExtractionRules": 1,
+        "DrawAllocation": 5,
+        "NotifyDataSetChanged": 1,
+        "ObsoleteSdkInt": 3,
+        "StaticFieldLeak": 5,
+        "DisableBaselineAlignment": 3,
+        "Overdraw": 4,
+        "UnusedResources": 7,
+        "UselessParent": 1,
+        "MonochromeLauncherIcon": 2,
+        "Autofill": 1,
+        "ViewConstructor": 1,
+        "SetTextI18n": 150,
+        "HardcodedText": 111
+      },
+      "package": "com.healthsync.watch",
+      "version_code": 26,
+      "minimum_api": 23,
+      "target_api": 34,
+      "apk_bytes": 7655811,
+      "apk_sha256": "978112717df5f60675479878f34852b8c6cf750672b29f5bc01e3cbdedff275d",
+      "signing": {
+        "verified": true,
+        "certificate_sha256": "a82dab8373c6d19741e5c9159181a2d8240dbd5b13f00765efe621fdc5d47d41",
+        "v1": true,
+        "v2": true
+      }
+    }
+  },
+  "database_migrations": {
+    "sqlite_version": "3.49.1",
+    "migrations": [
+      {
+        "from": 4,
+        "to": 6,
+        "schema_matches": true,
+        "history_preserved": true,
+        "unverified_records_archived": true
+      },
+      {
+        "from": 5,
+        "to": 6,
+        "schema_matches": true,
+        "history_preserved": true,
+        "unverified_records_archived": true
+      }
+    ],
+    "legacy_preservation": [
+      {
+        "from": 1,
+        "to": 6,
+        "fixture": "empty",
+        "schema_matches": true,
+        "original_rows_columns_indices_preserved": true,
+        "no_guessed_health_recovery": true
+      },
+      {
+        "from": 1,
+        "to": 6,
+        "fixture": "sparse",
+        "schema_matches": true,
+        "original_rows_columns_indices_preserved": true,
+        "no_guessed_health_recovery": true
+      },
+      {
+        "from": 1,
+        "to": 6,
+        "fixture": "all",
+        "schema_matches": true,
+        "original_rows_columns_indices_preserved": true,
+        "no_guessed_health_recovery": true
+      },
+      {
+        "from": 2,
+        "to": 6,
+        "fixture": "empty",
+        "schema_matches": true,
+        "original_rows_columns_indices_preserved": true,
+        "no_guessed_health_recovery": true
+      },
+      {
+        "from": 2,
+        "to": 6,
+        "fixture": "sparse",
+        "schema_matches": true,
+        "original_rows_columns_indices_preserved": true,
+        "no_guessed_health_recovery": true
+      },
+      {
+        "from": 2,
+        "to": 6,
+        "fixture": "all",
+        "schema_matches": true,
+        "original_rows_columns_indices_preserved": true,
+        "no_guessed_health_recovery": true
+      },
+      {
+        "from": 3,
+        "to": 6,
+        "fixture": "empty",
+        "schema_matches": true,
+        "original_rows_columns_indices_preserved": true,
+        "no_guessed_health_recovery": true
+      },
+      {
+        "from": 3,
+        "to": 6,
+        "fixture": "sparse",
+        "schema_matches": true,
+        "original_rows_columns_indices_preserved": true,
+        "no_guessed_health_recovery": true
+      },
+      {
+        "from": 3,
+        "to": 6,
+        "fixture": "all",
+        "schema_matches": true,
+        "original_rows_columns_indices_preserved": true,
+        "no_guessed_health_recovery": true
+      }
+    ],
+    "archive_collision": {
+      "archive_collision_rejected": true,
+      "original_records_preserved": true,
+      "partial_migration_rolled_back": true
+    }
+  },
+  "attached_android_devices": 0
+}

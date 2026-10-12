@@ -1,20 +1,18 @@
 {
   "phone": {
-    "versionCode": 19,
-    "versionName": "2.6.0",
-    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/latest/download/HealthSync-Phone.apk",
-    "changelog": "• Overnight Sleep Architecture & Stages: Automatic reception and visualization of Deep, Light, REM, and Awake stages synced from watch\n• Daily Readiness & Recovery Score: Dynamic 0–100 score combining sleep duration, stage efficiency, and resting HR\n• Blood Oxygen (SpO2) Trends: 24-hour saturation graphs and low-oxygen alerts\n• Comprehensive Health Ecosystem: Seamless synchronization for workouts, hydration, and stand metrics",
+    "versionCode": 20,
+    "versionName": "2.7.0",
+    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.7.0/HealthSync-Phone.apk",
+    "changelog": "A refreshed cream-and-forest design, clearer navigation, readable cards and consistent controls throughout. Real captured health records with original timestamps; clearly labeled estimates and unavailable states. Removes fabricated readiness, sleep stages and workout heart-rate zones. Adds accurate workout history and exports, improved face previews, and verified updates. Install both phone and watch apps.",
     "forceUpdate": false,
-    "sha256": "d29b6443e24d75a3dc37e65e07f9f55dcbdf22856af616ada20e034954786808"
+    "sha256": "3af68e9a11b6f171d98d3099dc476a28568695f967357254e57409e7ca784740"
   },
   "watch": {
-    "versionCode": 25,
-    "versionName": "2.6.0",
-    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/latest/download/HealthSync-Watch.apk",
-    "changelog": "• Automatic Sleep Tracking: Motion actigraphy and resting HR stage detection (Deep, Light, REM, Awake) with sleep score\n• Blood Oxygen (SpO2) Spot-Check: 15-second guided optical pulse measurement screen with pulsating ring\n• Stress & HRV Monitoring: Real-time physiological stress gauge with 1-Minute Box Breathing relax mode and haptic rhythm\n• Tactical Aerospace Compass: Low-pass filtered rotating rose with degree readout, cardinal indicators, GPS elevation, and True North haptic tick\n• Sedentary Stand Reminders & Hydration: Hourly inactivity vibration alerts ('Time to Stand!') and 1-tap water logging",
+    "versionCode": 26,
+    "versionName": "2.7.0",
+    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.7.0/HealthSync-Watch.apk",
+    "changelog": "A consistent dark-and-mint design across menus, settings, workouts, faces and health pages, with visible Back and Clock controls. Real sensor capture, honest missing values and clear capture status. Removes generated oxygen/stress/sleep values. Adds motion-rest estimates, guided breathing, manual hydration, reliable compass states, stricter steps/heart-rate capture and verified updates. Install both apps; unverifiable legacy live step counts restart after upgrade.",
     "forceUpdate": false,
-    "sha256": "6bd6a68f09b82dc8b275cf647c2586f7870e07d53523b6459a35cfab69f87b0d"
+    "sha256": "978112717df5f60675479878f34852b8c6cf750672b29f5bc01e3cbdedff275d"
   }
 }
-
-

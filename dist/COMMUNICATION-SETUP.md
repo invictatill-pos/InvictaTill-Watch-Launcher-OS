@@ -1,6 +1,6 @@
-# HealthSync communication setup — Watch 2.4.0 / Phone 2.3.0
+# HealthSync communication setup — Watch / Phone 2.7.0
 
-Prepared 9 October 2026. Install both new APKs as updates, then open both apps and connect the watch in the phone's Device tab.
+Updated 12 October 2026. Install both 2.7.0 APKs as updates, then open both apps and connect the watch in the phone's Device tab. These are device acceptance instructions; no phone or watch was attached for communication/audio testing during this update.
 
 ## Caller names and answering
 
