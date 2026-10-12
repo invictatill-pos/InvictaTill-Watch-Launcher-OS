@@ -110,11 +110,11 @@ class PhonePreferences(context: Context) {
         set(v) { prefs.edit().putInt("user_height_cm", v.coerceIn(100, 230)).apply() }
 
     var lastKnownWatchVersion: String
-        get() = prefs.getString("last_known_watch_version", "2.4.3") ?: "2.4.3"
+        get() = prefs.getString("last_known_watch_version", "2.4.4") ?: "2.4.4"
         set(v) { prefs.edit().putString("last_known_watch_version", v).apply() }
 
     var lastKnownWatchVersionCode: Int
-        get() = prefs.getInt("last_known_watch_version_code", 19)
+        get() = prefs.getInt("last_known_watch_version_code", 20)
         set(v) { prefs.edit().putInt("last_known_watch_version_code", v).apply() }
 
     private fun validInterval(value: Long) = if (value == -1L) value else value.coerceIn(30_000L, 3_600_000L)

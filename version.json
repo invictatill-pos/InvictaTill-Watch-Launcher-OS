@@ -1,18 +1,18 @@
 {
   "phone": {
-    "versionCode": 13,
-    "versionName": "2.3.3",
+    "versionCode": 14,
+    "versionName": "2.3.4",
     "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/latest/download/HealthSync-Phone.apk",
     "changelog": "• Phase 5 Watch Face Creator Studio: Design custom dials & photo watch faces\n• Phone gallery photo picker with smartwatch resolution optimizer (320x320)\n• Interactive 1:1 Canvas previewer with live ticking, hand styling & complication layout\n• My Creations collection with 1-tap Bluetooth beam to Kolabee U8 Ultra",
     "forceUpdate": false,
-    "sha256": "7c87df4548ad525c34724bf36065d0f7f3c16274c1a8553d7eb8f8340264f677"
+    "sha256": "c4d4a1128d8a895f87c3944e98da5e51498e112ba910908c873de492f42fd1e1"
   },
   "watch": {
-    "versionCode": 19,
-    "versionName": "2.4.3",
+    "versionCode": 20,
+    "versionName": "2.4.4",
     "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/latest/download/HealthSync-Watch.apk",
-    "changelog": "• Supercharged OTA Bluetooth receiver with RandomAccessFile offset assembly\n• Live duplex progress reporting (OTA_PROGRESS) back to companion\n• Real-time device telemetry and autonomous Wi-Fi fallback update",
+    "changelog": "• Phase 5 Dynamic Watch Face Engine (.hswf) with gallery photo dial support\n• Base64 hardware-accelerated Canvas bitmap decoding & live ambient AOD mode\n• Supercharged dual OTA receiver with RandomAccessFile offset assembly",
     "forceUpdate": false,
-    "sha256": "a9a24c96eecc55c34877dd91e9e7251854e08ff22726b93ffdffe404810d195a"
+    "sha256": "565666313433b13e330b42c8f956279148169da769c165b725648ef166d4d4f4"
   }
 }
