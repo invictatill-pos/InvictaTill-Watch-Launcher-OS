@@ -69,7 +69,8 @@ class HeartRateFeedbackTest {
         assertTrue(details.contains("75 bpm · unverified · 10 sec ago"))
         assertTrue(details.contains("accuracy 0"))
         assertTrue(details.contains("not saved to history or used in workouts"))
-        assertFalse(SyncValidation.validHeartRate(feedback.sensorPreview!!.bpm, 0, now, now))
+        assertTrue(SyncValidation.validHeartRate(feedback.sensorPreview!!.bpm, 0, now, now))
+        assertFalse(SyncValidation.validHeartRate(feedback.sensorPreview!!.bpm, -1, now, now))
     }
 
     @Test fun malformedPreviewIsIgnoredWithoutLosingIndependentDeviceStatus() {

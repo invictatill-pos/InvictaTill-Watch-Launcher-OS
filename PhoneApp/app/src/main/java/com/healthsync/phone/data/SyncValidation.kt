@@ -13,7 +13,7 @@ object SyncValidation {
         timestamp > 0 && now > 0 && (timestamp <= now || timestamp - now <= FUTURE_TOLERANCE_MS)
 
     fun validHeartRate(bpm: Int, accuracy: Int, timestamp: Long, now: Long = System.currentTimeMillis()) =
-        bpm in 25..240 && accuracy in 1..3 && validTimestamp(timestamp, now)
+        bpm in 25..240 && accuracy in 0..3 && validTimestamp(timestamp, now)
 
     fun validSpO2(percentage: Float, timestamp: Long, now: Long = System.currentTimeMillis()) =
         percentage.isFinite() && percentage in 50f..100f && validTimestamp(timestamp, now)

@@ -64,8 +64,8 @@ object SignalProcessing {
     }
 
     /**
-     * Continuous 24/7 Step Tracker with Anti-False Positive Buffer + adaptive threshold.
-     * Rule: Must detect at least 6 consecutive step peaks within valid interval (220ms <= dt <= 1400ms)
+     * Continuous 24/7 Step Tracker with Anti-False Positive Buffer + dynamic gravity compensation.
+     * Rule: Must detect at least 4 consecutive step peaks within valid interval (220ms <= dt <= 1800ms)
      * before committing steps to database to filter out isolated wrist flicks.
      * The threshold adapts to the user's current activity level for higher accuracy.
      */
@@ -73,67 +73,88 @@ object SignalProcessing {
         private val bandpass = MovementBandpassFilter()
         private var lastPeakTime = 0L
         private var consecutiveBufferCount = 0
-        private var stepThreshold = 1.6 // adaptive threshold start
+        private var stepThreshold = 1.4
         private var magSum = 0.0
         private var magCount = 0
         private var lastPeakMag = 0.0
         private var lastSampleMs = -1L
 
+        private var gravity = 9.81
+        private var smoothLinearAcc = 0.0
+
         fun reset() {
             bandpass.reset()
             lastPeakTime = 0L
             consecutiveBufferCount = 0
-            stepThreshold = 1.6
+            stepThreshold = 1.4
             magSum = 0.0
             magCount = 0
             lastPeakMag = 0.0
             lastSampleMs = -1L
+            gravity = 9.81
+            smoothLinearAcc = 0.0
         }
 
         fun processAccel(ax: Float, ay: Float, az: Float, nowMs: Long) {
             if (!ax.isFinite() || !ay.isFinite() || !az.isFinite()) return
             if (lastSampleMs >= 0 && nowMs <= lastSampleMs) return
-            // Filters are tuned for 50Hz. Decimate faster streams and reset after gaps.
-            if (lastSampleMs >= 0 && nowMs - lastSampleMs < 16) return
-            if (lastSampleMs >= 0 && nowMs - lastSampleMs > 1500) reset()
+            // Decimate faster streams (dt < 10ms)
+            if (lastSampleMs >= 0 && nowMs - lastSampleMs < 10) return
+            // If user paused for > 2500ms, reset the debounce cadence buffer but preserve committed steps
+            if (lastSampleMs >= 0 && nowMs - lastSampleMs > 2500) {
+                consecutiveBufferCount = 0
+                lastPeakTime = 0L
+            }
             lastSampleMs = nowMs
-            val mag = sqrt((ax * ax + ay * ay + az * az).toDouble())
-            val filtered = bandpass.filter(mag)
 
-            // Adaptive threshold: 50% of the rolling peak magnitude, clamped
-            magSum += kotlin.math.abs(filtered)
+            val mag = sqrt((ax.toDouble() * ax + ay.toDouble() * ay + az.toDouble() * az))
+            if (!mag.isFinite()) return
+
+            // Dynamic gravity isolation (sample-rate independent signed linear acceleration)
+            gravity = 0.88 * gravity + 0.12 * mag
+            val linearAcc = mag - gravity
+            smoothLinearAcc = 0.65 * smoothLinearAcc + 0.35 * linearAcc
+
+            // Discrete bandpass filter
+            val bp = bandpass.filter(mag)
+
+            // Dynamic fused signal: maximum of smoothed linear acceleration and bandpass output
+            val signal = maxOf(smoothLinearAcc, bp)
+
+            // Adaptive threshold
+            magSum += kotlin.math.abs(signal)
             magCount++
-            if (magCount >= 100) {
+            if (magCount >= 60) {
                 val avg = magSum / magCount
-                stepThreshold = (avg * 1.2 + 0.6).coerceIn(1.2, 3.0)
+                stepThreshold = (avg * 1.1 + 0.6).coerceIn(1.2, 3.2)
                 magSum = 0.0
                 magCount = 0
             }
 
             // Peak detection with hysteresis: rising edge above threshold
-            if (filtered > stepThreshold && lastPeakMag <= stepThreshold) {
+            if (signal > stepThreshold && lastPeakMag <= stepThreshold) {
                 val dt = nowMs - lastPeakTime
                 when {
                     lastPeakTime == 0L -> {
                         consecutiveBufferCount = 1
                         lastPeakTime = nowMs
                     }
-                    dt in 220..1400 -> {
+                    dt in 220..1800 -> {
                         consecutiveBufferCount++
                         lastPeakTime = nowMs
-                        if (consecutiveBufferCount == 6) {
-                            onStepsCommitted(6)
-                        } else if (consecutiveBufferCount > 6) {
+                        if (consecutiveBufferCount == 4) {
+                            onStepsCommitted(4)
+                        } else if (consecutiveBufferCount > 4) {
                             onStepsCommitted(1)
                         }
                     }
-                    dt > 1400 -> {
+                    dt > 1800 -> {
                         consecutiveBufferCount = 1
                         lastPeakTime = nowMs
                     }
                 }
             }
-            lastPeakMag = filtered
+            lastPeakMag = signal
         }
     }
 }

@@ -147,12 +147,12 @@ class SensorCollectorService : Service() {
             val displayed = watchFaceHeartRate()
             val ageLabel = HeartRatePolicy.ageLabel(displayed.capturedAt, System.currentTimeMillis())
             val current = when(hrStatus) {
-                "measuring" -> "Measuring… Wear snugly and stay still for up to 60 seconds."
+                "measuring" -> if (displayed.bpm > 0) "Measuring… Live: ${displayed.bpm} bpm" else "Measuring… Wear snugly and stay still."
                 "no_contact" -> "No new reading. Check wrist contact and measure again."
                 "no_events" -> "The sensor registered but sent no readings. Open Heart rate details and try Measure again."
-                "invalid_samples" -> "The sensor sent readings that could not be validated. Open Heart rate details to check accuracy and timestamps."
+                "invalid_samples" -> "The sensor sent readings that could not be validated. Open Heart rate details and try again."
                 "unreliable_accuracy" -> when {
-                    measurementDetails -> "Sensor accuracy flag: 0. This value is shown as sensor feedback and is excluded from recorded history and workouts."
+                    measurementDetails -> "Sensor reading received (accuracy 0). Value is recorded and displayed."
                     sensorPreview() != null -> "Reading received from the watch sensor. Tap Measure to refresh."
                     else -> "The last sensor reading has expired. Tap Measure again."
                 }
@@ -161,7 +161,7 @@ class SensorCollectorService : Service() {
                 "disabled" -> "Automatic measurement is off. Tap Measure for a reading."
                 else -> if (displayed.bpm > 0) ageLabel else "No reading yet. Tap Measure and stay still."
             }
-            return if (displayed.bpm > 0 && hrStatus in setOf("measuring", "no_contact", "no_events", "invalid_samples", "sensor_error", "service_unavailable", "disabled"))
+            return if (displayed.bpm > 0 && hrStatus in setOf("no_contact", "no_events", "invalid_samples", "sensor_error", "service_unavailable", "disabled"))
                 "$current $ageLabel" else current
         }
     }
@@ -202,7 +202,13 @@ class SensorCollectorService : Service() {
     private var heartRateAttempt: HeartRateAttemptDiagnostics? = null
     private val heartRatePreviewTracker = HeartRatePreviewTracker()
     private var lastDiagnosticRenderMs = -1L
-    private val stepTracker = SignalProcessing.AntiFalsePositiveStepTracker { incrementSteps(it) }
+    private var lastHardwareStepTimeMs = 0L
+    private val stepTracker = SignalProcessing.AntiFalsePositiveStepTracker { delta ->
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastHardwareStepTimeMs > 3000L) {
+            incrementSteps(delta)
+        }
+    }
     private val fallDetector = FallDetection { severity -> sendMsg(MessageType.FALL_DETECTED, FallDetectedPayload(severity)) }
 
     override fun onCreate() {
@@ -235,7 +241,7 @@ class SensorCollectorService : Service() {
         latestBpm = prefs.getInt("last_hr_bpm", -1)
         latestAcc = prefs.getInt("last_hr_accuracy", 0)
         latestBpmTimeMs = prefs.getLong("last_hr_time", 0L)
-        if (latestAcc !in 1..3 || displayBpm() < 0) {
+        if (latestAcc !in 0..3 || displayBpm() < 0) {
             latestBpm = -1; latestAcc = 0; latestBpmTimeMs = 0L
         }
         latestSensorPreview = HeartRateSensorPreview(prefs.getInt("last_sensor_hr_bpm", -1),
@@ -467,7 +473,7 @@ class SensorCollectorService : Service() {
                 refreshMeasurementWakeLock()
                 if (kind == MeasurementKind.HEART_RATE) {
                     val status = completionStatuses.remove(kind)
-                        ?: heartRateAttempt?.finalStatus(heartRatePreviewTracker.preview != null) ?: "no_events"
+                        ?: if (latestBpm > 0) "reading" else "no_events"
                     publishHeartRateAttempt(status, completed = true)
                     updateHrStatus(status)
                 }
@@ -573,78 +579,66 @@ class SensorCollectorService : Service() {
             when {
                 isHeartRateEvent -> {
                     if (!measurementWindows.isActive(MeasurementKind.HEART_RATE, SystemClock.elapsedRealtime())) return
-                    val timestampIssue = heartRatePreviewTracker.observe(event.values.firstOrNull(), event.accuracy,
+                    val reading = event.values.firstOrNull() ?: return
+                    val timestampIssue = heartRatePreviewTracker.observe(reading, event.accuracy,
                         event.timestamp, nowNanos, nowWall, measurementStartedNanos[MeasurementKind.HEART_RATE] ?: 0L)
-                    val capturedPreview = heartRatePreviewTracker.preview
-                    if (capturedPreview != null) {
-                        latestSensorPreview = capturedPreview
-                        prefs.edit().putInt("last_sensor_hr_bpm", capturedPreview.bpm)
-                            .putLong("last_sensor_hr_time", capturedPreview.capturedAt).apply()
-                    }
-                    val rejection = HeartRatePolicy.frameRejection(event.values.firstOrNull(), event.accuracy,
+                    val rejection = HeartRatePolicy.frameRejection(reading, event.accuracy,
                         event.timestamp, nowNanos, nowWall, measurementStartedNanos[MeasurementKind.HEART_RATE] ?: 0L,
                         lastHrEventNanos, timestampIssue)
                     heartRateAttempt?.frame(rejection, event.accuracy, event.timestamp, nowNanos,
-                        measurementStartedNanos[MeasurementKind.HEART_RATE] ?: 0L, event.values.firstOrNull(),
-                        timestampIssue, capturedPreview != null)
-                    val status = when {
-                        rejection == null -> "reading"
-                        capturedPreview != null -> "unreliable_accuracy"
-                        else -> "measuring"
-                    }
-                    publishHeartRateAttempt(status, force = hrStatus != status)
-                    if (rejection != null) {
-                        if (capturedPreview != null) finishMeasurement(MeasurementKind.HEART_RATE)
-                        if (hrStatus != status) updateHrStatus(status)
+                        measurementStartedNanos[MeasurementKind.HEART_RATE] ?: 0L, reading,
+                        timestampIssue, false)
+                    val isUsableReading = (rejection == null || event.accuracy == 0)
+                        && HeartRatePolicy.validReading(reading, event.accuracy)
+                    if (!isUsableReading) {
+                        if (event.accuracy == -1) updateHrStatus("no_contact")
                         return
                     }
-                    val reading = event.values[0]
                     val capturedAt = HeartRatePolicy.capturedWallTime(event.timestamp, nowNanos, nowWall,
-                        measurementStartedNanos[MeasurementKind.HEART_RATE] ?: 0L, lastHrEventNanos) ?: return
+                        measurementStartedNanos[MeasurementKind.HEART_RATE] ?: 0L, lastHrEventNanos) ?: nowWall
                     lastHrEventNanos = event.timestamp
                     val bpm = reading.toInt()
                     val changed = bpm != latestBpm
                     latestBpm = bpm; latestAcc = event.accuracy; latestBpmTimeMs = capturedAt
                     latestSensorPreview = null
-                    hrStatus = "reading"
                     prefs.edit().putInt("last_hr_bpm", bpm).putInt("last_hr_accuracy", latestAcc).putLong("last_hr_time", capturedAt)
                         .remove("last_sensor_hr_bpm").remove("last_sensor_hr_time").apply()
-                    finishMeasurement(MeasurementKind.HEART_RATE)
-                    if (changed || nowWall - lastHrSentMs >= 5000L) {
+                    publishHeartRateAttempt("measuring", force = hrStatus != "measuring")
+                    if (hrStatus != "measuring") hrStatus = "measuring"
+                    if (changed || nowWall - lastHrSentMs >= 1000L) {
                         lastHrSentMs = nowWall
                         sendMsg(MessageType.HEART_RATE, HeartRatePayload(bpm, latestAcc), capturedAt)
                         broadcastHr()
                     }
                 }
                 event.sensor.type == Sensor.TYPE_STEP_DETECTOR -> {
-                    if (!hardwareStepsRegistered) {
-                        resetDayIfNeeded()
-                        incrementSteps(1)
-                    }
+                    resetDayIfNeeded()
+                    lastHardwareStepTimeMs = SystemClock.elapsedRealtime()
+                    incrementSteps(1)
                 }
                 event.sensor.type == Sensor.TYPE_STEP_COUNTER -> {
                     val raw = event.values[0]
                     resetDayIfNeeded()
+                    val nowElapsed = SystemClock.elapsedRealtime()
                     val delta = hardwareStepGuard.sample(raw, event.sensor.maximumRange, nowMotion,
-                        SystemClock.elapsedRealtime(), counterRegisteredAtMs, maxLatencyMs = 120_000L) ?: return
-                    lastHardwareSteps = hardwareStepGuard.baselineCount
-                    prefs.edit().putInt("last_hardware_steps", lastHardwareSteps)
-                        .putLong("last_hardware_time_ms", hardwareStepGuard.baselineTimeMs).apply()
-                    if (delta > 0) {
-                        incrementSteps(delta)
+                        nowElapsed, counterRegisteredAtMs, maxLatencyMs = 120_000L)
+                        ?: hardwareStepGuard.sample(raw, event.sensor.maximumRange, nowElapsed, nowElapsed, counterRegisteredAtMs, 120_000L)
+                    if (delta != null) {
+                        lastHardwareStepTimeMs = nowElapsed
+                        lastHardwareSteps = hardwareStepGuard.baselineCount
+                        prefs.edit().putInt("last_hardware_steps", lastHardwareSteps)
+                            .putLong("last_hardware_time_ms", hardwareStepGuard.baselineTimeMs).apply()
+                        if (delta > 0) {
+                            incrementSteps(delta)
+                        }
                     }
                 }
                 event.sensor.type == Sensor.TYPE_ACCELEROMETER -> {
-                    if (!validWorkoutMotionSample(event.values, event.sensor.maximumRange, nowMotion,
-                        SystemClock.elapsedRealtime(), lastMotionMs, motionRegisteredAtMs)) {
-                        if (nowMotion > lastMotionMs) { stepTracker.reset(); fallDetector.reset() }
-                        return
+                    val nowElapsed = SystemClock.elapsedRealtime()
+                    if (event.values.size >= 3 && event.values[0].isFinite() && event.values[1].isFinite() && event.values[2].isFinite()) {
+                        stepTracker.processAccel(event.values[0], event.values[1], event.values[2], nowElapsed)
+                        fallDetector.process(event.values[0], event.values[1], event.values[2], nowElapsed)
                     }
-                    lastMotionMs = nowMotion
-                    if (!hardwareStepsRegistered && !stepDetectorRegistered) {
-                        stepTracker.processAccel(event.values[0], event.values[1], event.values[2], nowMotion)
-                    }
-                    fallDetector.process(event.values[0], event.values[1], event.values[2], nowMotion)
                 }
                 else -> if (oxygenSensors.contains(event.sensor)) {
                     if (!measurementWindows.isActive(MeasurementKind.OXYGEN, SystemClock.elapsedRealtime())) return

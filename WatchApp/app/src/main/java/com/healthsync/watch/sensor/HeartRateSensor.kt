@@ -62,8 +62,10 @@ class HeartRateSensor(
         if (event.sensor in sensors && event.values.isNotEmpty()) {
             val bpm = event.values[0].toInt()
             if (HeartRatePolicy.validReading(event.values[0], event.accuracy)) {
-                val capturedAt = HeartRatePolicy.capturedWallTime(event.timestamp, SystemClock.elapsedRealtimeNanos(),
-                    System.currentTimeMillis(), acquisitionStartedNanos, lastAcceptedNanos) ?: return
+                val nowNanos = SystemClock.elapsedRealtimeNanos()
+                val nowWall = System.currentTimeMillis()
+                val capturedAt = HeartRatePolicy.capturedWallTime(event.timestamp, nowNanos,
+                    nowWall, acquisitionStartedNanos, lastAcceptedNanos) ?: nowWall
                 lastAcceptedNanos = event.timestamp
                 Log.d(TAG, "HR: $bpm bpm (accuracy=${event.accuracy})")
                 onReading(bpm, event.accuracy)

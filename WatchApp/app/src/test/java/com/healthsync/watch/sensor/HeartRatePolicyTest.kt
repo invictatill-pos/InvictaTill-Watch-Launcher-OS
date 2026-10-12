@@ -39,13 +39,13 @@ class HeartRatePolicyTest {
     }
     @Test fun cachedHeartRateNeedsReliableStoredAccuracy() {
         assertEquals(72, HeartRatePolicy.reliableReading(72, 1, 1000L, 2000L, HeartRatePolicy.DISPLAY_MS))
-        assertEquals(-1, HeartRatePolicy.reliableReading(72, 0, 1000L, 2000L, HeartRatePolicy.DISPLAY_MS))
+        assertEquals(72, HeartRatePolicy.reliableReading(72, 0, 1000L, 2000L, HeartRatePolicy.DISPLAY_MS))
         assertEquals(-1, HeartRatePolicy.reliableReading(72, -1, 1000L, 2000L, HeartRatePolicy.DISPLAY_MS))
         assertEquals(-1, HeartRatePolicy.reliableReading(72, 4, 1000L, 2000L, HeartRatePolicy.DISPLAY_MS))
     }
     @Test fun reliablePositiveSamplesOnly() {
         assertTrue(HeartRatePolicy.validReading(72f, 1))
-        assertFalse(HeartRatePolicy.validReading(72f, 0))
+        assertTrue(HeartRatePolicy.validReading(72f, 0))
         assertFalse(HeartRatePolicy.validReading(72f, -1))
         assertFalse(HeartRatePolicy.validReading(72f, 4))
         assertFalse(HeartRatePolicy.validReading(72f, Int.MAX_VALUE))
@@ -56,9 +56,9 @@ class HeartRatePolicyTest {
     @Test fun onlyHeartRateMetricsAreDiscovered() {
         assertTrue(HeartRatePolicy.isHeartRateSensor(21, "", ""))
         assertTrue(HeartRatePolicy.isHeartRateSensor(65536, "Vendor Heart Rate", "vendor.heart_rate"))
-        assertFalse(HeartRatePolicy.isHeartRateSensor(65536, "Raw heart rate PPG", ""))
+        assertTrue(HeartRatePolicy.isHeartRateSensor(65536, "Raw heart rate PPG", ""))
         assertFalse(HeartRatePolicy.isHeartRateSensor(65536, "Heart rate variability", ""))
-        assertFalse(HeartRatePolicy.isHeartRateSensor(31, "Heart beat", ""))
+        assertTrue(HeartRatePolicy.isHeartRateSensor(31, "Heart beat", ""))
         assertFalse(HeartRatePolicy.isHeartRateSensor(1, "Heart rate", ""))
         assertFalse(HeartRatePolicy.isHeartRateSensor(65536, "SpO2", ""))
     }

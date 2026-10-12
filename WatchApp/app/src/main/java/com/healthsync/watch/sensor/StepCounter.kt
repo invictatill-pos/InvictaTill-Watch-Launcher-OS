@@ -41,6 +41,8 @@ class StepCounter(
     }
     fun stop() { sensorManager.unregisterListener(this); software.reset() }
 
+    private var lastHardwareTimeMs = 0L
+
     override fun onSensorChanged(event: SensorEvent) {
         resetDay()
         if (event.sensor.type == Sensor.TYPE_STEP_COUNTER && event.values.isNotEmpty()) {
@@ -49,9 +51,13 @@ class StepCounter(
             val value = raw.toInt()
             val delta = if (lastRaw >= 0 && value >= lastRaw) value - lastRaw else 0
             lastRaw = value
+            lastHardwareTimeMs = android.os.SystemClock.elapsedRealtime()
             if (delta > 0) { steps += delta; emit() }
-        } else if (event.sensor.type == Sensor.TYPE_ACCELEROMETER && !isHardware && event.values.size >= 3) {
-            software.processAccel(event.values[0], event.values[1], event.values[2], event.timestamp / 1_000_000L)
+        } else if (event.sensor.type == Sensor.TYPE_ACCELEROMETER && event.values.size >= 3) {
+            val nowElapsed = android.os.SystemClock.elapsedRealtime()
+            if (nowElapsed - lastHardwareTimeMs > 3000L) {
+                software.processAccel(event.values[0], event.values[1], event.values[2], nowElapsed)
+            }
         }
     }
     private fun resetDay() {

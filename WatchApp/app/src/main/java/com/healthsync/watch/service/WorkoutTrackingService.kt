@@ -170,9 +170,10 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
             }
         }
         if (!tracking) { clearPublishedState(); stopForeground(true); stopSelf(); return START_NOT_STICKY }
-        // Automatic heart rate follows the chosen sensor interval, including Off, during workouts.
+        // Start sensor collection and continuous heart rate tracking during workouts
         if (!paused) runCatching {
             ContextCompat.startForegroundService(this, Intent(this, SensorCollectorService::class.java))
+            SensorCollectorService.forceMeasureHr(this)
         }.onFailure { Log.w(TAG, "Sensor collection could not start", it) }
         publishState()
         startTicker()
@@ -260,9 +261,13 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
             while (tracking && isActive) {
                 collectSteps()
                 if (!paused) {
+                    // Keep continuous heart rate measurement active during workouts like Apple Watch/Garmin
+                    if (tick % 20 == 0 || SensorCollectorService.hrStatus !in setOf("measuring", "reading")) {
+                        SensorCollectorService.forceMeasureHr(this@WorkoutTrackingService)
+                    }
                     val sampleTime = SensorCollectorService.latestBpmTimeMs
-                    val bpm = SensorCollectorService.freshBpm()
-                    if (bpm > 0 && sampleTime >= startTimeMs && sampleTime != lastHrSampleTime) {
+                    val bpm = SensorCollectorService.freshBpm().takeIf { it > 0 } ?: SensorCollectorService.latestBpm
+                    if (bpm in 30..240 && sampleTime >= startTimeMs && sampleTime != lastHrSampleTime) {
                         hrSum += bpm; hrCount++; peakHr = maxOf(peakHr, bpm); lastHrSampleTime = sampleTime
                     }
                 }
@@ -307,7 +312,8 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
     private fun broadcastUpdate() {
         if (!tracking) return
         val duration = activeDurationMs(); val distance = distanceMeters()
-        val bpm = SensorCollectorService.freshBpm(); val cadence = if (paused) 0 else cadenceTracker.currentCadence(SystemClock.elapsedRealtime())
+        val bpm = SensorCollectorService.freshBpm().takeIf { it > 0 } ?: SensorCollectorService.latestBpm.takeIf { it in 30..240 } ?: -1
+        val cadence = if (paused) 0 else cadenceTracker.currentCadence(SystemClock.elapsedRealtime())
         val metric1 = when (activityType) {
             "Run" -> if (distance >= 10f) String.format(Locale.getDefault(), "%.2f min/km", SportAlgorithms.calculatePaceMinPerKm(distance.toDouble(), duration / 1000)) else "-- min/km"
             "Cycling" -> String.format(Locale.getDefault(), "%.1f km/h", SportAlgorithms.calculateSpeedKmh(distance.toDouble(), duration / 1000))

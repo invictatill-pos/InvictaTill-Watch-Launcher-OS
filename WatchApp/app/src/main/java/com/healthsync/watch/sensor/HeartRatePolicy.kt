@@ -9,16 +9,19 @@ object HeartRatePolicy {
     const val MAX_FRAME_AGE_NANOS = 10_000_000_000L
     fun isHeartRateSensor(type: Int, name: String, stringType: String): Boolean {
         if (type == 21) return true // Android TYPE_HEART_RATE
+        if (type == 31) return true // Android TYPE_HEART_BEAT
         if (type < 65_536) return false // No reinterpretation of other public sensor types.
         val label = "$name $stringType".lowercase(Locale.ROOT).replace('_', ' ').replace('-', ' ')
-        if (listOf("ppg", "raw", "heartbeat", "heart beat", "oxygen", "spo2", "variability").any { it in label }) return false
-        return label.contains("heart rate") || label.contains("heartrate")
+        if ((label.contains("spo2") || label.contains("oxygen")) && !label.contains("heart") && !label.contains("pulse")) return false
+        if (label.contains("variability")) return false
+        return label.contains("heart rate") || label.contains("heartrate") || label.contains("pulse") ||
+               label.contains("ppg") || label.contains("hrs") || label.contains("pah") || label.contains("tianyihexin")
     }
-    fun validReading(value: Float, accuracy: Int) = value.isFinite() && value in 25f..240f && accuracy in 1..3
+    fun validReading(value: Float, accuracy: Int) = value.isFinite() && value in 25f..240f && accuracy in 0..3
     fun reading(bpm: Int, measuredAt: Long, now: Long, maximumAge: Long): Int =
         if (bpm in 25..240 && measuredAt > 0 && now - measuredAt in 0L..maximumAge) bpm else -1
     fun reliableReading(bpm: Int, accuracy: Int, measuredAt: Long, now: Long, maximumAge: Long): Int =
-        if (accuracy in 1..3) reading(bpm, measuredAt, now, maximumAge) else -1
+        if (accuracy in 0..3) reading(bpm, measuredAt, now, maximumAge) else -1
     fun ageLabel(measuredAt: Long, now: Long): String {
         val age = (now - measuredAt).coerceAtLeast(0L)
         return when {
@@ -42,7 +45,7 @@ object HeartRatePolicy {
         if (timestampRejection(eventNanos, nowNanos, nowWallMs, acquisitionStartedNanos, lastAcceptedNanos) != null) return null
         val ageNanos = nowNanos - eventNanos
         val capturedWall = nowWallMs - ageNanos / 1_000_000L
-        return capturedWall
+        return if (capturedWall > 0L) capturedWall else null
     }
     fun validOxygen(value: Float, accuracy: Int) = value.isFinite() && value in 50f..100f && accuracy in 1..3
 

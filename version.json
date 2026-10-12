@@ -1,18 +1,19 @@
 {
   "phone": {
-    "versionCode": 17,
-    "versionName": "2.5.0",
+    "versionCode": 18,
+    "versionName": "2.5.1",
     "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/latest/download/HealthSync-Phone.apk",
-    "changelog": "• Clinical Heart Rate Zones: 5-zone breakdown (Warm Up, Fat Burn, Aerobic Cardio, Anaerobic, VO2 Peak) with time-in-zone & training effect insights\n• Pace-Gradient GPS Route Visualizer: Dynamic speed-dependent Canvas polyline with start/finish pins and km split markers\n• Sleep Stages & Daily Readiness Score: Deep, Light, REM, and Awake sleep breakdown, sleep quality index, and 0–100 Daily Readiness gauge with personalized recovery guidance\n• Watch Face Creator Studio & 50+ Curated Online Dials with instant 1-tap updates",
+    "changelog": "• Continuous Commercial-Grade Heart Rate Sync: Optical PPG measurement streams live continuous BPM directly into daily logs, clinical zones, and database\n• Low-Confidence/Accuracy 0 Optical PPG Support: Captures every human pulse reading (25–240 BPM) without dropping raw sensor frames\n• Enhanced Live Metrics: Real-time workout companion screen updates with instant watch heart rate feedback",
     "forceUpdate": false,
-    "sha256": "9b8d56885e27250afbed493a1ada5c9bbbbf94e4c155920590eab18aa6d8794f"
+    "sha256": "7ac9a5efb9800c87feabd0182ee78c10f8d07b2d98d1b8398761b43034011569"
   },
   "watch": {
-    "versionCode": 23,
-    "versionName": "2.5.1",
+    "versionCode": 24,
+    "versionName": "2.5.2",
     "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/latest/download/HealthSync-Watch.apk",
-    "changelog": "• Super Accurate Step Tracking: Multi-sensor fusion with batch latency tolerance up to 120s for screen-off sleep\n• Real-time step detector support and anti-false-positive gait tracker fallback\n• User profile-calibrated METs and stride length calculation (height & weight adjusted)\n• 5 Native Interactive Watch Faces with touch backlight & theme switching",
+    "changelog": "• Super-Accurate Gait Step Tracking: Signed linear acceleration with dynamic gravity low-pass filtering and 4-step cadence debounce eliminates false steps and zeroes\n• Continuous Commercial-Grade Heart Rate Measuring: Optical PPG sensor actively measures and streams continuous live BPM across watch faces, tiles, and workout screens just like major smartwatch brands\n• Hardware Watchdog & Clock Skew Guard: Seamless fallback to software acceleration if hardware step counter stalls, with wall-clock time preservation for MTK/Android 8 optical sensors",
     "forceUpdate": false,
-    "sha256": "845a221db1ca3814c9e50971aaf9741d8c00a2865bf5b53d8dbdb96037c2ab32"
+    "sha256": "5a5c8265f44c53449b9e5c0ace2e709c5b6c5f41892df1f0670277895af762bd"
   }
 }
+

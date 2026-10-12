@@ -29,8 +29,8 @@ class SyncValidationTest {
     }
 
     @Test fun rejectsUnreliableAndNoContactHeartRateBeforeReplayDedup() {
-        for (accuracy in listOf(-1, 0, 4)) assertFalse(SyncValidation.validHeartRate(72, accuracy, 900_000, 1_000_000))
-        for (accuracy in 1..3) assertTrue(SyncValidation.validHeartRate(72, accuracy, 900_000, 1_000_000))
+        for (accuracy in listOf(-1, 4)) assertFalse(SyncValidation.validHeartRate(72, accuracy, 900_000, 1_000_000))
+        for (accuracy in 0..3) assertTrue(SyncValidation.validHeartRate(72, accuracy, 900_000, 1_000_000))
         assertFalse(SyncValidation.validHeartRate(0, 3, 900_000, 1_000_000))
         assertFalse(SyncValidation.validHeartRate(241, 3, 900_000, 1_000_000))
         assertFalse(SyncValidation.validHeartRate(72, 3, 1_300_001, 1_000_000))
@@ -65,10 +65,12 @@ class SyncValidationTest {
     @Test fun rawHeartRateRejectsMissingNullStringAndFractionalRequiredValues() {
         val invalid = listOf("{}", "null", "[]", """{"bpm":72}""",
             """{"bpm":72,"accuracy":null}""", """{"bpm":"72","accuracy":3}""",
-            """{"bpm":72.5,"accuracy":3}""", """{"bpm":72,"accuracy":0}""")
+            """{"bpm":72.5,"accuracy":3}""", """{"bpm":72,"accuracy":-1}""")
         for (json in invalid) assertFalse(json, SyncValidation.validIncomingHealthPayload(MessageType.HEART_RATE, json, 900_000, 1_000_000))
         assertTrue(SyncValidation.validIncomingHealthPayload(MessageType.HEART_RATE,
             """{"bpm":72,"accuracy":3}""", 900_000, 1_000_000))
+        assertTrue(SyncValidation.validIncomingHealthPayload(MessageType.HEART_RATE,
+            """{"bpm":72,"accuracy":0}""", 900_000, 1_000_000))
     }
 
     @Test fun rawMetricsCannotUseGsonDefaultZerosForMissingFields() {

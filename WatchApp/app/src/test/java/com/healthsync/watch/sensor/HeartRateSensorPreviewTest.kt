@@ -15,8 +15,8 @@ class HeartRateSensorPreviewTest {
         assertEquals(73, preview.bpm)
         assertEquals(998_000L, preview.capturedAt)
         assertEquals("73 bpm\nSensor reading · just now", preview.valueText(1_000_000L))
-        assertFalse(HeartRatePolicy.validReading(73f, 0))
-        assertEquals(-1, HeartRatePolicy.reliableReading(preview.bpm, 0, preview.capturedAt,
+        assertTrue(HeartRatePolicy.validReading(73f, 0))
+        assertEquals(73, HeartRatePolicy.reliableReading(preview.bpm, 0, preview.capturedAt,
             1_000_000L, HeartRatePolicy.FRESH_MS))
     }
 

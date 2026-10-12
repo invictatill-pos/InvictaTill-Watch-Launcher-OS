@@ -11,16 +11,16 @@ interface HeartRateDao {
     @Insert
     suspend fun insert(entity: HeartRateEntity)
 
-    @Query("SELECT EXISTS(SELECT 1 FROM heart_rate WHERE timestamp = :timestamp AND bpm = :bpm AND accuracy BETWEEN 1 AND 3)")
+    @Query("SELECT EXISTS(SELECT 1 FROM heart_rate WHERE timestamp = :timestamp AND bpm = :bpm AND accuracy >= 0)")
     suspend fun hasReading(timestamp: Long, bpm: Int): Boolean
 
-    @Query("SELECT * FROM heart_rate WHERE timestamp >= :since AND accuracy BETWEEN 1 AND 3 AND bpm BETWEEN 25 AND 240 ORDER BY timestamp DESC")
+    @Query("SELECT * FROM heart_rate WHERE timestamp >= :since AND accuracy >= 0 AND bpm BETWEEN 25 AND 240 ORDER BY timestamp DESC")
     fun getLast24h(since: Long): Flow<List<HeartRateEntity>>
 
-    @Query("SELECT * FROM heart_rate WHERE accuracy BETWEEN 1 AND 3 AND bpm BETWEEN 25 AND 240 ORDER BY timestamp DESC LIMIT 1")
+    @Query("SELECT * FROM heart_rate WHERE accuracy >= 0 AND bpm BETWEEN 25 AND 240 ORDER BY timestamp DESC LIMIT 1")
     fun getLatest(): Flow<HeartRateEntity?>
 
-    @Query("SELECT AVG(bpm) FROM heart_rate WHERE timestamp >= :since AND accuracy BETWEEN 1 AND 3 AND bpm BETWEEN 25 AND 240")
+    @Query("SELECT AVG(bpm) FROM heart_rate WHERE timestamp >= :since AND accuracy >= 0 AND bpm BETWEEN 25 AND 240")
     suspend fun getAvgBpm(since: Long): Float?
 
     @Query("DELETE FROM heart_rate WHERE timestamp < :before")
