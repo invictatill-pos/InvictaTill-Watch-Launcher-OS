@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
@@ -18,6 +19,7 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.healthsync.phone.data.watchface.*
 import kotlin.math.*
@@ -38,6 +40,16 @@ fun DynamicFacePreview(
     stepGoal: Int = 10000,
     battery: Int = 85
 ) {
+    val cachedImage = remember(pkg.background.imageBase64) {
+        val b64 = pkg.background.imageBase64
+        if (!b64.isNullOrBlank()) {
+            try {
+                val bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+            } catch (_: Exception) { null }
+        } else null
+    }
+
     Box(
         modifier = modifier
             .aspectRatio(1f)
@@ -55,7 +67,7 @@ fun DynamicFacePreview(
             val density = radius / 150f // normalize to watch scale
 
             // 1. Draw Background
-            drawBackgroundLayer(pkg.background, cx, cy, radius, w, h)
+            drawBackgroundLayer(pkg.background, cachedImage, cx, cy, radius, w, h)
 
             // 2. Draw Dial Ticks & Numbers
             drawDialLayer(pkg.dial, cx, cy, radius, density)
@@ -77,6 +89,7 @@ fun DynamicFacePreview(
 
 private fun DrawScope.drawBackgroundLayer(
     bg: BackgroundConfig,
+    cachedImage: ImageBitmap?,
     cx: Float,
     cy: Float,
     radius: Float,
@@ -84,6 +97,17 @@ private fun DrawScope.drawBackgroundLayer(
     h: Float
 ) {
     when (bg.type) {
+        "image" -> {
+            if (cachedImage != null) {
+                drawImage(
+                    image = cachedImage,
+                    dstSize = IntSize(w.toInt(), h.toInt())
+                )
+            } else {
+                val color = parseColor(bg.colorHex, Color(0xFF0A0D12))
+                drawRect(color = color, size = size)
+            }
+        }
         "gradient_radial" -> {
             val start = parseColor(bg.gradientStartHex ?: bg.colorHex, Color(0xFF101622))
             val end = parseColor(bg.gradientEndHex ?: "#000000", Color.Black)

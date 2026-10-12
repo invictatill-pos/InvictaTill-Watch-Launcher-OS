@@ -1,0 +1,321 @@
+package com.healthsync.phone.data.watchface
+
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.util.Base64
+import android.util.Log
+import com.google.gson.Gson
+import java.io.ByteArrayOutputStream
+import java.io.File
+import java.util.UUID
+
+/**
+ * Manages user-created custom watch faces on the phone.
+ * Supports saving, loading, deleting, image compression for photo dials,
+ * and built-in starter templates for the Creator Studio.
+ */
+class CustomFaceStore private constructor(private val context: Context) {
+
+    private val gson = Gson()
+    private val customDir: File by lazy {
+        File(context.filesDir, "custom_watchfaces").apply {
+            if (!exists()) mkdirs()
+        }
+    }
+
+    companion object {
+        private const val TAG = "CustomFaceStore"
+        @Volatile private var instance: CustomFaceStore? = null
+
+        fun getInstance(context: Context): CustomFaceStore {
+            return instance ?: synchronized(this) {
+                instance ?: CustomFaceStore(context.applicationContext).also { instance = it }
+            }
+        }
+
+        /**
+         * Compresses a source bitmap into a square Base64 JPEG optimized for smartwatch screens (320x320).
+         * Keeps transfer payload small (~20-40KB) for instantaneous Bluetooth beaming to Kolabee U8 Ultra.
+         */
+        fun encodePhotoBitmap(bitmap: Bitmap, targetDimension: Int = 320, quality: Int = 85): String {
+            val minSide = minOf(bitmap.width, bitmap.height)
+            val cropX = (bitmap.width - minSide) / 2
+            val cropY = (bitmap.height - minSide) / 2
+            val cropped = Bitmap.createBitmap(bitmap, cropX, cropY, minSide, minSide)
+            val scaled = if (minSide != targetDimension) {
+                Bitmap.createScaledBitmap(cropped, targetDimension, targetDimension, true)
+            } else cropped
+
+            val stream = ByteArrayOutputStream()
+            scaled.compress(Bitmap.CompressFormat.JPEG, quality, stream)
+            val bytes = stream.toByteArray()
+            return Base64.encodeToString(bytes, Base64.NO_WRAP)
+        }
+    }
+
+    /** Lists all custom watch faces saved by the user. */
+    fun listCustomFaces(): List<HswfPackage> {
+        val files = customDir.listFiles { _, name -> name.endsWith(".hswf") } ?: return emptyList()
+        val list = mutableListOf<HswfPackage>()
+        for (file in files) {
+            try {
+                val json = file.readText(Charsets.UTF_8)
+                val pkg = gson.fromJson(json, HswfPackage::class.java)
+                if (pkg != null && pkg.id.isNotBlank()) {
+                    list.add(pkg)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error reading custom face ${file.name}", e)
+            }
+        }
+        return list.sortedByDescending { it.id }
+    }
+
+    /** Finds a custom face by ID. */
+    fun getCustomFace(id: String): HswfPackage? {
+        val file = File(customDir, "$id.hswf")
+        if (!file.exists()) return null
+        return try {
+            val json = file.readText(Charsets.UTF_8)
+            gson.fromJson(json, HswfPackage::class.java)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading $id.hswf", e)
+            null
+        }
+    }
+
+    /** Saves or updates a custom watch face. */
+    fun saveCustomFace(pkg: HswfPackage): Boolean {
+        return try {
+            val file = File(customDir, "${pkg.id}.hswf")
+            val json = gson.toJson(pkg)
+            file.writeText(json, Charsets.UTF_8)
+            Log.d(TAG, "Successfully saved custom face: ${pkg.name} (${pkg.id})")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save custom face ${pkg.id}", e)
+            false
+        }
+    }
+
+    /** Deletes a custom watch face. */
+    fun deleteCustomFace(id: String): Boolean {
+        val file = File(customDir, "$id.hswf")
+        return file.exists() && file.delete()
+    }
+
+    /** Provides curated starter design templates that users can customize. */
+    fun getTemplates(): List<HswfPackage> {
+        return listOf(
+            createPhotoDialTemplate(),
+            createExecutiveChronoTemplate(),
+            createCyberNeonTemplate(),
+            createMinimalBauhausTemplate()
+        )
+    }
+
+    private fun createPhotoDialTemplate(): HswfPackage {
+        return HswfPackage(
+            id = "template_photo",
+            name = "Photo Memories",
+            author = "HealthSync Studio",
+            description = "High-visibility dial optimized for personal photos and family portraits.",
+            type = "hybrid",
+            background = BackgroundConfig(
+                type = "solid",
+                colorHex = "#0F172A",
+                gradientStartHex = "#1E293B",
+                gradientEndHex = "#020617"
+            ),
+            dial = DialConfig(
+                showTicks = true,
+                tickCount = 12,
+                majorTickLength = 8f,
+                minorTickLength = 4f,
+                tickWidth = 2f,
+                majorTickColorHex = "#F8FAFC",
+                minorTickColorHex = "#94A3B8",
+                showNumbers = true,
+                numberType = "minimal_cardinal",
+                numberColorHex = "#F8FAFC",
+                numberSizeSp = 14f,
+                dialRadiusRatio = 0.90f
+            ),
+            hands = HandsConfig(
+                hourHand = HandStyle(lengthRatio = 0.48f, widthDp = 4f, colorHex = "#FFFFFF", shape = "baton"),
+                minuteHand = HandStyle(lengthRatio = 0.72f, widthDp = 2.8f, colorHex = "#38BDF8", shape = "baton"),
+                secondHand = HandStyle(lengthRatio = 0.84f, widthDp = 1.5f, colorHex = "#F43F5E", shape = "needle", smoothSweep = true)
+            ),
+            digitalClock = DigitalClockConfig(
+                enabled = true,
+                format = "HH:mm",
+                xRatio = 0.5f,
+                yRatio = 0.75f,
+                fontSizeSp = 28f,
+                colorHex = "#FFFFFF",
+                glowColorHex = "#38BDF8"
+            ),
+            date = DateConfig(
+                enabled = true,
+                format = "EEE d",
+                xRatio = 0.5f,
+                yRatio = 0.25f,
+                fontSizeSp = 13f,
+                colorHex = "#94A3B8",
+                hasFrame = true,
+                frameColorHex = "#1E293B"
+            ),
+            complications = ComplicationsConfig(
+                battery = ComplicationWidget(enabled = true, xRatio = 0.28f, yRatio = 0.5f, style = "text_only", colorHex = "#10B981"),
+                heartRate = ComplicationWidget(enabled = true, xRatio = 0.72f, yRatio = 0.5f, style = "text_only", colorHex = "#F43F5E")
+            )
+        )
+    }
+
+    private fun createExecutiveChronoTemplate(): HswfPackage {
+        return HswfPackage(
+            id = "template_executive",
+            name = "Executive Chrono",
+            author = "HealthSync Studio",
+            description = "Refined luxury analog layout with Roman numerals and dual subdials.",
+            type = "analog",
+            background = BackgroundConfig(
+                type = "gradient_radial",
+                colorHex = "#0B0E14",
+                gradientStartHex = "#161D2A",
+                gradientEndHex = "#06080C"
+            ),
+            dial = DialConfig(
+                showTicks = true,
+                tickCount = 60,
+                majorTickLength = 14f,
+                minorTickLength = 6f,
+                tickWidth = 2.2f,
+                majorTickColorHex = "#D4AF37",
+                minorTickColorHex = "#475569",
+                showNumbers = true,
+                numberType = "roman",
+                numberColorHex = "#F8FAFC",
+                numberSizeSp = 15f,
+                dialRadiusRatio = 0.86f
+            ),
+            hands = HandsConfig(
+                hourHand = HandStyle(lengthRatio = 0.52f, widthDp = 5.5f, colorHex = "#F8FAFC", shape = "sword", capRadius = 7f),
+                minuteHand = HandStyle(lengthRatio = 0.76f, widthDp = 3.8f, colorHex = "#D4AF37", shape = "sword", capRadius = 6f),
+                secondHand = HandStyle(lengthRatio = 0.88f, widthDp = 1.6f, colorHex = "#00E5FF", shape = "needle", smoothSweep = true)
+            ),
+            digitalClock = null,
+            date = DateConfig(
+                enabled = true,
+                format = "d",
+                xRatio = 0.74f,
+                yRatio = 0.5f,
+                fontSizeSp = 14f,
+                colorHex = "#D4AF37",
+                hasFrame = true,
+                frameColorHex = "#1E293B"
+            ),
+            complications = ComplicationsConfig(
+                heartRate = ComplicationWidget(enabled = true, xRatio = 0.5f, yRatio = 0.72f, style = "arc_gauge", colorHex = "#00E5FF", accentColorHex = "#1E293B"),
+                steps = ComplicationWidget(enabled = true, xRatio = 0.5f, yRatio = 0.28f, style = "arc_gauge", colorHex = "#D4AF37", accentColorHex = "#1E293B")
+            )
+        )
+    }
+
+    private fun createCyberNeonTemplate(): HswfPackage {
+        return HswfPackage(
+            id = "template_cyber",
+            name = "Cyber Neon",
+            author = "HealthSync Studio",
+            description = "High-tech cyberpunk aesthetic with glowing digital clock and neon telemetry.",
+            type = "digital",
+            background = BackgroundConfig(
+                type = "gradient_linear",
+                colorHex = "#05050A",
+                gradientStartHex = "#0A0818",
+                gradientEndHex = "#020205",
+                gradientAngle = 90f
+            ),
+            dial = DialConfig(
+                showTicks = true,
+                tickCount = 12,
+                majorTickLength = 8f,
+                minorTickLength = 4f,
+                tickWidth = 2f,
+                majorTickColorHex = "#00F0FF",
+                minorTickColorHex = "#FF0055",
+                showNumbers = false,
+                dialRadiusRatio = 0.90f
+            ),
+            hands = null,
+            digitalClock = DigitalClockConfig(
+                enabled = true,
+                format = "HH:mm:ss",
+                xRatio = 0.5f,
+                yRatio = 0.44f,
+                fontSizeSp = 34f,
+                colorHex = "#00F0FF",
+                glowColorHex = "#00F0FF",
+                fontFamily = "monospace"
+            ),
+            date = DateConfig(
+                enabled = true,
+                format = "EEE, MMM d",
+                xRatio = 0.5f,
+                yRatio = 0.58f,
+                fontSizeSp = 12f,
+                colorHex = "#FF0055",
+                hasFrame = false
+            ),
+            complications = ComplicationsConfig(
+                heartRate = ComplicationWidget(enabled = true, xRatio = 0.28f, yRatio = 0.74f, style = "arc_gauge", colorHex = "#FF0055", accentColorHex = "#200515"),
+                steps = ComplicationWidget(enabled = true, xRatio = 0.72f, yRatio = 0.74f, style = "arc_gauge", colorHex = "#00F0FF", accentColorHex = "#051520"),
+                battery = ComplicationWidget(enabled = true, xRatio = 0.5f, yRatio = 0.24f, style = "text_only", colorHex = "#00FF66")
+            )
+        )
+    }
+
+    private fun createMinimalBauhausTemplate(): HswfPackage {
+        return HswfPackage(
+            id = "template_bauhaus",
+            name = "Minimal Bauhaus",
+            author = "HealthSync Studio",
+            description = "Timeless Swiss minimalism with stark monochrome geometric clarity.",
+            type = "analog",
+            background = BackgroundConfig(
+                type = "solid",
+                colorHex = "#0A0A0A"
+            ),
+            dial = DialConfig(
+                showTicks = true,
+                tickCount = 12,
+                majorTickLength = 10f,
+                minorTickLength = 0f,
+                tickWidth = 3f,
+                majorTickColorHex = "#E5E5E5",
+                minorTickColorHex = "#262626",
+                showNumbers = false,
+                dialRadiusRatio = 0.88f
+            ),
+            hands = HandsConfig(
+                hourHand = HandStyle(lengthRatio = 0.48f, widthDp = 5f, colorHex = "#FFFFFF", shape = "baton", capRadius = 6f),
+                minuteHand = HandStyle(lengthRatio = 0.76f, widthDp = 3f, colorHex = "#E5E5E5", shape = "baton", capRadius = 5f),
+                secondHand = HandStyle(lengthRatio = 0.86f, widthDp = 1.6f, colorHex = "#E11D48", shape = "needle", smoothSweep = true)
+            ),
+            digitalClock = null,
+            date = DateConfig(
+                enabled = true,
+                format = "d",
+                xRatio = 0.5f,
+                yRatio = 0.68f,
+                fontSizeSp = 13f,
+                colorHex = "#A3A3A3",
+                hasFrame = false
+            ),
+            complications = ComplicationsConfig(
+                battery = ComplicationWidget(enabled = true, xRatio = 0.5f, yRatio = 0.32f, style = "text_only", colorHex = "#737373")
+            )
+        )
+    }
+}

@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.healthsync.phone.data.watchface.CustomFaceStore
 import com.healthsync.phone.data.watchface.HswfPackage
 import com.healthsync.phone.data.watchface.OnlineWatchFaceCatalog
 import com.healthsync.phone.data.watchface.OnlineWatchFaceCatalog.StoreItem
@@ -37,6 +38,17 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
+enum class StudioSection(val title: String, val subtitle: String) {
+    STORE("Watch Face Store", "Curated dials for Kolabee U8 Ultra"),
+    CREATOR("Watch Face Creator", "Design your personalized dial"),
+    MY_CREATIONS("My Creations", "Personal dials & custom designs")
+}
+
+/**
+ * Phase 4 & Phase 5: Watch Face Studio & Store.
+ * Provides curated online dial store, interactive Watch Face Creator Studio,
+ * and user's saved custom designs library with 1-tap beam to Kolabee U8 Ultra.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WatchFaceStoreScreen(
@@ -46,11 +58,28 @@ fun WatchFaceStoreScreen(
     val scope = rememberCoroutineScope()
     val connState by BluetoothSyncService.connectionState.collectAsState()
 
+    var currentSection by remember { mutableStateOf(StudioSection.STORE) }
+    var editingPackageForCreator by remember { mutableStateOf<HswfPackage?>(null) }
+    var myCreationsRefreshTrigger by remember { mutableIntStateOf(0) }
+
     var selectedCategory by remember { mutableStateOf("All") }
     var searchQuery by remember { mutableStateOf("") }
     var selectedItemForDetail by remember { mutableStateOf<StoreItem?>(null) }
 
     val categories = listOf("All", "Luxury", "Sports", "Minimal", "Cyberpunk")
+
+    // If Creator mode is active, display the full creator studio
+    if (currentSection == StudioSection.CREATOR) {
+        WatchFaceCreatorScreen(
+            initialPackage = editingPackageForCreator,
+            onBack = { currentSection = StudioSection.STORE },
+            onFaceSaved = {
+                myCreationsRefreshTrigger++
+                currentSection = StudioSection.MY_CREATIONS
+            }
+        )
+        return
+    }
 
     val filteredItems = remember(selectedCategory, searchQuery) {
         OnlineWatchFaceCatalog.items.filter { item ->
@@ -70,13 +99,13 @@ fun WatchFaceStoreScreen(
                 title = {
                     Column {
                         Text(
-                            "Watch Face Studio",
+                            currentSection.title,
                             color = TextWhite,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            "Curated dials for Kolabee U8 Ultra",
+                            currentSection.subtitle,
                             color = TextDim,
                             fontSize = 12.sp
                         )
@@ -130,105 +159,262 @@ fun WatchFaceStoreScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Search Bar
+            // Segmented Top Navigation: [Explore Store] | [Creator Studio] | [My Creations]
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 6.dp),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(14.dp),
                 color = BgCard,
                 border = BorderStroke(1.dp, BorderSubtle)
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Icon(Icons.Default.Search, contentDescription = null, tint = TextDim, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    BasicTextFieldWithPlaceholder(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        placeholder = "Search by style, author, or features…",
-                        modifier = Modifier.weight(1f)
-                    )
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(
-                            onClick = { searchQuery = "" },
-                            modifier = Modifier.size(20.dp)
+                    // Store Tab
+                    val isStore = currentSection == StudioSection.STORE
+                    Surface(
+                        onClick = { currentSection = StudioSection.STORE },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (isStore) AccentCyan else Color.Transparent
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
                         ) {
-                            Icon(Icons.Default.Close, contentDescription = "Clear", tint = TextDim, modifier = Modifier.size(14.dp))
+                            Icon(
+                                Icons.Default.Storefront,
+                                contentDescription = null,
+                                tint = if (isStore) Color.Black else TextWhite,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                "Store",
+                                color = if (isStore) Color.Black else TextWhite,
+                                fontSize = 12.sp,
+                                fontWeight = if (isStore) FontWeight.Bold else FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    // Creator Tab
+                    Surface(
+                        onClick = {
+                            editingPackageForCreator = null
+                            currentSection = StudioSection.CREATOR
+                        },
+                        modifier = Modifier.weight(1.1f),
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color.Transparent
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = AccentCyan,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                "Creator",
+                                color = AccentCyan,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    // My Creations Tab
+                    val isMyCreations = currentSection == StudioSection.MY_CREATIONS
+                    Surface(
+                        onClick = { currentSection = StudioSection.MY_CREATIONS },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (isMyCreations) AccentCyan else Color.Transparent
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                Icons.Default.CollectionsBookmark,
+                                contentDescription = null,
+                                tint = if (isMyCreations) Color.Black else TextWhite,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                "My Dials",
+                                color = if (isMyCreations) Color.Black else TextWhite,
+                                fontSize = 12.sp,
+                                fontWeight = if (isMyCreations) FontWeight.Bold else FontWeight.Medium
+                            )
                         }
                     }
                 }
             }
 
-            // Category Filter Pills
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(categories) { cat ->
-                    val isSelected = selectedCategory == cat
+            // Display content based on active section
+            when (currentSection) {
+                StudioSection.MY_CREATIONS -> {
+                    MyCreationsView(
+                        onOpenCreator = { pkgToEdit ->
+                            editingPackageForCreator = pkgToEdit
+                            currentSection = StudioSection.CREATOR
+                        },
+                        refreshTrigger = myCreationsRefreshTrigger,
+                        onRefreshNeeded = { myCreationsRefreshTrigger++ },
+                        isWatchConnected = connState.isConnected
+                    )
+                }
+                StudioSection.STORE, StudioSection.CREATOR -> {
+                    // Hero Creator Banner
                     Surface(
-                        onClick = { selectedCategory = cat },
-                        shape = RoundedCornerShape(20.dp),
-                        color = if (isSelected) AccentCyan else BgCard,
-                        border = BorderStroke(1.dp, if (isSelected) AccentCyan else BorderSubtle)
+                        onClick = {
+                            editingPackageForCreator = null
+                            currentSection = StudioSection.CREATOR
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        color = BgCard,
+                        border = BorderStroke(1.dp, AccentCyan.copy(alpha = 0.35f))
                     ) {
-                        Text(
-                            text = cat,
-                            color = if (isSelected) Color.White else TextSecondary,
-                            fontSize = 13.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
-                        )
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .clip(CircleShape)
+                                    .background(AccentCyan.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.AutoAwesome, null, tint = AccentCyan, modifier = Modifier.size(22.dp))
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Create Custom Dial or Photo Face", color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text("Build personalized watch faces or beam family photos to Kolabee U8", color = TextDim, fontSize = 11.sp)
+                            }
+                            Icon(Icons.Default.ArrowForward, null, tint = AccentCyan, modifier = Modifier.size(18.dp))
+                        }
                     }
-                }
-            }
 
-            // Watch Face Cards Grid
-            if (filteredItems.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Watch, contentDescription = null, tint = TextDim, modifier = Modifier.size(48.dp))
-                        Spacer(Modifier.height(12.dp))
-                        Text("No watch faces match your query", color = TextWhite, fontWeight = FontWeight.Bold)
-                        Text("Try choosing another category or clearing search filters", color = TextDim, fontSize = 12.sp)
-                    }
-                }
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 40.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(filteredItems, key = { it.pkg.id }) { item ->
-                        StoreFaceCard(
-                            item = item,
-                            onClick = { selectedItemForDetail = item },
-                            onQuickInstall = {
-                                if (!connState.isConnected) {
-                                    Toast.makeText(context, "Connect watch via Bluetooth first", Toast.LENGTH_SHORT).show()
-                                    return@StoreFaceCard
-                                }
-                                scope.launch {
-                                    Toast.makeText(context, "Beaming '${item.pkg.name}' to Watch…", Toast.LENGTH_SHORT).show()
-                                    val ok = WatchFaceSender.sendFaceToWatch(item.pkg, setActive = true)
-                                    if (ok) {
-                                        Toast.makeText(context, "✓ '${item.pkg.name}' installed & active on Watch!", Toast.LENGTH_LONG).show()
-                                    } else {
-                                        Toast.makeText(context, "Failed to send to Watch. Check connection.", Toast.LENGTH_LONG).show()
-                                    }
+                    // Search Bar
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        color = BgCard,
+                        border = BorderStroke(1.dp, BorderSubtle)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Search, contentDescription = null, tint = TextDim, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            BasicTextFieldWithPlaceholder(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                placeholder = "Search by style, author, or features…",
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(
+                                    onClick = { searchQuery = "" },
+                                    modifier = Modifier.size(20.dp)
+                                ) {
+                                    Icon(Icons.Default.Close, contentDescription = "Clear", tint = TextDim, modifier = Modifier.size(14.dp))
                                 }
                             }
-                        )
+                        }
+                    }
+
+                    // Category Filter Pills
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(categories) { cat ->
+                            val isSelected = selectedCategory == cat
+                            Surface(
+                                onClick = { selectedCategory = cat },
+                                shape = RoundedCornerShape(20.dp),
+                                color = if (isSelected) AccentCyan else BgCard,
+                                border = BorderStroke(1.dp, if (isSelected) AccentCyan else BorderSubtle)
+                            ) {
+                                Text(
+                                    text = cat,
+                                    color = if (isSelected) Color.White else TextSecondary,
+                                    fontSize = 13.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // Watch Face Cards Grid
+                    if (filteredItems.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(32.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.Watch, contentDescription = null, tint = TextDim, modifier = Modifier.size(48.dp))
+                                Spacer(Modifier.height(12.dp))
+                                Text("No watch faces match your query", color = TextWhite, fontWeight = FontWeight.Bold)
+                                Text("Try choosing another category or clearing search filters", color = TextDim, fontSize = 12.sp)
+                            }
+                        }
+                    } else {
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(2),
+                            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 40.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            items(filteredItems, key = { it.pkg.id }) { item ->
+                                StoreFaceCard(
+                                    item = item,
+                                    onClick = { selectedItemForDetail = item },
+                                    onQuickInstall = {
+                                        if (!connState.isConnected) {
+                                            Toast.makeText(context, "Connect watch via Bluetooth first", Toast.LENGTH_SHORT).show()
+                                            return@StoreFaceCard
+                                        }
+                                        scope.launch {
+                                            Toast.makeText(context, "Beaming '${item.pkg.name}' to Watch…", Toast.LENGTH_SHORT).show()
+                                            val ok = WatchFaceSender.sendFaceToWatch(item.pkg, setActive = true)
+                                            if (ok) {
+                                                Toast.makeText(context, "✓ '${item.pkg.name}' installed & active on Watch!", Toast.LENGTH_LONG).show()
+                                            } else {
+                                                Toast.makeText(context, "Failed to send to Watch. Check connection.", Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -240,8 +426,189 @@ fun WatchFaceStoreScreen(
         WatchFaceDetailSheet(
             item = item,
             isWatchConnected = connState.isConnected,
-            onDismiss = { selectedItemForDetail = null }
+            onDismiss = { selectedItemForDetail = null },
+            onCustomize = { pkg ->
+                selectedItemForDetail = null
+                editingPackageForCreator = pkg.copy(
+                    id = "custom_${System.currentTimeMillis()}",
+                    name = "${pkg.name} Custom",
+                    author = "You"
+                )
+                currentSection = StudioSection.CREATOR
+            }
         )
+    }
+}
+
+/**
+ * My Creations View: Displays all user-created and saved custom watch faces.
+ */
+@Composable
+private fun MyCreationsView(
+    onOpenCreator: (HswfPackage?) -> Unit,
+    refreshTrigger: Int,
+    onRefreshNeeded: () -> Unit,
+    isWatchConnected: Boolean
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val faceStore = remember { CustomFaceStore.getInstance(context) }
+    val myFaces = remember(refreshTrigger) { faceStore.listCustomFaces() }
+
+    if (myFaces.isEmpty()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(32.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(CircleShape)
+                        .background(AccentCyan.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Palette, contentDescription = null, tint = AccentCyan, modifier = Modifier.size(36.dp))
+                }
+                Text("No Custom Dials Yet", color = TextWhite, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "Design your own watch face from scratch or create a photo dial with personal memories.",
+                    color = TextDim,
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Center
+                )
+                Button(
+                    onClick = { onOpenCreator(null) },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentCyan)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Create Your First Dial", color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    } else {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 40.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            items(myFaces, key = { it.id }) { face ->
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = BgCard,
+                    border = BorderStroke(1.dp, BorderSubtle),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(136.dp)
+                                .padding(4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            DynamicFacePreview(
+                                pkg = face,
+                                modifier = Modifier.fillMaxSize(),
+                                hours = 10,
+                                minutes = 10,
+                                seconds = 32,
+                                heartRate = 72,
+                                steps = 5420,
+                                battery = 88
+                            )
+                        }
+
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            face.name,
+                            color = TextWhite,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            if (face.background.type == "image") "Photo Dial" else "Custom ${face.type.replaceFirstChar { it.uppercase() }}",
+                            color = AccentCyan,
+                            fontSize = 11.sp
+                        )
+
+                        Spacer(Modifier.height(10.dp))
+
+                        // Action Buttons: Beam & Edit
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            // Beam to Watch
+                            Button(
+                                onClick = {
+                                    if (!isWatchConnected) {
+                                        Toast.makeText(context, "Connect watch via Bluetooth first", Toast.LENGTH_SHORT).show()
+                                        return@Button
+                                    }
+                                    scope.launch {
+                                        Toast.makeText(context, "Beaming '${face.name}' to Watch…", Toast.LENGTH_SHORT).show()
+                                        val ok = WatchFaceSender.sendFaceToWatch(face, setActive = true)
+                                        if (ok) {
+                                            Toast.makeText(context, "✓ '${face.name}' active on Watch!", Toast.LENGTH_LONG).show()
+                                        } else {
+                                            Toast.makeText(context, "Transfer failed. Check connection.", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.weight(1f).height(36.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = AccentCyan),
+                                contentPadding = PaddingValues(horizontal = 4.dp)
+                            ) {
+                                Icon(Icons.Default.SendToMobile, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Beam", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            // Edit in Studio
+                            OutlinedButton(
+                                onClick = { onOpenCreator(face) },
+                                modifier = Modifier.size(36.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, BorderSubtle),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Icon(Icons.Default.Edit, contentDescription = "Edit", tint = TextWhite, modifier = Modifier.size(16.dp))
+                            }
+
+                            // Delete
+                            OutlinedButton(
+                                onClick = {
+                                    faceStore.deleteCustomFace(face.id)
+                                    onRefreshNeeded()
+                                    Toast.makeText(context, "Deleted '${face.name}'", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.size(36.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, BorderSubtle),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Icon(Icons.Default.DeleteOutline, contentDescription = "Delete", tint = StatusError, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -302,52 +669,36 @@ private fun StoreFaceCard(
                 overflow = TextOverflow.Ellipsis
             )
 
-            Spacer(Modifier.height(8.dp))
-
-            // Category & Badge Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = AccentCyan.copy(alpha = 0.1f)
-                ) {
-                    Text(
-                        item.category,
-                        color = AccentCyan,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Icon(Icons.Default.Download, contentDescription = null, tint = TextDim, modifier = Modifier.size(11.dp))
-                    Text(item.downloadCount, color = TextDim, fontSize = 10.sp)
-                }
-            }
-
             Spacer(Modifier.height(10.dp))
 
-            // Action Button
+            // Action: Install Button
             Surface(
                 onClick = onQuickInstall,
-                shape = RoundedCornerShape(12.dp),
-                color = AccentCyan.copy(alpha = 0.14f),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(34.dp)
+                    .height(36.dp),
+                shape = RoundedCornerShape(10.dp),
+                color = AccentCyan.copy(alpha = 0.14f),
+                border = BorderStroke(1.dp, AccentCyan.copy(alpha = 0.4f))
             ) {
                 Row(
                     modifier = Modifier.fillMaxSize(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
                 ) {
-                    Icon(Icons.Default.SendToMobile, contentDescription = null, tint = AccentCyan, modifier = Modifier.size(14.dp))
+                    Icon(
+                        Icons.Default.SendToMobile,
+                        contentDescription = null,
+                        tint = AccentCyan,
+                        modifier = Modifier.size(14.dp)
+                    )
                     Spacer(Modifier.width(6.dp))
-                    Text("Beam to Watch", color = AccentCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Beam to Watch",
+                        color = AccentCyan,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
         }
@@ -359,7 +710,8 @@ private fun StoreFaceCard(
 private fun WatchFaceDetailSheet(
     item: StoreItem,
     isWatchConnected: Boolean,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onCustomize: (HswfPackage) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -367,146 +719,116 @@ private fun WatchFaceDetailSheet(
     var sendSuccess by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    // Live ticking preview state
-    var liveSeconds by remember { mutableIntStateOf(Calendar.getInstance().get(Calendar.SECOND)) }
-    var isAodMode by remember { mutableStateOf(false) }
+    var isAmbientPreview by remember { mutableStateOf(false) }
+    var simSeconds by remember { mutableIntStateOf(30) }
+    var simMinutes by remember { mutableIntStateOf(10) }
+    var simHours by remember { mutableIntStateOf(10) }
 
+    // Live ticking simulation
     LaunchedEffect(Unit) {
         while (true) {
-            delay(1000)
             val cal = Calendar.getInstance()
-            liveSeconds = cal.get(Calendar.SECOND)
+            simHours = cal.get(Calendar.HOUR)
+            simMinutes = cal.get(Calendar.MINUTE)
+            simSeconds = cal.get(Calendar.SECOND)
+            delay(1000L)
         }
     }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = BgCard,
+        containerColor = BgCardHover,
         dragHandle = { BottomSheetDefaults.DragHandle(color = TextDim) }
     ) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 10.dp),
+                .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Large Interactive Preview
+            // Interactive 1:1 Live Preview
             item {
                 Box(
                     modifier = Modifier
-                        .size(200.dp)
+                        .size(210.dp)
                         .clip(CircleShape)
-                        .background(if (isAodMode) Color(0xFF020406) else Color.Transparent),
+                        .background(Color.Black)
+                        .border(4.dp, Color(0xFF1E293B), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    val cal = Calendar.getInstance()
-                    val hr = cal.get(Calendar.HOUR)
-                    val min = cal.get(Calendar.MINUTE)
-
                     DynamicFacePreview(
                         pkg = item.pkg,
                         modifier = Modifier.fillMaxSize(),
-                        hours = hr,
-                        minutes = min,
-                        seconds = if (isAodMode) 0 else liveSeconds,
-                        heartRate = 74,
-                        steps = 6210,
-                        stepGoal = 10000,
+                        hours = simHours,
+                        minutes = simMinutes,
+                        seconds = simSeconds,
+                        heartRate = 78,
+                        steps = 6200,
                         battery = 85
                     )
                 }
             }
 
-            // Mode Selector: Normal vs AOD
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    FilterChip(
-                        selected = !isAodMode,
-                        onClick = { isAodMode = false },
-                        label = { Text("Active Mode (Live)") },
-                        leadingIcon = { Icon(Icons.Default.LightMode, null, modifier = Modifier.size(16.dp)) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = AccentCyan,
-                            selectedLabelColor = Color.White
-                        )
-                    )
-                    FilterChip(
-                        selected = isAodMode,
-                        onClick = { isAodMode = true },
-                        label = { Text("AOD Ambient Mode") },
-                        leadingIcon = { Icon(Icons.Default.DarkMode, null, modifier = Modifier.size(16.dp)) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = AccentCyan,
-                            selectedLabelColor = Color.White
-                        )
-                    )
-                }
-            }
-
-            // Title, Author, Category
+            // Title & Category Badge
             item {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(item.pkg.name, color = TextWhite, fontSize = 22.sp, fontWeight = FontWeight.Black)
-                    Text("By ${item.pkg.author} · v${item.pkg.version}", color = TextDim, fontSize = 13.sp)
-                    Spacer(Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        item.tags.forEach { tag ->
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = BgInput
-                            ) {
-                                Text(tag, color = TextSecondary, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
-                            }
-                        }
-                    }
+                    Text(item.pkg.name, color = TextWhite, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text("By ${item.pkg.author} · ${item.category}", color = AccentCyan, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        item.pkg.description,
+                        color = TextDim,
+                        fontSize = 13.sp,
+                        textAlign = TextAlign.Center
+                    )
                 }
             }
 
-            // Description
+            // Specs Card
             item {
                 Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = BgInput,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    color = BgCard,
+                    border = BorderStroke(1.dp, BorderSubtle)
                 ) {
-                    Column(Modifier.padding(14.dp)) {
-                        Text("About this Watch Face", color = TextWhite, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(4.dp))
-                        Text(item.pkg.description, color = TextSecondary, fontSize = 12.sp, lineHeight = 17.sp)
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SpecRow("Type", item.pkg.type.replaceFirstChar { it.uppercase() })
+                        SpecRow("FPS", "Hardware 60 FPS")
+                        SpecRow("Dial", if (item.pkg.dial.showTicks) "${item.pkg.dial.tickCount} Ticks (${item.pkg.dial.numberType})" else "Minimal")
+                        SpecRow("Target Display", "Kolabee U8 Ultra (320x320)")
+                        SpecRow("Protocol", ".hswf v${item.pkg.schemaVersion}")
                     }
                 }
             }
 
-            // Complications Supported Specs
-            item {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = BgInput,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Hardware Features", color = TextWhite, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        SpecRow("Dial Engine", "Native 60 FPS Canvas (.hswf)")
-                        SpecRow("Heart Rate Complication", if (item.pkg.complications.heartRate.enabled) "Supported (Live BPM)" else "Disabled")
-                        SpecRow("Daily Steps Complication", if (item.pkg.complications.steps.enabled) "Supported (Target Arc)" else "Disabled")
-                        SpecRow("Battery Level Gauge", if (item.pkg.complications.battery.enabled) "Supported" else "Disabled")
-                        SpecRow("Always-On Display (AOD)", "Optimized Low-Power Ambient")
-                    }
-                }
-            }
-
-            // Install Action Button
+            // Actions: Customize in Studio & Install
             item {
                 if (errorMessage != null) {
                     Text(errorMessage!!, color = StatusError, fontSize = 13.sp, modifier = Modifier.padding(bottom = 6.dp))
                 }
 
+                // Customize in Studio Button
+                OutlinedButton(
+                    onClick = { onCustomize(item.pkg) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, AccentCyan.copy(alpha = 0.5f))
+                ) {
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = AccentCyan, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Customize in Creator Studio", color = AccentCyan, fontWeight = FontWeight.Bold)
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                // Install Action Button
                 Button(
                     onClick = {
                         if (!isWatchConnected) {
@@ -548,9 +870,9 @@ private fun WatchFaceDetailSheet(
                         Spacer(Modifier.width(8.dp))
                         Text("Installed & Active on Watch!", fontWeight = FontWeight.Bold)
                     } else {
-                        Icon(Icons.Default.InstallMobile, contentDescription = null, tint = Color.White)
+                        Icon(Icons.Default.SendToMobile, contentDescription = null, tint = Color.Black)
                         Spacer(Modifier.width(8.dp))
-                        Text("Install & Set Active on Watch", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text("Install & Set Active on Watch", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     }
                 }
                 Spacer(Modifier.height(20.dp))
