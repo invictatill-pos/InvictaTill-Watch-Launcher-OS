@@ -1,19 +1,20 @@
 {
   "phone": {
-    "versionCode": 18,
-    "versionName": "2.5.1",
+    "versionCode": 19,
+    "versionName": "2.6.0",
     "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/latest/download/HealthSync-Phone.apk",
-    "changelog": "• Continuous Commercial-Grade Heart Rate Sync: Optical PPG measurement streams live continuous BPM directly into daily logs, clinical zones, and database\n• Low-Confidence/Accuracy 0 Optical PPG Support: Captures every human pulse reading (25–240 BPM) without dropping raw sensor frames\n• Enhanced Live Metrics: Real-time workout companion screen updates with instant watch heart rate feedback",
+    "changelog": "• Overnight Sleep Architecture & Stages: Automatic reception and visualization of Deep, Light, REM, and Awake stages synced from watch\n• Daily Readiness & Recovery Score: Dynamic 0–100 score combining sleep duration, stage efficiency, and resting HR\n• Blood Oxygen (SpO2) Trends: 24-hour saturation graphs and low-oxygen alerts\n• Comprehensive Health Ecosystem: Seamless synchronization for workouts, hydration, and stand metrics",
     "forceUpdate": false,
-    "sha256": "7ac9a5efb9800c87feabd0182ee78c10f8d07b2d98d1b8398761b43034011569"
+    "sha256": "d29b6443e24d75a3dc37e65e07f9f55dcbdf22856af616ada20e034954786808"
   },
   "watch": {
-    "versionCode": 24,
-    "versionName": "2.5.2",
+    "versionCode": 25,
+    "versionName": "2.6.0",
     "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/latest/download/HealthSync-Watch.apk",
-    "changelog": "• Super-Accurate Gait Step Tracking: Signed linear acceleration with dynamic gravity low-pass filtering and 4-step cadence debounce eliminates false steps and zeroes\n• Continuous Commercial-Grade Heart Rate Measuring: Optical PPG sensor actively measures and streams continuous live BPM across watch faces, tiles, and workout screens just like major smartwatch brands\n• Hardware Watchdog & Clock Skew Guard: Seamless fallback to software acceleration if hardware step counter stalls, with wall-clock time preservation for MTK/Android 8 optical sensors",
+    "changelog": "• Automatic Sleep Tracking: Motion actigraphy and resting HR stage detection (Deep, Light, REM, Awake) with sleep score\n• Blood Oxygen (SpO2) Spot-Check: 15-second guided optical pulse measurement screen with pulsating ring\n• Stress & HRV Monitoring: Real-time physiological stress gauge with 1-Minute Box Breathing relax mode and haptic rhythm\n• Tactical Aerospace Compass: Low-pass filtered rotating rose with degree readout, cardinal indicators, GPS elevation, and True North haptic tick\n• Sedentary Stand Reminders & Hydration: Hourly inactivity vibration alerts ('Time to Stand!') and 1-tap water logging",
     "forceUpdate": false,
-    "sha256": "5a5c8265f44c53449b9e5c0ace2e709c5b6c5f41892df1f0670277895af762bd"
+    "sha256": "6bd6a68f09b82dc8b275cf647c2586f7870e07d53523b6459a35cfab69f87b0d"
   }
 }
+
 

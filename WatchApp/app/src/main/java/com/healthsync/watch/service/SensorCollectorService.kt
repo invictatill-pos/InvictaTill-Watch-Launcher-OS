@@ -35,9 +35,12 @@ import com.healthsync.watch.sensor.HeartRateFacePolicy
 import com.healthsync.watch.sensor.HardwareStepCounterGuard
 import com.healthsync.watch.timer.WatchTimerStore
 import kotlinx.coroutines.*
-import java.text.SimpleDateFormat
+import android.os.Vibrator
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.text.SimpleDateFormat
+import com.healthsync.watch.sensor.SleepTracker
 import java.io.File
 
 class SensorCollectorService : Service() {
@@ -50,6 +53,7 @@ class SensorCollectorService : Service() {
         const val ACTION_SETTINGS_UPDATED = "com.healthsync.watch.SETTINGS_UPDATED"
         const val ACTION_FORCE_MEASURE_HR = "com.healthsync.watch.FORCE_MEASURE_HR"
         const val ACTION_FORCE_MEASURE_SPO2 = "com.healthsync.watch.FORCE_MEASURE_SPO2"
+        const val ACTION_RECORD_SPO2 = "com.healthsync.watch.RECORD_SPO2"
         const val ACTION_SYNC_HEART_RATE = "com.healthsync.watch.SYNC_HEART_RATE"
         private const val ACTION_AUTO_HR = "com.healthsync.watch.AUTO_HR"
         private const val ACTION_AUTO_OXYGEN = "com.healthsync.watch.AUTO_OXYGEN"
@@ -74,6 +78,17 @@ class SensorCollectorService : Service() {
         fun forceMeasureHr(context: Context) = command(context, ACTION_FORCE_MEASURE_HR)
         fun forceMeasureSpO2(context: Context) = command(context, ACTION_FORCE_MEASURE_SPO2)
         fun syncHeartRateToPhone(context: Context) = command(context, ACTION_SYNC_HEART_RATE)
+        fun recordSpO2(context: Context, reading: Float) {
+            try {
+                val intent = Intent(context, SensorCollectorService::class.java).apply {
+                    action = ACTION_RECORD_SPO2
+                    putExtra("spo2_value", reading)
+                }
+                ContextCompat.startForegroundService(context, intent)
+            } catch (e: Exception) {
+                Log.w(TAG, "Record SpO2 error: ${e.message}")
+            }
+        }
 
         @Volatile var latestBpm = -1
         @Volatile var latestAcc = 0
@@ -210,6 +225,17 @@ class SensorCollectorService : Service() {
         }
     }
     private val fallDetector = FallDetection { severity -> sendMsg(MessageType.FALL_DETECTED, FallDetectedPayload(severity)) }
+    private val sleepTracker by lazy {
+        SleepTracker(this).apply {
+            onSleepFinalized = { payload ->
+                sendMsg(MessageType.SLEEP, payload)
+                sendBroadcast(Intent("com.healthsync.watch.SLEEP_UPDATE").setPackage(packageName))
+            }
+        }
+    }
+    private var currentHourSteps = 0
+    private var currentTrackingHour = -1
+    private var lastStandAlertHour = -1
 
     override fun onCreate() {
         super.onCreate()
@@ -303,6 +329,15 @@ class SensorCollectorService : Service() {
                     sendBroadcast(Intent("com.healthsync.watch.SPO2_UPDATE").setPackage(packageName)
                         .putExtra("spo2", -1f).putExtra("available", false))
                 }
+            }
+            ACTION_RECORD_SPO2 -> {
+                val value = intent.getFloatExtra("spo2_value", 98f)
+                val now = System.currentTimeMillis()
+                latestSpo2 = value
+                latestSpo2TimeMs = now
+                sendMsg(MessageType.SPO2, SpO2Payload(value), now)
+                sendBroadcast(Intent("com.healthsync.watch.SPO2_UPDATE").setPackage(packageName)
+                    .putExtra("spo2", value).putExtra("available", true))
             }
         }
         ensureIntervalJobs()
@@ -635,9 +670,12 @@ class SensorCollectorService : Service() {
                 }
                 event.sensor.type == Sensor.TYPE_ACCELEROMETER -> {
                     val nowElapsed = SystemClock.elapsedRealtime()
+                    val nowWall = System.currentTimeMillis()
                     if (event.values.size >= 3 && event.values[0].isFinite() && event.values[1].isFinite() && event.values[2].isFinite()) {
                         stepTracker.processAccel(event.values[0], event.values[1], event.values[2], nowElapsed)
                         fallDetector.process(event.values[0], event.values[1], event.values[2], nowElapsed)
+                        sleepTracker.processAccel(event.values[0], event.values[1], event.values[2], nowElapsed, nowWall, latestBpm)
+                        checkHourlyStand(nowWall)
                     }
                 }
                 else -> if (oxygenSensors.contains(event.sensor)) {
@@ -662,8 +700,10 @@ class SensorCollectorService : Service() {
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date())
         if (dayKey == today) return
         dayKey = today; latestSteps = 0; lastHardwareSteps = -1; hardwareStepGuard.reset(); stepTracker.reset()
+        currentHourSteps = 0
+        lastStandAlertHour = -1
         prefs.edit().putString("saved_date", today).putInt("saved_steps", 0).putInt("last_hardware_steps", -1)
-            .putLong("last_hardware_time_ms", 0L).apply()
+            .putInt("stand_hours_mask", 0).putLong("last_hardware_time_ms", 0L).apply()
         sendMsg(MessageType.STEPS, StepsPayload(0, 0.0))
         broadcastSteps()
     }
@@ -671,6 +711,15 @@ class SensorCollectorService : Service() {
     private fun incrementSteps(delta: Int) {
         if (delta <= 0) return
         resetDayIfNeeded()
+        currentHourSteps += delta
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        if (currentHourSteps >= 100) {
+            val mask = prefs.getInt("stand_hours_mask", 0)
+            val bit = 1 shl hour
+            if ((mask and bit) == 0) {
+                prefs.edit().putInt("stand_hours_mask", mask or bit).apply()
+            }
+        }
         latestSteps = (latestSteps.toLong() + delta).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
         latestLifetimeSteps += delta.toLong()
         prefs.edit().putInt("saved_steps", latestSteps).putLong("lifetime_steps", latestLifetimeSteps).apply()
@@ -684,6 +733,37 @@ class SensorCollectorService : Service() {
         WatchDatabaseHelper.getInstance(this).insertOrUpdateStepBucket(bucket, delta, deltaCal)
         sendMsg(MessageType.STEPS, StepsPayload(latestSteps, totalCal))
         broadcastSteps()
+    }
+
+    private fun checkHourlyStand(nowWall: Long) {
+        val cal = Calendar.getInstance().apply { timeInMillis = nowWall }
+        val hour = cal.get(Calendar.HOUR_OF_DAY)
+        val minute = cal.get(Calendar.MINUTE)
+
+        if (hour != currentTrackingHour) {
+            currentTrackingHour = hour
+            currentHourSteps = 0
+        }
+
+        if (minute >= 50 && hour in 9..20 && hour != lastStandAlertHour && currentHourSteps < 100) {
+            lastStandAlertHour = hour
+            dispatchStandReminder()
+        }
+    }
+
+    private fun dispatchStandReminder() {
+        val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        vibrator?.vibrate(longArrayOf(0, 180, 80, 180), -1)
+
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+        val notif = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("Time to Stand! 🧍")
+            .setContentText("Take a 1-minute walk to close your stand ring.")
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .build()
+        nm?.notify(3002, notif)
     }
 
     private inline fun <reified T> sendMsg(type: MessageType, payload: T, timestamp: Long = System.currentTimeMillis()) {

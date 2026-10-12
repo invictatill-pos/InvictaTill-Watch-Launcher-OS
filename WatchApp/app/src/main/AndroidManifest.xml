@@ -228,6 +228,28 @@
             android:screenOrientation="portrait"
             android:keepScreenOn="true" />
 
+        <!-- Health & Flagship Features -->
+        <activity
+            android:name=".ui.SleepActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".ui.SpO2Activity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".ui.StressActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".ui.CompassActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".ui.HydrationActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
         <!-- Boot receiver -->
         <receiver android:name=".receiver.WatchBootReceiver" android:exported="true">
             <intent-filter>

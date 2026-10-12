@@ -69,6 +69,11 @@ class AppGridPanel(
     private var sheet: View? = null
     private val builtins = listOf(
         Entry("@health", "Health", icon = android.R.drawable.ic_menu_myplaces),
+        Entry("@sleep", "Sleep", icon = android.R.drawable.ic_lock_idle_alarm),
+        Entry("@spo2", "SpO2", icon = android.R.drawable.ic_menu_compass),
+        Entry("@stress", "Stress", icon = android.R.drawable.ic_popup_sync),
+        Entry("@compass", "Compass", icon = android.R.drawable.ic_menu_directions),
+        Entry("@hydration", "Water", icon = android.R.drawable.ic_menu_agenda),
         Entry("@music", "Music", icon = android.R.drawable.ic_media_play),
         Entry("@notifications", "Notifications", icon = android.R.drawable.ic_dialog_email),
         Entry("@tools", "Tools", icon = android.R.drawable.ic_menu_recent_history),
@@ -214,6 +219,11 @@ class AppGridPanel(
     private fun launch(entry: Entry) {
         when (entry.key) {
             "@health" -> { remember(entry); onNavigate("fitness") }
+            "@sleep" -> { remember(entry); activity.startActivity(Intent(activity, com.healthsync.watch.ui.SleepActivity::class.java)) }
+            "@spo2" -> { remember(entry); activity.startActivity(Intent(activity, com.healthsync.watch.ui.SpO2Activity::class.java)) }
+            "@stress" -> { remember(entry); activity.startActivity(Intent(activity, com.healthsync.watch.ui.StressActivity::class.java)) }
+            "@compass" -> { remember(entry); activity.startActivity(Intent(activity, com.healthsync.watch.ui.CompassActivity::class.java)) }
+            "@hydration" -> { remember(entry); activity.startActivity(Intent(activity, com.healthsync.watch.ui.HydrationActivity::class.java)) }
             "@music" -> { remember(entry); onNavigate("media") }
             "@notifications" -> { remember(entry); onNavigate("notifications") }
             "@tools" -> { remember(entry); onUtilities() }

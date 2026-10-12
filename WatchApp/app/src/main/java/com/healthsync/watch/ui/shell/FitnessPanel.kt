@@ -143,6 +143,11 @@ class FitnessPanel(
         }
         action("Workout history", 0xFF9FC3FF.toInt()) { launch(WatchHistoryActivity::class.java) }
         action("Health measurements", 0xFFFF8999.toInt()) { openHealth() }
+        action("Sleep Analysis", 0xFF5C6BC0.toInt()) { launch(com.healthsync.watch.ui.SleepActivity::class.java) }
+        action("Blood Oxygen (SpO2)", 0xFFFF3D00.toInt()) { launch(com.healthsync.watch.ui.SpO2Activity::class.java) }
+        action("Stress & Breathing", 0xFF00E5FF.toInt()) { launch(com.healthsync.watch.ui.StressActivity::class.java) }
+        action("Compass & Altitude", 0xFF00E676.toInt()) { launch(com.healthsync.watch.ui.CompassActivity::class.java) }
+        action("Water Hydration", 0xFF00B0FF.toInt()) { launch(com.healthsync.watch.ui.HydrationActivity::class.java) }
         action("Activity settings", muted, onOpenSettings)
         action("Back to clock", muted, onClose).background = shape(Color.TRANSPARENT)
         refresh()
