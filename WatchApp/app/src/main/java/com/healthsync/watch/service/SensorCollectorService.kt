@@ -41,12 +41,22 @@ import com.healthsync.watch.sensor.observedActivityMonitoringDelta
 import com.healthsync.watch.sensor.StepCapturePolicy
 import com.healthsync.watch.timer.WatchTimerStore
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import android.os.Vibrator
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.text.SimpleDateFormat
 import com.healthsync.watch.sensor.SleepTracker
+import com.healthsync.watch.sensor.HealthAppMetric
+import com.healthsync.watch.sensor.HealthAppReading
+import com.healthsync.watch.sensor.InstalledHealthAppFallback
+import com.healthsync.watch.sensor.SensorCandidateRetryPolicy
+import com.healthsync.watch.sensor.WatchHealthSourcePolicy
+import com.healthsync.watch.sensor.HeartRateFaceReading
+import com.healthsync.watch.sensor.OxygenSensorPreview
+import com.healthsync.watch.sensor.OxygenDisplayReading
 import java.io.File
 
 class SensorCollectorService : Service() {
@@ -59,6 +69,8 @@ class SensorCollectorService : Service() {
         const val ACTION_SETTINGS_UPDATED = "com.healthsync.watch.SETTINGS_UPDATED"
         const val ACTION_FORCE_MEASURE_HR = "com.healthsync.watch.FORCE_MEASURE_HR"
         const val ACTION_FORCE_MEASURE_SPO2 = "com.healthsync.watch.FORCE_MEASURE_SPO2"
+        private const val ACTION_CHECK_APP_HR = "com.healthsync.watch.CHECK_APP_HR"
+        private const val ACTION_CHECK_APP_OXYGEN = "com.healthsync.watch.CHECK_APP_OXYGEN"
         const val ACTION_SYNC_HEART_RATE = "com.healthsync.watch.SYNC_HEART_RATE"
         private const val ACTION_AUTO_HR = "com.healthsync.watch.AUTO_HR"
         private const val ACTION_AUTO_OXYGEN = "com.healthsync.watch.AUTO_OXYGEN"
@@ -66,6 +78,18 @@ class SensorCollectorService : Service() {
         @Volatile private var latestHrAttemptReport: String? = null
 
         private fun command(context: Context, action: String) {
+            val appMetric = when (action) {
+                ACTION_FORCE_MEASURE_HR, ACTION_CHECK_APP_HR -> HealthAppMetric.HEART_RATE
+                ACTION_FORCE_MEASURE_SPO2, ACTION_CHECK_APP_OXYGEN -> HealthAppMetric.OXYGEN
+                else -> null
+            }
+            if (appMetric != null && Build.VERSION.SDK_INT >= 34 &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED &&
+                bodySensorAccessStatus(context) != null) {
+                restoreHealthCaptureCache(context)
+                HealthAppImportService.start(context, appMetric)
+                return
+            }
             try { ContextCompat.startForegroundService(context, Intent(context, SensorCollectorService::class.java).setAction(action)) }
             catch (e: Exception) {
                 hrStatus = "service_unavailable"
@@ -82,11 +106,30 @@ class SensorCollectorService : Service() {
         fun notifySettingsUpdated(context: Context) = command(context, ACTION_SETTINGS_UPDATED)
         fun forceMeasureHr(context: Context) = command(context, ACTION_FORCE_MEASURE_HR)
         fun forceMeasureSpO2(context: Context) = command(context, ACTION_FORCE_MEASURE_SPO2)
-        fun syncHeartRateToPhone(context: Context) = command(context, ACTION_SYNC_HEART_RATE)
+        fun checkHealthAppHeartRate(context: Context) = command(context, ACTION_CHECK_APP_HR)
+        fun checkHealthAppOxygen(context: Context) = command(context, ACTION_CHECK_APP_OXYGEN)
+        fun syncHeartRateToPhone(context: Context) {
+            if (Build.VERSION.SDK_INT >= 34 &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED &&
+                bodySensorAccessStatus(context) != null) {
+                restoreHealthCaptureCache(context)
+                if (displayBpm() > 0) {
+                    sendImportedMsg(MessageType.HEART_RATE,
+                        HeartRatePayload(latestBpm, latestAcc, latestHrSource, latestHrSourcePackage, latestHrSourceLabel), latestBpmTimeMs)
+                    publishAppFallbackStatus(context, HealthAppMetric.HEART_RATE,
+                        if (latestHrSource == WatchHealthSourcePolicy.HEALTH_APP) "app_reading" else "reading")
+                }
+                if (displaySpO2() > 0f) sendImportedMsg(MessageType.SPO2,
+                    SpO2Payload(latestSpo2, latestOxygenSource, latestOxygenSourcePackage, latestOxygenSourceLabel), latestSpo2TimeMs)
+            } else command(context, ACTION_SYNC_HEART_RATE)
+        }
 
         @Volatile var latestBpm = -1
         @Volatile var latestAcc = 0
         @Volatile var latestBpmTimeMs = 0L
+        @Volatile var latestHrSource = WatchHealthSourcePolicy.SENSOR; private set
+        @Volatile var latestHrSourcePackage = ""; private set
+        @Volatile var latestHrSourceLabel = ""; private set
         @Volatile var latestSteps = 0
         @Volatile var latestStepsCaptureTimeMs = 0L; private set
         @Volatile var stepCaptureSource = "NONE"; private set
@@ -96,6 +139,11 @@ class SensorCollectorService : Service() {
         @Volatile var latestLifetimeSteps = -1L
         @Volatile var latestSpo2 = -1f
         @Volatile var latestSpo2TimeMs = 0L
+        @Volatile var latestOxygenSource = WatchHealthSourcePolicy.SENSOR; private set
+        @Volatile var latestOxygenSourcePackage = ""; private set
+        @Volatile var latestOxygenSourceLabel = ""; private set
+        @Volatile private var hrAppFallbackMessage = ""
+        @Volatile private var oxygenAppFallbackMessage = ""
         @Volatile var heartRateAvailable = false
         @Volatile var spo2Available = false
         @Volatile var spo2Status = "idle"
@@ -103,6 +151,16 @@ class SensorCollectorService : Service() {
         @Volatile private var latestMotionCapturedElapsed = -1L
         @Volatile var hrStatus = "idle"
         @Volatile private var latestSensorPreview: HeartRateSensorPreview? = null
+        @Volatile private var latestOxygenPreview: OxygenSensorPreview? = null
+
+        fun watchOxygenReading(nowMs: Long = System.currentTimeMillis()): OxygenDisplayReading {
+            val recorded = displaySpO2(nowMs)
+            val preview = latestOxygenPreview?.takeIf { it.display(nowMs) > 0f }
+            if (preview == null) latestOxygenPreview = null
+            if (preview != null && (recorded <= 0f || preview.capturedAt > latestSpo2TimeMs))
+                return OxygenDisplayReading(preview.percentage, preview.capturedAt, unverified = true)
+            return OxygenDisplayReading(recorded, if (recorded > 0f) latestSpo2TimeMs else 0L, unverified = false)
+        }
 
         fun sensorPreview(nowMs: Long = System.currentTimeMillis()): HeartRateSensorPreview? {
             val preview = latestSensorPreview ?: return null
@@ -116,17 +174,26 @@ class SensorCollectorService : Service() {
             if (display.sensorReading) return HeartRateSensorPreview(display.bpm, display.capturedAt).valueText(nowMs)
             return if (display.bpm > 0) "${display.bpm} bpm" else "— bpm"
         }
-        fun watchFaceHeartRate(nowMs: Long = System.currentTimeMillis()) =
-            HeartRateFacePolicy.select(latestBpm, latestAcc, latestBpmTimeMs, sensorPreview(nowMs), nowMs)
+        fun watchFaceHeartRate(nowMs: Long = System.currentTimeMillis()): HeartRateFaceReading {
+            val preview = sensorPreview(nowMs)
+            if (latestHrSource == WatchHealthSourcePolicy.HEALTH_APP && displayBpm(nowMs) > 0 &&
+                (preview == null || preview.capturedAt <= latestBpmTimeMs))
+                return HeartRateFaceReading(latestBpm, latestBpmTimeMs, sensorReading = false)
+            return HeartRateFacePolicy.select(latestBpm, latestAcc, latestBpmTimeMs, preview, nowMs)
+        }
 
         fun freshBpm(nowMs: Long = System.currentTimeMillis()): Int =
-            HeartRatePolicy.reliableReading(latestBpm, latestAcc, latestBpmTimeMs, nowMs, HeartRatePolicy.FRESH_MS)
+            WatchHealthSourcePolicy.heartRate(latestBpm, latestAcc, latestBpmTimeMs, nowMs, HeartRatePolicy.FRESH_MS,
+                latestHrSource, latestHrSourcePackage, latestHrSourceLabel)
         fun displayBpm(nowMs: Long = System.currentTimeMillis()): Int =
-            HeartRatePolicy.reliableReading(latestBpm, latestAcc, latestBpmTimeMs, nowMs, HeartRatePolicy.DISPLAY_MS)
+            WatchHealthSourcePolicy.heartRate(latestBpm, latestAcc, latestBpmTimeMs, nowMs, HeartRatePolicy.DISPLAY_MS,
+                latestHrSource, latestHrSourcePackage, latestHrSourceLabel)
         fun freshSpO2(nowMs: Long = System.currentTimeMillis()): Float =
-            OxygenCapturePolicy.displayReading(latestSpo2, latestSpo2TimeMs, nowMs, HeartRatePolicy.FRESH_MS)
+            WatchHealthSourcePolicy.oxygen(latestSpo2, latestSpo2TimeMs, nowMs, HeartRatePolicy.FRESH_MS,
+                latestOxygenSource, latestOxygenSourcePackage, latestOxygenSourceLabel)
         fun displaySpO2(nowMs: Long = System.currentTimeMillis()): Float =
-            OxygenCapturePolicy.displayReading(latestSpo2, latestSpo2TimeMs, nowMs, HeartRatePolicy.DISPLAY_MS)
+            WatchHealthSourcePolicy.oxygen(latestSpo2, latestSpo2TimeMs, nowMs, HeartRatePolicy.DISPLAY_MS,
+                latestOxygenSource, latestOxygenSourcePackage, latestOxygenSourceLabel)
         fun hasCapturedStepsToday(nowMs: Long = System.currentTimeMillis()): Boolean =
             StepCapturePolicy.visibleCapture(StepCapturePolicy.capturedToday(latestStepsCaptureTimeMs,
                 latestStepCaptureDay, SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(nowMs)),
@@ -147,6 +214,11 @@ class SensorCollectorService : Service() {
         fun restEstimateInProgress(nowElapsed: Long = SystemClock.elapsedRealtime()): Boolean =
             latestRestEstimateActive && restMonitoringActive(nowElapsed)
         fun oxygenStatusText(context: Context): String = when {
+            spo2Status == "checking_health_apps" -> "Checking readings shared by installed health apps…"
+            watchOxygenReading().unverified -> "Unverified sensor · ${HeartRatePolicy.ageLabel(watchOxygenReading().capturedAt, System.currentTimeMillis())}"
+            spo2Status == "app_reading" && displaySpO2() > 0f ->
+                "From $latestOxygenSourceLabel · ${HeartRatePolicy.ageLabel(latestSpo2TimeMs, System.currentTimeMillis())}"
+            oxygenAppFallbackMessage.isNotBlank() && spo2Status !in setOf("measuring", "received") -> oxygenAppFallbackMessage
             ContextCompat.checkSelfPermission(context, Manifest.permission.BODY_SENSORS) != PackageManager.PERMISSION_GRANTED ->
                 "Allow sensor access in App permissions to measure oxygen."
             !spo2Available -> "This watch exposes no compatible oxygen saturation sensor. No reading can be captured."
@@ -180,6 +252,8 @@ class SensorCollectorService : Service() {
                 candidates.getOrNull()?.take(4)?.forEach { appendLine("  ${sensorDescription(it).take(300)}") }
                 if (candidates.isFailure) appendLine("  ${candidates.exceptionOrNull()?.javaClass?.simpleName}")
                 appendLine("Accuracy: -1=no contact, 0=unreliable, 1..3=usable. Only validated BPM sensor frames with usable accuracy are recorded.")
+                appendLine("App fallback: ${hrAppFallbackMessage.ifBlank { "No failed app export check." }}")
+                appendLine("Latest captured source: $latestHrSource${if (latestHrSourcePackage.isNotBlank()) "; $latestHrSourcePackage ($latestHrSourceLabel)" else ""}")
                 appendLine("No raw heart rate values are included in this report.")
                 appendLine()
                 append(attempt)
@@ -192,13 +266,18 @@ class SensorCollectorService : Service() {
                 .onFailure { Log.w(TAG, "Could not save HR diagnostic: ${it.javaClass.simpleName}") }
         }
         fun heartRateStatusText(context: Context, measurementDetails: Boolean = false): String {
+            if (hrStatus == "checking_health_apps") return "Checking readings shared by installed health apps…"
+            if (hrStatus == "app_reading" && displayBpm() > 0)
+                return "From $latestHrSourceLabel · ${heartRateAgeLabel()}"
+            if (hrAppFallbackMessage.isNotBlank() && hrStatus !in setOf("measuring", "reading"))
+                return hrAppFallbackMessage
             if (ContextCompat.checkSelfPermission(context, Manifest.permission.BODY_SENSORS) != PackageManager.PERMISSION_GRANTED)
                 return "Allow sensor access in App permissions to measure heart rate."
             if (!hasHeartRateSensor(context)) return "No compatible heart rate sensor is exposed by this watch. Open Heart rate details to check this watch's sensor support."
             val displayed = watchFaceHeartRate()
             val ageLabel = HeartRatePolicy.ageLabel(displayed.capturedAt, System.currentTimeMillis())
             val current = when(hrStatus) {
-                "measuring" -> if (displayed.bpm > 0) "Measuring… Live: ${displayed.bpm} bpm" else "Measuring… Wear snugly and stay still."
+                "measuring" -> if (displayed.bpm > 0) "Measuring… Latest: ${displayed.bpm} bpm · $ageLabel" else "Measuring… Wear snugly and stay still."
                 "no_contact" -> "No new reading. Check wrist contact and measure again."
                 "no_events" -> "The sensor registered but sent no readings. Open Heart rate details and try Measure again."
                 "invalid_samples" -> "The sensor sent readings that could not be validated. Open Heart rate details and try again."
@@ -212,6 +291,88 @@ class SensorCollectorService : Service() {
             return if (displayed.bpm > 0 && hrStatus in setOf("no_contact", "no_events", "invalid_samples", "sensor_error", "service_unavailable", "disabled"))
                 "$current $ageLabel" else current
         }
+
+        private fun sendImportedMsg(type: MessageType, payload: Any, capturedAt: Long) {
+            val protocol = Gson()
+            BluetoothClientService.sendRawMsg(SyncMessage(type, capturedAt, protocol.toJson(payload)), protocol)
+        }
+
+        fun publishAppFallbackStatus(context: Context, metric: HealthAppMetric, status: String, message: String = "") {
+            if (metric == HealthAppMetric.HEART_RATE) {
+                hrStatus = status; hrAppFallbackMessage = message
+                context.sendBroadcast(Intent("com.healthsync.watch.HR_UPDATE").setPackage(context.packageName)
+                    .putExtra("bpm", freshBpm()).putExtra("available", heartRateAvailable).putExtra("status", status)
+                    .putExtra("reading_time", latestBpmTimeMs))
+                sendImportedMsg(MessageType.HEART_RATE_STATUS, HeartRateStatusPayload(status, displayBpm(), latestBpmTimeMs,
+                    heartRateDiagnosticReport(context)), System.currentTimeMillis())
+                persistDiagnosticReport(context)
+            } else {
+                spo2Status = status; oxygenAppFallbackMessage = message
+                context.sendBroadcast(Intent("com.healthsync.watch.SPO2_UPDATE").setPackage(context.packageName)
+                    .putExtra("spo2", displaySpO2()).putExtra("available", spo2Available).putExtra("status", status)
+                    .putExtra("reading_time", latestSpo2TimeMs))
+            }
+        }
+
+        private fun restoreHealthCaptureCache(context: Context) {
+            val saved = context.getSharedPreferences("HealthSync_Steps", Context.MODE_PRIVATE)
+            if (latestBpmTimeMs == 0L && saved.getInt("hr_capture_schema", 0) == 2) {
+                latestBpm = saved.getInt("last_hr_bpm", -1); latestAcc = saved.getInt("last_hr_accuracy", 0)
+                latestBpmTimeMs = saved.getLong("last_hr_time", 0L)
+                latestHrSource = saved.getString("last_hr_source", WatchHealthSourcePolicy.SENSOR).orEmpty()
+                latestHrSourcePackage = saved.getString("last_hr_source_package", "").orEmpty()
+                latestHrSourceLabel = saved.getString("last_hr_source_label", "").orEmpty()
+                if (displayBpm() < 0) { latestBpm = -1; latestAcc = 0; latestBpmTimeMs = 0L }
+            }
+            if (latestSpo2TimeMs == 0L && saved.getBoolean("oxygen_sensor_captured", false)) {
+                latestSpo2 = saved.getFloat("sensor_oxygen_value", -1f); latestSpo2TimeMs = saved.getLong("sensor_oxygen_time", 0L)
+                latestOxygenSource = saved.getString("oxygen_source", WatchHealthSourcePolicy.SENSOR).orEmpty()
+                latestOxygenSourcePackage = saved.getString("oxygen_source_package", "").orEmpty()
+                latestOxygenSourceLabel = saved.getString("oxygen_source_label", "").orEmpty()
+                if (displaySpO2() < 0f) { latestSpo2 = -1f; latestSpo2TimeMs = 0L }
+            }
+        }
+        /** Preserve the export's capture time and source; never assign it sensor accuracy. */
+        fun importHealthAppReading(context: Context, reading: HealthAppReading): Boolean {
+            val prefs = context.getSharedPreferences("HealthSync_Steps", Context.MODE_PRIVATE)
+            restoreHealthCaptureCache(context)
+            if (!WatchHealthSourcePolicy.validAppIdentity(reading.sourcePackage, reading.sourceLabel)) return false
+            val now = System.currentTimeMillis()
+            if (reading.metric == HealthAppMetric.HEART_RATE) {
+                val bpm = WatchHealthSourcePolicy.heartRate(reading.value.toInt(), 0, reading.capturedAt, now,
+                    HeartRatePolicy.DISPLAY_MS, WatchHealthSourcePolicy.HEALTH_APP, reading.sourcePackage, reading.sourceLabel)
+                if (!reading.value.isFinite() || reading.value !in 25f..240f || bpm < 0) return false
+                // A late/duplicated app export cannot replace a newer sensor capture.
+                if (displayBpm(now) > 0 && (reading.capturedAt < latestBpmTimeMs ||
+                        (reading.capturedAt == latestBpmTimeMs && latestHrSource != WatchHealthSourcePolicy.HEALTH_APP))) return false
+                if (latestHrSource == WatchHealthSourcePolicy.HEALTH_APP && latestHrSourcePackage == reading.sourcePackage &&
+                    latestBpmTimeMs == reading.capturedAt && latestBpm == bpm) return true
+                latestBpm = bpm; latestAcc = 0; latestBpmTimeMs = reading.capturedAt
+                latestHrSource = WatchHealthSourcePolicy.HEALTH_APP
+                latestHrSourcePackage = reading.sourcePackage; latestHrSourceLabel = reading.sourceLabel
+                prefs.edit().putInt("hr_capture_schema", 2).putInt("last_hr_bpm", bpm).putInt("last_hr_accuracy", 0)
+                    .putLong("last_hr_time", reading.capturedAt).putString("last_hr_source", latestHrSource)
+                    .putString("last_hr_source_package", latestHrSourcePackage).putString("last_hr_source_label", latestHrSourceLabel).apply()
+                sendImportedMsg(MessageType.HEART_RATE, HeartRatePayload(latestBpm, latestAcc, latestHrSource, latestHrSourcePackage, latestHrSourceLabel), reading.capturedAt)
+            } else {
+                if (WatchHealthSourcePolicy.oxygen(reading.value, reading.capturedAt, now, HeartRatePolicy.DISPLAY_MS,
+                        WatchHealthSourcePolicy.HEALTH_APP, reading.sourcePackage, reading.sourceLabel) < 0f) return false
+                if (displaySpO2(now) > 0f && (reading.capturedAt < latestSpo2TimeMs ||
+                        (reading.capturedAt == latestSpo2TimeMs && latestOxygenSource != WatchHealthSourcePolicy.HEALTH_APP))) return false
+                if (latestOxygenSource == WatchHealthSourcePolicy.HEALTH_APP && latestOxygenSourcePackage == reading.sourcePackage &&
+                    latestSpo2TimeMs == reading.capturedAt && latestSpo2 == reading.value) return true
+                latestSpo2 = reading.value; latestSpo2TimeMs = reading.capturedAt
+                latestOxygenSource = WatchHealthSourcePolicy.HEALTH_APP
+                latestOxygenSourcePackage = reading.sourcePackage; latestOxygenSourceLabel = reading.sourceLabel
+                prefs.edit().putBoolean("oxygen_sensor_captured", true).putFloat("sensor_oxygen_value", latestSpo2)
+                    .putLong("sensor_oxygen_time", latestSpo2TimeMs).putString("oxygen_source", latestOxygenSource)
+                    .putString("oxygen_source_package", latestOxygenSourcePackage).putString("oxygen_source_label", latestOxygenSourceLabel).apply()
+                sendImportedMsg(MessageType.SPO2, SpO2Payload(latestSpo2, latestOxygenSource, latestOxygenSourcePackage, latestOxygenSourceLabel), reading.capturedAt)
+            }
+            return true
+        }
+
+
     }
 
     private val gson = Gson()
@@ -235,6 +396,7 @@ class SensorCollectorService : Service() {
     private var hrJob: Job? = null
     private var spo2Job: Job? = null
     private val measurementJobs = mutableMapOf<MeasurementKind, Job>()
+    private val appFallbackMutex = Mutex()
     private val measurementSensors = mutableMapOf<MeasurementKind, List<Sensor>>()
     private val manualMeasurements = mutableMapOf<MeasurementKind, Boolean>()
     private val completionStatuses = mutableMapOf<MeasurementKind, String>()
@@ -246,6 +408,7 @@ class SensorCollectorService : Service() {
     private val measurementStartedNanos = mutableMapOf<MeasurementKind, Long>()
     private var lastHrEventNanos = 0L
     private var lastOxygenEventNanos = 0L
+    private var lastOxygenObservedNanos = 0L
     private var lastHrSentMs = 0L
     private var foregroundStarted = false
     private val oxygenSensors = mutableListOf<Sensor>()
@@ -279,6 +442,8 @@ class SensorCollectorService : Service() {
         super.onCreate()
         watchPrefs = WatchPreferences(this)
         latestSensorPreview = null
+        latestOxygenPreview = null
+        hrAppFallbackMessage = ""; oxygenAppFallbackMessage = ""
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         createChannel()
         foregroundStarted = ForegroundPolicy.start(this, NOTIF_ID, buildNotif("Steps and sensor monitoring"))
@@ -318,7 +483,10 @@ class SensorCollectorService : Service() {
         latestBpm = if (validatedCaptureSchema) prefs.getInt("last_hr_bpm", -1) else -1
         latestAcc = if (validatedCaptureSchema) prefs.getInt("last_hr_accuracy", 0) else 0
         latestBpmTimeMs = if (validatedCaptureSchema) prefs.getLong("last_hr_time", 0L) else 0L
-        if (latestAcc !in 1..3 || displayBpm() < 0) {
+        latestHrSource = prefs.getString("last_hr_source", WatchHealthSourcePolicy.SENSOR).orEmpty()
+        latestHrSourcePackage = prefs.getString("last_hr_source_package", "").orEmpty()
+        latestHrSourceLabel = prefs.getString("last_hr_source_label", "").orEmpty()
+        if (displayBpm() < 0) {
             latestBpm = -1; latestAcc = 0; latestBpmTimeMs = 0L
         }
         // Legacy unverified previews and arbitrary oxygen values are not captured health records.
@@ -326,7 +494,11 @@ class SensorCollectorService : Service() {
         prefs.edit().remove("last_sensor_hr_bpm").remove("last_sensor_hr_time").apply()
         latestSpo2 = if (prefs.getBoolean("oxygen_sensor_captured", false)) prefs.getFloat("sensor_oxygen_value", -1f) else -1f
         latestSpo2TimeMs = if (latestSpo2 > 0f) prefs.getLong("sensor_oxygen_time", 0L) else 0L
+        latestOxygenSource = prefs.getString("oxygen_source", WatchHealthSourcePolicy.SENSOR).orEmpty()
+        latestOxygenSourcePackage = prefs.getString("oxygen_source_package", "").orEmpty()
+        latestOxygenSourceLabel = prefs.getString("oxygen_source_label", "").orEmpty()
         if (displaySpO2() < 0f) { latestSpo2 = -1f; latestSpo2TimeMs = 0L }
+        spo2Status = if (latestOxygenSource == WatchHealthSourcePolicy.HEALTH_APP && displaySpO2() > 0f) "app_reading" else "idle"
         findOxygenSensors()
         refreshHeartSensors()
         spo2Available = oxygenSensors.isNotEmpty()
@@ -376,16 +548,18 @@ class SensorCollectorService : Service() {
                 if (measurementJobs[MeasurementKind.HEART_RATE]?.isActive != true) updateHrStatus(initialHrStatus())
             }
             ACTION_FORCE_MEASURE_HR -> requestMeasurement(MeasurementKind.HEART_RATE)
+            ACTION_CHECK_APP_HR -> requestAppExport(MeasurementKind.HEART_RATE)
+            ACTION_CHECK_APP_OXYGEN -> requestAppExport(MeasurementKind.OXYGEN)
             ACTION_AUTO_HR -> handleScheduledAlarm(MeasurementKind.HEART_RATE, intent)
             ACTION_AUTO_OXYGEN -> handleScheduledAlarm(MeasurementKind.OXYGEN, intent)
             ACTION_SYNC_HEART_RATE -> {
                 val bpm = displayBpm()
                 if (bpm > 0) BluetoothClientService.sendRawMsg(SyncMessage(type = MessageType.HEART_RATE,
-                    timestamp = latestBpmTimeMs, payload = gson.toJson(HeartRatePayload(bpm, latestAcc))), gson)
+                    timestamp = latestBpmTimeMs, payload = gson.toJson(heartRatePayload())), gson)
                 // Sensor events can complete while Bluetooth is disconnected. Replay only
                 // real saved captures with their original timestamps on reconnect.
                 val oxygen = displaySpO2()
-                if (oxygen > 0f) sendMsg(MessageType.SPO2, SpO2Payload(oxygen), latestSpo2TimeMs)
+                if (oxygen > 0f) sendMsg(MessageType.SPO2, oxygenPayload(), latestSpo2TimeMs)
                 sleepTracker.getLatestPayload()?.let { sendMsg(MessageType.SLEEP, it, it.endTime) }
                 if (hasCapturedStepsToday()) sendMsg(MessageType.STEPS,
                     StepsPayload(latestSteps, latestSteps * estimatedCaloriesPerStep()), latestStepsCaptureTimeMs)
@@ -419,7 +593,7 @@ class SensorCollectorService : Service() {
         // Only explicit oxygen names qualify: heartbeat and private integer IDs
         // alone do not identify oxygen measurements.
         oxygenSensors.clear()
-        sensorManager.getSensorList(Sensor.TYPE_ALL).filterTo(oxygenSensors) { sensor ->
+        runCatching { sensorManager.getSensorList(Sensor.TYPE_ALL) }.getOrDefault(emptyList()).filterTo(oxygenSensors) { sensor ->
             OxygenCapturePolicy.isOxygenSensor(sensor.type, sensor.name, sensor.stringType)
         }
     }
@@ -465,10 +639,10 @@ class SensorCollectorService : Service() {
     }
 
     private fun ensureIntervalJobs() {
-        if (measurementSchedule.isEnabled(MeasurementKind.HEART_RATE) && heartRateAvailable && hrJob?.isActive != true) {
+        if (measurementSchedule.isEnabled(MeasurementKind.HEART_RATE) && hrJob?.isActive != true) {
             hrJob = intervalJob(MeasurementKind.HEART_RATE)
         }
-        if (measurementSchedule.isEnabled(MeasurementKind.OXYGEN) && spo2Available && spo2Job?.isActive != true) {
+        if (measurementSchedule.isEnabled(MeasurementKind.OXYGEN) && spo2Job?.isActive != true) {
             spo2Job = intervalJob(MeasurementKind.OXYGEN)
         }
         updateMeasurementAlarms()
@@ -500,16 +674,13 @@ class SensorCollectorService : Service() {
         updateMeasurementAlarms()
         val accessStatus = bodySensorAccessStatus(this)
         if (accessStatus != null) {
-            measurementSchedule.markFinished(kind, SystemClock.elapsedRealtime())
-            updateMeasurementAlarms()
-            if (kind == MeasurementKind.HEART_RATE) updateHrStatus(accessStatus) else updateOxygenStatus(accessStatus)
+            startAppFallback(kind, manualRequest, accessStatus)
             return
         }
         if (kind == MeasurementKind.HEART_RATE) refreshHeartSensors()
-        if (kind == MeasurementKind.OXYGEN &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.BODY_SENSORS) != PackageManager.PERMISSION_GRANTED) {
-            measurementSchedule.markFinished(kind, SystemClock.elapsedRealtime())
-            updateMeasurementAlarms(); updateOxygenStatus("permission_required"); return
+        if (kind == MeasurementKind.OXYGEN) {
+            findOxygenSensors()
+            spo2Available = oxygenSensors.isNotEmpty()
         }
         val requestedSensors = when (kind) {
             MeasurementKind.HEART_RATE -> heartSensors
@@ -522,57 +693,75 @@ class SensorCollectorService : Service() {
             heartRateAttempt = HeartRateAttemptDiagnostics(System.currentTimeMillis(), requestedSensors.map { sensorDescription(it) }, granted)
             if (!granted) {
                 publishHeartRateAttempt("permission_required", completed = true)
-                measurementSchedule.markFinished(kind, SystemClock.elapsedRealtime())
-                updateMeasurementAlarms()
-                updateHrStatus("permission_required"); return
+                startAppFallback(kind, manualRequest, "permission_required"); return
             }
         }
         val acquisitionStartNanos = SystemClock.elapsedRealtimeNanos()
-        val registeredSensors = mutableListOf<Sensor>()
-        for (sensor in requestedSensors) {
-            val registered = try {
-                sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL).also {
-                    if (kind == MeasurementKind.HEART_RATE) heartRateAttempt?.registration(sensorDescription(sensor), if (it) "registered / selected" else "registration returned false", selected = it)
+        var nextCandidate = 0
+        var selectedAtMs = acquisitionStartNanos / 1_000_000L
+        fun selectNextCandidate(): Boolean {
+            unregisterMeasurementSensors(kind)
+            while (nextCandidate < requestedSensors.size) {
+                val sensor = requestedSensors[nextCandidate++]
+                val registeredAt = SystemClock.elapsedRealtimeNanos()
+                val registered = try {
+                    sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL).also {
+                        if (kind == MeasurementKind.HEART_RATE) heartRateAttempt?.registration(sensorDescription(sensor),
+                            if (it) "registered / selected" else "registration returned false", selected = it)
+                    }
+                } catch (e: Exception) {
+                    if (kind == MeasurementKind.HEART_RATE) heartRateAttempt?.registration(sensorDescription(sensor), "registration failed: ${e.javaClass.simpleName}")
+                    Log.w(TAG, "$kind sensor unavailable: ${e.javaClass.simpleName}"); false
                 }
-            } catch (e: Exception) {
-                if (kind == MeasurementKind.HEART_RATE) heartRateAttempt?.registration(sensorDescription(sensor), "registration failed: ${e.javaClass.simpleName}")
-                Log.w(TAG, "$kind sensor unavailable: ${e.message}"); false
+                if (!registered) continue
+                measurementSensors[kind] = listOf(sensor)
+                if (kind == MeasurementKind.HEART_RATE) {
+                    activeHeartSensors = listOf(sensor)
+                    heartRatePreviewTracker.reset()
+                } else lastOxygenObservedNanos = 0L
+                measurementStartedNanos[kind] = registeredAt
+                selectedAtMs = registeredAt / 1_000_000L
+                completionStatuses.remove(kind)
+                return true
             }
-            if (registered) {
-                registeredSensors += sensor
-                // Match the original HealthSync path: use the firmware default, with a
-                // fallback only if registration fails, rather than drive multiple HR HALs.
-                if (kind == MeasurementKind.HEART_RATE) break
-            }
+            return false
         }
-        // Missing sensors or denied permission must not hold the CPU awake.
-        if (registeredSensors.isEmpty()) {
-            measurementSchedule.markFinished(kind, SystemClock.elapsedRealtime())
-            updateMeasurementAlarms()
+        if (!selectNextCandidate()) {
+            val status = if (requestedSensors.isEmpty()) "missing_sensor" else "sensor_error"
             if (kind == MeasurementKind.HEART_RATE) {
-                val status = if (requestedSensors.isEmpty()) "missing_sensor" else "sensor_error"
                 publishHeartRateAttempt(status, completed = true)
-                updateHrStatus(status)
-            } else updateOxygenStatus(if (requestedSensors.isEmpty()) "missing_sensor" else "sensor_error")
+            }
+            startAppFallback(kind, manualRequest, status)
             return
         }
-        measurementSensors[kind] = registeredSensors.toList()
         manualMeasurements[kind] = manualRequest
-        if (kind == MeasurementKind.HEART_RATE) activeHeartSensors = registeredSensors.toList()
-        measurementStartedNanos[kind] = acquisitionStartNanos
         measurementWindows.request(kind, acquisitionStartNanos / 1_000_000L, if(kind == MeasurementKind.HEART_RATE) HR_MEASURE_WINDOW_MS else MEASURE_WINDOW_MS)
         if (kind == MeasurementKind.HEART_RATE) {
+            hrAppFallbackMessage = ""
             publishHeartRateAttempt("measuring", force = true)
             updateHrStatus("measuring")
-        } else updateOxygenStatus("measuring")
+        } else { oxygenAppFallbackMessage = ""; updateOxygenStatus("measuring") }
         refreshMeasurementWakeLock()
         measurementJobs[kind] = scope.launch {
             try {
                 while (isActive) {
                     val remainingMs = measurementWindows.remainingMs(kind, SystemClock.elapsedRealtime())
                     if (remainingMs <= 0L) break
+                    if (SensorCandidateRetryPolicy.shouldAdvance(SystemClock.elapsedRealtime(), selectedAtMs,
+                            if (kind == MeasurementKind.HEART_RATE) HR_MEASURE_WINDOW_MS else MEASURE_WINDOW_MS,
+                            requestedSensors.size, nextCandidate < requestedSensors.size)) {
+                        if (!selectNextCandidate()) break
+                        if (kind == MeasurementKind.HEART_RATE) updateHrStatus("measuring")
+                    }
                     delay(minOf(1000L, remainingMs))
                 }
+                // Release hardware and its wake lock before a bounded, read-only app query.
+                unregisterMeasurementSensors(kind)
+                measurementWindows.clear(kind)
+                refreshMeasurementWakeLock()
+                completionStatuses[kind] = readAppFallback(kind,
+                    completionStatuses[kind] ?: if (kind == MeasurementKind.HEART_RATE)
+                        heartRateAttempt?.finalStatus() ?: "no_events" else "timeout")
             } finally {
                 unregisterMeasurementSensors(kind)
                 measurementWindows.clear(kind)
@@ -599,6 +788,57 @@ class SensorCollectorService : Service() {
             catch (e: Exception) { Log.w(TAG, "$kind sensor could not unregister: ${e.javaClass.simpleName}") }
         }
     }
+
+    private fun startAppFallback(kind: MeasurementKind, manualRequest: Boolean, sensorStatus: String) {
+        manualMeasurements[kind] = manualRequest
+        measurementJobs[kind] = scope.launch {
+            var status = sensorStatus
+            try { status = readAppFallback(kind, sensorStatus) }
+            finally {
+                measurementJobs.remove(kind)
+                manualMeasurements.remove(kind)
+                measurementSchedule.markFinished(kind, SystemClock.elapsedRealtime())
+                updateMeasurementAlarms()
+                if (kind == MeasurementKind.HEART_RATE) updateHrStatus(status) else updateOxygenStatus(status)
+            }
+        }
+    }
+
+    private fun requestAppExport(kind: MeasurementKind) {
+        if (measurementJobs[kind]?.isCompleted == false) return
+        measurementSchedule.markStarted(kind, SystemClock.elapsedRealtime())
+        updateMeasurementAlarms()
+        startAppFallback(kind, manualRequest = true, sensorStatus = bodySensorAccessStatus(this) ?: "no_events")
+    }
+
+    private suspend fun readAppFallback(kind: MeasurementKind, sensorStatus: String): String {
+        if (kind == MeasurementKind.HEART_RATE) updateHrStatus("checking_health_apps")
+        else updateOxygenStatus("checking_health_apps")
+        val metric = if (kind == MeasurementKind.HEART_RATE) HealthAppMetric.HEART_RATE else HealthAppMetric.OXYGEN
+        val result = appFallbackMutex.withLock {
+            withContext(Dispatchers.IO) { InstalledHealthAppFallback(this@SensorCollectorService).readLatest(metric) }
+        }
+        if (result.reading?.let { acceptHealthAppReading(it) } == true) {
+            if (kind == MeasurementKind.HEART_RATE) hrAppFallbackMessage = "" else oxygenAppFallbackMessage = ""
+            return "app_reading"
+        }
+        val reason = when (sensorStatus) {
+            "permission_required" -> "Allow sensor access in App permissions."
+            "background_permission_required" -> "Open HealthSync or allow all-time sensor access."
+            "missing_sensor" -> "No compatible sensor is exposed by this watch."
+            "sensor_error" -> "The watch could not start a compatible sensor."
+            "unreliable_accuracy" -> "The sensor's reading is unverified."
+            else -> "No valid sensor reading was received."
+        }
+        val message = "$reason ${result.message}"
+        if (kind == MeasurementKind.HEART_RATE) hrAppFallbackMessage = message else oxygenAppFallbackMessage = message
+        return sensorStatus
+    }
+
+    private fun acceptHealthAppReading(reading: HealthAppReading) = importHealthAppReading(this, reading)
+
+    private fun heartRatePayload() = HeartRatePayload(latestBpm, latestAcc, latestHrSource, latestHrSourcePackage, latestHrSourceLabel)
+    private fun oxygenPayload() = SpO2Payload(latestSpo2, latestOxygenSource, latestOxygenSourcePackage, latestOxygenSourceLabel)
 
     private fun finishMeasurement(kind: MeasurementKind, status: String? = null) {
         if (status != null) completionStatuses[kind] = status
@@ -642,9 +882,8 @@ class SensorCollectorService : Service() {
                 editor.putLong("schedule_${kind.name}_interval", interval).putLong("schedule_${kind.name}_due", due)
                 changed = true
             }
-            val available = if (kind == MeasurementKind.HEART_RATE) heartRateAvailable else spo2Available
             val slot = AlarmSlot(interval, revision, due)
-            if (interval <= 0L || !available) {
+            if (interval <= 0L) {
                 alarmSlots.remove(kind)
                 runCatching { manager.cancel(measurementAlarm(kind, slot)) }
                 continue
@@ -698,11 +937,17 @@ class SensorCollectorService : Service() {
                         lastHrEventNanos, timestampIssue)
                     heartRateAttempt?.frame(rejection, event.accuracy, event.timestamp, nowNanos,
                         measurementStartedNanos[MeasurementKind.HEART_RATE] ?: 0L, reading,
-                        timestampIssue, false)
+                        timestampIssue, heartRatePreviewTracker.preview != null)
                     val isUsableReading = rejection == null && HeartRatePolicy.validReading(reading, event.accuracy)
                     if (!isUsableReading) {
+                        latestSensorPreview = heartRatePreviewTracker.preview
                         if (event.accuracy == -1) updateHrStatus("no_contact")
-                        if (event.accuracy == 0) completionStatuses[MeasurementKind.HEART_RATE] = "unreliable_accuracy"
+                        if (event.accuracy == 0) {
+                            completionStatuses[MeasurementKind.HEART_RATE] = "unreliable_accuracy"
+                            if (latestSensorPreview != null && nowWall - lastHrSentMs >= 1_000L) {
+                                lastHrSentMs = nowWall; broadcastHr()
+                            }
+                        }
                         return
                     }
                     val capturedAt = HeartRatePolicy.capturedWallTime(event.timestamp, nowNanos, nowWall,
@@ -711,9 +956,11 @@ class SensorCollectorService : Service() {
                     val bpm = reading.toInt()
                     val changed = bpm != latestBpm
                     latestBpm = bpm; latestAcc = event.accuracy; latestBpmTimeMs = capturedAt
+                    latestHrSource = WatchHealthSourcePolicy.SENSOR; latestHrSourcePackage = ""; latestHrSourceLabel = ""
                     latestSensorPreview = null
                     completionStatuses.remove(MeasurementKind.HEART_RATE)
                     prefs.edit().putInt("hr_capture_schema", 2).putInt("last_hr_bpm", bpm).putInt("last_hr_accuracy", latestAcc).putLong("last_hr_time", capturedAt)
+                        .putString("last_hr_source", latestHrSource).remove("last_hr_source_package").remove("last_hr_source_label")
                         .remove("last_sensor_hr_bpm").remove("last_sensor_hr_time").apply()
                     publishHeartRateAttempt("measuring", force = hrStatus != "measuring")
                     if (hrStatus != "measuring") hrStatus = "measuring"
@@ -767,16 +1014,29 @@ class SensorCollectorService : Service() {
                         checkHourlyStand(nowWall)
                     }
                 }
-                else -> if (oxygenSensors.contains(event.sensor)) {
+                else -> if (measurementSensors[MeasurementKind.OXYGEN]?.contains(event.sensor) == true) {
                     if (!measurementWindows.isActive(MeasurementKind.OXYGEN, SystemClock.elapsedRealtime())) return
                     val reading = event.values[0]
+                    val startedAt = measurementStartedNanos[MeasurementKind.OXYGEN] ?: 0L
+                    val previousObserved = maxOf(lastOxygenEventNanos, lastOxygenObservedNanos)
+                    if (event.timestamp > lastOxygenObservedNanos && event.timestamp in startedAt..nowNanos)
+                        lastOxygenObservedNanos = event.timestamp
+                    if (!HeartRatePolicy.validOxygen(reading, event.accuracy)) {
+                        latestOxygenPreview = OxygenSensorPreview.fromFrame(reading, event.accuracy,
+                            event.timestamp, nowNanos, nowWall, startedAt, previousObserved)
+                        if (latestOxygenPreview != null) updateOxygenStatus("unreliable_accuracy")
+                        return
+                    }
                     if (HeartRatePolicy.validOxygen(reading, event.accuracy)) {
                         val capturedAt = HeartRatePolicy.capturedWallTime(event.timestamp, nowNanos, nowWall,
-                            measurementStartedNanos[MeasurementKind.OXYGEN] ?: 0L, lastOxygenEventNanos) ?: return
+                            startedAt, previousObserved) ?: return
                         lastOxygenEventNanos = event.timestamp
                         latestSpo2 = reading; latestSpo2TimeMs = capturedAt
+                        latestOxygenPreview = null
+                        latestOxygenSource = WatchHealthSourcePolicy.SENSOR; latestOxygenSourcePackage = ""; latestOxygenSourceLabel = ""
                         prefs.edit().putBoolean("oxygen_sensor_captured", true).putFloat("sensor_oxygen_value", reading)
-                            .putLong("sensor_oxygen_time", capturedAt).apply()
+                            .putLong("sensor_oxygen_time", capturedAt).putString("oxygen_source", latestOxygenSource)
+                            .remove("oxygen_source_package").remove("oxygen_source_label").apply()
                         finishMeasurement(MeasurementKind.OXYGEN, "received")
                         sendMsg(MessageType.SPO2, SpO2Payload(reading), capturedAt)
                         updateOxygenStatus("received")
@@ -933,6 +1193,7 @@ class SensorCollectorService : Service() {
         BluetoothClientService.sendRawMsg(SyncMessage(type = type, timestamp = timestamp, payload = gson.toJson(payload)), gson)
     }
     private fun initialHrStatus() = when {
+        latestHrSource == WatchHealthSourcePolicy.HEALTH_APP && displayBpm() > 0 -> "app_reading"
         ContextCompat.checkSelfPermission(this, Manifest.permission.BODY_SENSORS) != PackageManager.PERMISSION_GRANTED -> "permission_required"
         !heartRateAvailable -> "missing_sensor"
         watchPrefs.hrIntervalMs <= 0 -> "disabled"
@@ -971,6 +1232,7 @@ class SensorCollectorService : Service() {
         .setContentText(text).setOngoing(true).setSilent(true).build()
     override fun onDestroy() {
         latestSensorPreview = null
+        latestOxygenPreview = null
         latestRestEstimateActive = false; latestMotionCapturedElapsed = -1L
         stepSensorAvailable = false; stepCaptureStatus = "monitoring_unavailable"
         scope.cancel(); sensorManager.unregisterListener(listener)

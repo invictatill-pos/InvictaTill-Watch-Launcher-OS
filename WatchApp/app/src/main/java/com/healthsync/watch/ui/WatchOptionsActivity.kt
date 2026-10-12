@@ -508,26 +508,31 @@ class WatchOptionsActivity : AppCompatActivity() {
         val heartStatus = label("")
         val heartButton = action("Measure heart rate") { requestOperation("measure_hr") }
         action("Heart rate details") { showScreen(SCREEN_HR_DETAILS) }
+        action("Check watch heart rate data") { SensorCollectorService.checkHealthAppHeartRate(this) }
         val oxygen = label("Blood oxygen", 18f, bold = true)
         val oxygenStatus = label("")
         val oxygenButton = action("Measure oxygen") { requestOperation("measure_oxygen") }
+        action("Check watch oxygen data") { SensorCollectorService.checkHealthAppOxygen(this) }
+        action("Open watch health app") { showHealthApps(this) }
         val steps = label("Steps today", 18f, bold = true)
         val stepsStatus=label("",11f)
         val battery = label("Battery", 18f, bold = true)
         liveUpdate = {
             val hasBodyPermission = allowed(Manifest.permission.BODY_SENSORS)
             heart.text = "Heart rate\n${SensorCollectorService.heartRateValueText()}"
-            heartStatus.text = if (!hasBodyPermission) "Allow sensor access to measure heart rate."
-                else SensorCollectorService.heartRateStatusText(this)
+            heartStatus.text = SensorCollectorService.heartRateStatusText(this)
             // Older Android firmware can hide health sensors until permission is granted.
             // Keep this action available so an empty inventory cannot block permission or a retry.
             heartButton.text = if (hasBodyPermission) "Measure heart rate" else "Allow sensor access"
+            val heartMeasuring = SensorCollectorService.hrStatus in setOf("measuring", "checking_health_apps")
+            if (heartMeasuring) heartButton.text = if (SensorCollectorService.hrStatus == "checking_health_apps") "Checking watch apps…" else "Measuring…"
+            heartButton.isEnabled = !heartMeasuring
             heartButton.contentDescription = heartButton.text
-            val spo2 = SensorCollectorService.displaySpO2().takeIf { it > 0f }
+            val spo2 = SensorCollectorService.watchOxygenReading().percentage.takeIf { it > 0f }
             oxygen.text = spo2?.let { "Blood oxygen\n${String.format(Locale.getDefault(), "%.0f", it)}%" }
                 ?: "Blood oxygen\n—%"
             oxygenStatus.text = SensorCollectorService.oxygenStatusText(this)
-            val oxygenMeasuring = SensorCollectorService.spo2Status == "measuring"
+            val oxygenMeasuring = SensorCollectorService.spo2Status in setOf("measuring", "checking_health_apps", "unreliable_accuracy")
             oxygenButton.text = if (!hasBodyPermission) "Allow sensor access" else if (oxygenMeasuring) "Measuring oxygen…" else "Measure oxygen"
             oxygenButton.isEnabled = !oxygenMeasuring
             oxygenButton.contentDescription = oxygenButton.text
@@ -546,6 +551,8 @@ class WatchOptionsActivity : AppCompatActivity() {
         val sensorValue = label("", 18f, bold = true)
         val status = label("")
         action("Measure heart rate") { requestOperation("measure_hr") }
+        action("Check watch app data") { SensorCollectorService.checkHealthAppHeartRate(this) }
+        action("Open watch health app") { showHealthApps(this) }
         action("Copy heart rate report") {
             runCatching {
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
@@ -892,8 +899,8 @@ class WatchOptionsActivity : AppCompatActivity() {
     private fun performOperation(operation: String) {
         startHealthServices()
         when (operation) {
-            "measure_hr" -> if (allowed(Manifest.permission.BODY_SENSORS)) SensorCollectorService.forceMeasureHr(this)
-            "measure_oxygen" -> if (allowed(Manifest.permission.BODY_SENSORS)) SensorCollectorService.forceMeasureSpO2(this)
+            "measure_hr" -> SensorCollectorService.forceMeasureHr(this)
+            "measure_oxygen" -> SensorCollectorService.forceMeasureSpO2(this)
             "sensor_permissions" -> {
                 SensorCollectorService.notifySettingsUpdated(this)
                 showScreen(SCREEN_SENSORS)

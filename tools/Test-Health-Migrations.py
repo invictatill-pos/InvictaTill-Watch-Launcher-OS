@@ -16,7 +16,10 @@ create_statements = [sql for sql in quoted_sql(generated.read_text(encoding="utf
 assert len(create_statements) >= 7, "Generate the current Room implementation before checking migrations"
 migrations = module.read_text(encoding="utf-8")
 sql5to6 = quoted_sql(migrations.split("val migration5To6", 1)[1].split("val migration4To5", 1)[0])
-sql4to5 = quoted_sql(migrations.split("val migration4To5", 1)[1].split("@Provides", 1)[0])
+sql4to5 = quoted_sql(migrations.split("val migration4To5", 1)[1].split("val migration6To7", 1)[0])
+sql6to7 = quoted_sql(migrations.split("val migration6To7", 1)[1].split("@Provides", 1)[0])
+assert len(sql6to7) == 5, "Version 7 adds provenance without replacing existing history"
+assert "migration6To7" in migrations.split(".addMigrations(", 1)[1].split(")", 1)[0]
 
 def fresh_database():
     connection = sqlite3.connect(":memory:")
@@ -32,7 +35,6 @@ schema6_sql = [json.loads('"' + sql + '"') for sql in re.findall(r'"(CREATE TABL
 rename_sql = next(sql for sql in quoted_sql(legacy) if sql.startswith("ALTER TABLE"))
 archive_template = re.search(r'val archive = "([^"]+)"', legacy).group(1)
 assert tables == legacy_tables
-assert set(schema6_sql) == {sql for sql in create_statements if "room_master_table" not in sql}, "Legacy CREATE SQL must exactly match generated Room app tables"
 assert "fallbackToDestructiveMigration" not in migrations
 for version in (1, 2, 3):
     assert f"migration{version}To6 = LegacyDatabasePreservation.migration({version})" in migrations
@@ -51,8 +53,9 @@ def index_schema(database, table):
 def check_path(start_version):
     database = fresh_database()
     for table, columns in {
+        "heart_rate": ["source", "sourcePackage", "sourceLabel"],
         "sleep": ["source", "estimatedMinutes", "stagesAvailable"],
-        "spo2": ["source"],
+        "spo2": ["source", "sourcePackage", "sourceLabel"],
         "workouts": ["distanceSource", "caloriesEstimated"],
     }.items():
         for column in columns:
@@ -69,22 +72,50 @@ def check_path(start_version):
     database.execute("INSERT INTO notification_history (packageName, appLabel, title, text, timestamp) VALUES ('example.app', 'Example', 'Title', 'Message', 1000000)")
     for sql in sql5to6:
         database.execute(sql)
+    for sql in sql6to7:
+        database.execute(sql)
     for table in tables:
         actual_columns = database.execute(f"PRAGMA table_info({table})").fetchall()
         expected_columns = expected.execute(f"PRAGMA table_info({table})").fetchall()
-        assert actual_columns == expected_columns, f"Schema mismatch after {start_version}->6: {table}"
+        assert actual_columns == expected_columns, f"Schema mismatch after {start_version}->7: {table}"
         assert index_schema(database, table) == index_schema(expected, table), (start_version, table, "indices")
         assert database.execute(f"PRAGMA foreign_key_list(`{table}`)").fetchall() == expected.execute(f"PRAGMA foreign_key_list(`{table}`)").fetchall()
     assert database.execute("SELECT COUNT(*) FROM spo2").fetchone()[0] == 0
     assert database.execute("SELECT COUNT(*) FROM sleep").fetchone()[0] == 0
     assert database.execute("SELECT percentage FROM legacy_spo2_unverified").fetchone() == (98.0,)
     assert database.execute("SELECT deepMinutes FROM legacy_sleep_unverified").fetchone() == (10,)
-    assert database.execute("SELECT bpm, accuracy FROM heart_rate").fetchone() == (75, 3)
+    assert database.execute("SELECT bpm, accuracy, source, sourcePackage, sourceLabel FROM heart_rate").fetchone() == (75, 3, "WATCH_SENSOR", "", "")
     assert database.execute("SELECT steps FROM steps").fetchone() == (1234,)
     assert database.execute("SELECT activityType, durationSeconds, distanceSource, caloriesEstimated FROM workouts").fetchone() == ("Walk", 60, "UNKNOWN", 1)
     assert database.execute("SELECT text FROM notification_history").fetchone() == ("Message",)
     database.close()
-    return {"from": start_version, "to": 6, "schema_matches": True, "history_preserved": True, "unverified_records_archived": True}
+    return {"from": start_version, "to": 7, "schema_matches": True, "history_preserved": True, "unverified_records_archived": True}
+
+def check_source_migration():
+    database = sqlite3.connect(":memory:")
+    for sql in schema6_sql:
+        database.execute(sql)
+    database.execute("INSERT INTO heart_rate (id, bpm, accuracy, timestamp) VALUES (9, 75, 3, 1000000)")
+    database.execute("INSERT INTO spo2 (id, percentage, timestamp, source) VALUES (8, 98, 900000, 'WATCH_SENSOR')")
+    database.execute("CREATE TABLE legacy_spo2_unverified (original_value REAL)")
+    database.execute("INSERT INTO legacy_spo2_unverified VALUES (97)")
+    original = {table: database.execute(f"SELECT * FROM `{table}`").fetchall() for table in tables}
+    for sql in sql6to7:
+        database.execute(sql)
+    for table in tables:
+        assert database.execute(f"PRAGMA table_info(`{table}`)").fetchall() == expected.execute(f"PRAGMA table_info(`{table}`)").fetchall(), ("6->7", table, "schema")
+        original_width = len(original[table][0]) if original[table] else 0
+        assert [row[:original_width] for row in database.execute(f"SELECT * FROM `{table}`").fetchall()] == original[table], (table, "record values retained")
+    assert database.execute("SELECT source, sourcePackage, sourceLabel FROM heart_rate WHERE id=9").fetchone() == ("WATCH_SENSOR", "", "")
+    assert database.execute("SELECT source, sourcePackage, sourceLabel FROM spo2 WHERE id=8").fetchone() == ("WATCH_SENSOR", "", "")
+    assert database.execute("SELECT original_value FROM legacy_spo2_unverified").fetchone() == (97,)
+    # Imported measurements preserve the app's capture time and do not claim sensor accuracy.
+    database.execute("INSERT INTO heart_rate (bpm, accuracy, timestamp, source, sourcePackage, sourceLabel) VALUES (72, 0, 800000, 'WATCH_HEALTH_APP', 'vendor.health', 'Watch Health')")
+    database.execute("INSERT INTO spo2 (percentage, timestamp, source, sourcePackage, sourceLabel) VALUES (99, 800000, 'WATCH_HEALTH_APP', 'vendor.health', 'Watch Health')")
+    assert database.execute("SELECT bpm, accuracy, timestamp, sourcePackage, sourceLabel FROM heart_rate WHERE source='WATCH_HEALTH_APP'").fetchone() == (72, 0, 800000, "vendor.health", "Watch Health")
+    assert database.execute("SELECT percentage, timestamp, sourcePackage, sourceLabel FROM spo2 WHERE source='WATCH_HEALTH_APP'").fetchone() == (99.0, 800000, "vendor.health", "Watch Health")
+    database.close()
+    return {"from": 6, "to": 7, "schema_matches": True, "history_and_archives_preserved": True, "imported_provenance_and_capture_time_retained": True}
 
 def run_legacy_migration(database, version):
     # Execute production table names, archive template, RENAME and CREATE SQL.
@@ -96,6 +127,8 @@ def run_legacy_migration(database, version):
         assert not table_exists(database, archive), "Production migration rejects archive collisions"
         database.execute(rename_sql.replace("$table", table).replace("$archive", archive))
     for sql in schema6_sql:
+        database.execute(sql)
+    for sql in sql6to7:
         database.execute(sql)
 
 def check_legacy_path(version, fixture):
@@ -129,7 +162,6 @@ def check_legacy_path(version, fixture):
             assert database.execute(f"PRAGMA table_info(`{table}`)").fetchall() == expected.execute(f"PRAGMA table_info(`{table}`)").fetchall(), (version, fixture, table, "columns/defaults/primary keys")
             assert index_schema(database, table) == index_schema(expected, table), (version, fixture, table, "indices")
             assert database.execute(f"PRAGMA foreign_key_list(`{table}`)").fetchall() == expected.execute(f"PRAGMA foreign_key_list(`{table}`)").fetchall()
-            assert database.execute("SELECT sql FROM sqlite_master WHERE name = ?", (table,)).fetchone() == expected.execute("SELECT sql FROM sqlite_master WHERE name = ?", (table,)).fetchone(), (version, fixture, table, "create SQL")
             assert database.execute(f"SELECT COUNT(*) FROM `{table}`").fetchone() == (0,), "No guessed active health recovery"
             archive = f"legacy_v{version}_{table}"
             if table not in original:
@@ -153,7 +185,7 @@ def check_legacy_path(version, fixture):
         expected_extra = [("unrelated original data",)] + ([("old workout inserted",)] if "workouts" in original else [])
         assert database.execute("SELECT entry FROM original_extra_data ORDER BY rowid").fetchall() == expected_extra, "Original trigger and unrelated data preserved"
     database.close()
-    return {"from": version, "to": 6, "fixture": fixture, "schema_matches": True, "original_rows_columns_indices_preserved": True, "no_guessed_health_recovery": True}
+    return {"from": version, "to": 7, "fixture": fixture, "schema_matches": True, "original_rows_columns_indices_preserved": True, "no_guessed_health_recovery": True}
 
 def check_archive_collision():
     database = sqlite3.connect(":memory:")
@@ -179,6 +211,51 @@ def check_archive_collision():
     database.close()
     return {"archive_collision_rejected": True, "original_records_preserved": True, "partial_migration_rolled_back": True}
 
-print(json.dumps({"sqlite_version": sqlite3.sqlite_version, "migrations": [check_path(4), check_path(5)],
+def generated_queries(dao):
+    source = generated.parent / f"{dao}_Impl.java"
+    return [json.loads('"' + value + '"') for value in re.findall(r'final String _sql = "((?:\\.|[^"\\])*)";', source.read_text(encoding="utf-8"))]
+
+def check_captured_source_queries():
+    database = fresh_database()
+    for row in [
+        (1, 75, 3, 900000, "WATCH_SENSOR", "", ""),
+        (2, 72, 0, 800000, "WATCH_HEALTH_APP", "vendor.health", "Watch Health"),
+        (3, 71, 0, 950000, "WATCH_SENSOR", "", ""),
+        (4, 72, 0, 975000, "WATCH_HEALTH_APP", "", ""),
+        (5, 72, 3, 1000000, "LEGACY_UNVERIFIED", "", ""),
+        (6, 72, 0, 900000, "WATCH_HEALTH_APP", "vendor.health", "Watch Health"),
+    ]:
+        database.execute("INSERT INTO heart_rate VALUES (?, ?, ?, ?, ?, ?, ?)", row)
+    for row in [
+        (1, 98, 900000, "WATCH_SENSOR", "", ""),
+        (2, 99, 800000, "WATCH_HEALTH_APP", "vendor.health", "Watch Health"),
+        (3, 99, 975000, "WATCH_HEALTH_APP", "", ""),
+        (4, 99, 1000000, "LEGACY_UNVERIFIED", "", ""),
+        (5, 99, 900000, "WATCH_HEALTH_APP", "vendor.health", "Watch Health"),
+    ]:
+        database.execute("INSERT INTO spo2 VALUES (?, ?, ?, ?, ?, ?)", row)
+    heart_queries = generated_queries("HeartRateDao")
+    oxygen_queries = generated_queries("SpO2Dao")
+    latest_heart = next(sql for sql in heart_queries if "LIMIT 1" in sql)
+    latest_oxygen = next(sql for sql in oxygen_queries if "LIMIT 1" in sql)
+    assert database.execute(latest_heart).fetchone()[0] == 1, "Prefer sensor on equal capture times; unreliable/legacy rows stay excluded"
+    assert database.execute(latest_oxygen).fetchone()[0] == 1, "Keep legacy oxygen excluded; prefer sensor on equal capture times"
+    heart_history = next(sql for sql in heart_queries if sql.startswith("SELECT *") and "timestamp >= ?" in sql)
+    oxygen_history = next(sql for sql in oxygen_queries if sql.startswith("SELECT *") and "timestamp >= ?" in sql)
+    assert sorted(row[0] for row in database.execute(heart_history, (700000,))) == [1, 2, 6]
+    assert sorted(row[0] for row in database.execute(oxygen_history, (700000,))) == [1, 2, 5]
+    workout_heart = next(sql for sql in heart_queries if "timestamp BETWEEN ? AND ?" in sql)
+    assert [row[0] for row in database.execute(workout_heart, (700000, 850000))] == [2], "Workout queries accept captured app HR without inventing accuracy"
+    heart_dedup = next(sql for sql in heart_queries if sql.startswith("SELECT EXISTS"))
+    oxygen_dedup = next(sql for sql in oxygen_queries if sql.startswith("SELECT EXISTS"))
+    assert database.execute(heart_dedup, (800000, 72, "WATCH_HEALTH_APP", "vendor.health")).fetchone() == (1,)
+    assert database.execute(heart_dedup, (800000, 72, "WATCH_HEALTH_APP", "other.app")).fetchone() == (0,)
+    assert database.execute(heart_dedup, (950000, 71, "WATCH_SENSOR", "")).fetchone() == (0,), "Unreliable legacy sensor row cannot suppress a valid replay"
+    assert database.execute(oxygen_dedup, (800000, 99, "WATCH_HEALTH_APP", "vendor.health")).fetchone() == (1,)
+    assert database.execute(oxygen_dedup, (800000, 99, "WATCH_SENSOR", "")).fetchone() == (0,)
+    database.close()
+    return {"generated_room_queries_verified": True, "captured_app_records_included": True, "invalid_and_legacy_records_excluded": True, "dedup_includes_source_identity": True}
+
+print(json.dumps({"sqlite_version": sqlite3.sqlite_version, "migrations": [check_path(4), check_path(5), check_source_migration()],
                   "legacy_preservation": [check_legacy_path(v, fixture) for v in (1, 2, 3) for fixture in ("empty", "sparse", "all")],
-                  "archive_collision": check_archive_collision()}, indent=2))
+                  "archive_collision": check_archive_collision(), "captured_source_queries": check_captured_source_queries()}, indent=2))

@@ -42,11 +42,22 @@ object AppModule {
             db.execSQL("ALTER TABLE workouts ADD COLUMN durationSeconds INTEGER NOT NULL DEFAULT 0")
         }
     }
+    val migration6To7 = object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Existing active HR rows were accepted only from a verified watch sensor.
+            // Preserve all values and leave the archived legacy tables untouched.
+            db.execSQL("ALTER TABLE heart_rate ADD COLUMN source TEXT NOT NULL DEFAULT 'WATCH_SENSOR'")
+            db.execSQL("ALTER TABLE heart_rate ADD COLUMN sourcePackage TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE heart_rate ADD COLUMN sourceLabel TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE spo2 ADD COLUMN sourcePackage TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE spo2 ADD COLUMN sourceLabel TEXT NOT NULL DEFAULT ''")
+        }
+    }
 
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): FitnessDatabase =
         Room.databaseBuilder(context, FitnessDatabase::class.java, "health_sync_db")
-            .addMigrations(migration1To6, migration2To6, migration3To6, migration4To5, migration5To6)
+            .addMigrations(migration1To6, migration2To6, migration3To6, migration4To5, migration5To6, migration6To7)
             .build()
 }

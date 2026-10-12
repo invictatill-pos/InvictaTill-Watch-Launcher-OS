@@ -1,13 +1,13 @@
-# HealthSync 2.7.0
+# HealthSync 2.7.1
 
-HealthSync is an Android watch launcher and Android phone companion with real sensor capture, local workout history, Bluetooth sync, notifications, calls, watch faces, and watch utilities. The 12 October 2026 update refreshes the look throughout both apps, removes fabricated health readings, and improves navigation, capture status, and app updates.
+HealthSync is an Android watch launcher and Android phone companion with real sensor capture, local workout history, Bluetooth sync, notifications, calls, watch faces, and watch utilities. The 12 October 2026 sensor update retries compatible HR/oxygen sensors, imports timestamped readings shared by installed watch health apps, displays unverified sensor feedback separately, and improves workout GPS fallback/recovery.
 
 ## Install or update
 
 | Device | APK | Android version | Build code |
 | --- | --- | --- | --- |
-| Watch | [HealthSync-Watch.apk](dist/HealthSync-Watch.apk) | Android 6 / API 23 or newer | 26 |
-| Phone | [HealthSync-Phone.apk](dist/HealthSync-Phone.apk) | Android 8 / API 26 or newer | 20 |
+| Watch | [HealthSync-Watch.apk](dist/HealthSync-Watch.apk) | Android 6 / API 23 or newer | 27 |
+| Phone | [HealthSync-Phone.apk](dist/HealthSync-Phone.apk) | Android 8 / API 26 or newer | 21 |
 
 Install both apps over the existing packages. The apps retain the existing development signing certificate. The phone APK is an optimized release build; the watch APK retains the compatible v1/v2-signed debug format used by earlier watch deliveries. The [installation guide](dist/ANDROID8-INSTALL.md) explains Bluetooth pairing, permissions, updates, and Home recovery. Published APKs are available in [GitHub Releases](https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases).
 
@@ -19,8 +19,8 @@ Phone database versions 4 and 5 retain verified history during the upgrade. Earl
 
 | Feature | Source and behavior |
 | --- | --- |
-| Heart rate | An Android heart-rate sensor or explicitly identified vendor BPM sensor; reliable accuracy, range, and original capture timestamp are required for health history. Raw PPG and heartbeat-event sensors are not treated as BPM. Diagnostic sensor feedback is separate from accepted records. |
-| Blood oxygen | An explicitly identified vendor oxygen-saturation sensor. Manual and scheduled measurements share the real sensor acquisition flow. Unsupported hardware, denied access, and timeouts show their status. No timer or button generates an oxygen reading. |
+| Heart rate | A compatible Android/vendor BPM sensor, then readings shared by installed watch health apps when capture fails. Imports retain app source and original time. Accuracy-zero sensor feedback is explicitly unverified and excluded from history/workout statistics. Raw PPG and heartbeat-event sensors are not treated as BPM. |
+| Blood oxygen | An explicit vendor saturation sensor, then exported app saturation records. Manual and scheduled acquisition share the same flow. Unverified sensor feedback is separate from accepted captures. Private app data remains inaccessible without an export. |
 | Steps | One active hardware counter/detector source, or a motion-based step estimate when needed. Invalid or reordered sensor timestamps are rejected. Missing permission/sensor states are visible. |
 | Rest | A motion-based estimate from continuously observed overnight accelerometer samples. No first-run night, deep/light/REM stages, or sleep score is generated. Rest is an estimate, not proof of sleep. |
 | Stress / HRV | Unavailable without a validated measurement source. Guided box breathing is available without inventing a score or claiming measured improvement. |
@@ -30,6 +30,8 @@ Phone database versions 4 and 5 retain verified history during the upgrade. Earl
 | Compass / elevation | Actual orientation sensors, magnetic-heading/calibration status, and fresh valid location altitude. Missing signals do not display default north or zero elevation. |
 
 See the [health data contract](docs/HEALTH-DATA-CONTRACT.md) for validation rules, upgrade cleanup, and device acceptance checks.
+
+The [U8 Ultra fallback guide](docs/WATCH-HEALTH-FALLBACK.md) explains **Open watch health app**, **Check watch app data**, exported provider compatibility, and workout location recovery. GPS/network/OEM tracking accepts fresh passive locations shared by other watch apps and restarts stalled subscriptions. Physical watch sensor/export availability remains subject to the firmware.
 
 ## Navigation and features
 
@@ -56,7 +58,7 @@ Use JDK 17 or newer and Android SDK platform/build-tools 34. Set `sdk.dir` in lo
 ```powershell
 .\gradlew.bat :PhoneApp:app:testDebugUnitTest :WatchApp:app:testDebugUnitTest :PhoneApp:app:lintDebug :WatchApp:app:lintDebug
 .\gradlew.bat :PhoneApp:app:assembleRelease :WatchApp:app:assembleDebug
-.\tools\update_dist.ps1 -WatchVersion 2.7.0 -PhoneVersion 2.7.0
+.\tools\update_dist.ps1 -WatchVersion 2.7.1 -PhoneVersion 2.7.1
 ```
 
-The [2.7.0 build report](dist/BUILD-REPORT-Android8-2.7.0.md) records actual validation. No physical watch or phone was connected during this update. Automated tests and static checks do not establish physical sensor accuracy, overnight battery use, circular-display fit, call audio, or OEM permission behavior; these require the device checks in the health and communication guides.
+The [2.7.1 build report](dist/BUILD-REPORT-Android8-2.7.1.md) records actual validation. No physical watch or phone was connected during this update. Automated tests and static checks do not establish physical sensor accuracy, stock-app export compatibility, GPS reception, overnight battery use, circular-display fit, call audio, or OEM permission behavior; these require the device checks in the health and communication guides.

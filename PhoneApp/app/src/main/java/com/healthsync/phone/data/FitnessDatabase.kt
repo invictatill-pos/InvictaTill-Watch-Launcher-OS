@@ -4,6 +4,9 @@ import androidx.room.*
 import com.healthsync.phone.data.model.*
 import kotlinx.coroutines.flow.Flow
 
+private const val CAPTURED_HEART_RATE = "bpm BETWEEN 25 AND 240 AND ((source = 'WATCH_SENSOR' AND accuracy BETWEEN 1 AND 3) OR (source = 'WATCH_HEALTH_APP' AND accuracy BETWEEN 0 AND 3 AND sourcePackage != '' AND sourceLabel != ''))"
+private const val CAPTURED_SPO2 = "percentage BETWEEN 50 AND 100 AND (source = 'WATCH_SENSOR' OR (source = 'WATCH_HEALTH_APP' AND sourcePackage != '' AND sourceLabel != ''))"
+
 // ── Heart Rate DAO ────────────────────────────────────────────────────────────
 
 @Dao
@@ -11,19 +14,19 @@ interface HeartRateDao {
     @Insert
     suspend fun insert(entity: HeartRateEntity)
 
-    @Query("SELECT EXISTS(SELECT 1 FROM heart_rate WHERE timestamp = :timestamp AND bpm = :bpm AND accuracy BETWEEN 1 AND 3)")
-    suspend fun hasReading(timestamp: Long, bpm: Int): Boolean
+    @Query("SELECT EXISTS(SELECT 1 FROM heart_rate WHERE timestamp = :timestamp AND bpm = :bpm AND source = :source AND sourcePackage = :sourcePackage AND " + CAPTURED_HEART_RATE + ")")
+    suspend fun hasReading(timestamp: Long, bpm: Int, source: String, sourcePackage: String): Boolean
 
-    @Query("SELECT * FROM heart_rate WHERE timestamp >= :since AND accuracy BETWEEN 1 AND 3 AND bpm BETWEEN 25 AND 240 ORDER BY timestamp DESC")
+    @Query("SELECT * FROM heart_rate WHERE timestamp >= :since AND " + CAPTURED_HEART_RATE + " ORDER BY timestamp DESC")
     fun getLast24h(since: Long): Flow<List<HeartRateEntity>>
 
-    @Query("SELECT * FROM heart_rate WHERE accuracy BETWEEN 1 AND 3 AND bpm BETWEEN 25 AND 240 ORDER BY timestamp DESC LIMIT 1")
+    @Query("SELECT * FROM heart_rate WHERE " + CAPTURED_HEART_RATE + " ORDER BY timestamp DESC, CASE WHEN source = 'WATCH_SENSOR' THEN 0 ELSE 1 END ASC LIMIT 1")
     fun getLatest(): Flow<HeartRateEntity?>
 
-    @Query("SELECT * FROM heart_rate WHERE timestamp BETWEEN :start AND :end AND accuracy BETWEEN 1 AND 3 AND bpm BETWEEN 25 AND 240 ORDER BY timestamp ASC")
+    @Query("SELECT * FROM heart_rate WHERE timestamp BETWEEN :start AND :end AND " + CAPTURED_HEART_RATE + " ORDER BY timestamp ASC")
     fun getForWorkout(start: Long, end: Long): Flow<List<HeartRateEntity>>
 
-    @Query("SELECT AVG(bpm) FROM heart_rate WHERE timestamp >= :since AND accuracy BETWEEN 1 AND 3 AND bpm BETWEEN 25 AND 240")
+    @Query("SELECT AVG(bpm) FROM heart_rate WHERE timestamp >= :since AND " + CAPTURED_HEART_RATE)
     suspend fun getAvgBpm(since: Long): Float?
 
     @Query("DELETE FROM heart_rate WHERE timestamp < :before")
@@ -79,13 +82,13 @@ interface SpO2Dao {
     @Insert
     suspend fun insert(entity: SpO2Entity)
 
-    @Query("SELECT EXISTS(SELECT 1 FROM spo2 WHERE timestamp = :timestamp AND percentage = :percentage AND source = 'WATCH_SENSOR')")
-    suspend fun hasReading(timestamp: Long, percentage: Float): Boolean
+    @Query("SELECT EXISTS(SELECT 1 FROM spo2 WHERE timestamp = :timestamp AND percentage = :percentage AND source = :source AND sourcePackage = :sourcePackage AND " + CAPTURED_SPO2 + ")")
+    suspend fun hasReading(timestamp: Long, percentage: Float, source: String, sourcePackage: String): Boolean
 
-    @Query("SELECT * FROM spo2 WHERE timestamp >= :since AND source = 'WATCH_SENSOR' AND percentage BETWEEN 50 AND 100 ORDER BY timestamp DESC")
+    @Query("SELECT * FROM spo2 WHERE timestamp >= :since AND " + CAPTURED_SPO2 + " ORDER BY timestamp DESC")
     fun getLast24h(since: Long): Flow<List<SpO2Entity>>
 
-    @Query("SELECT * FROM spo2 WHERE source = 'WATCH_SENSOR' AND percentage BETWEEN 50 AND 100 ORDER BY timestamp DESC LIMIT 1")
+    @Query("SELECT * FROM spo2 WHERE " + CAPTURED_SPO2 + " ORDER BY timestamp DESC, CASE WHEN source = 'WATCH_SENSOR' THEN 0 ELSE 1 END ASC LIMIT 1")
     fun getLatest(): Flow<SpO2Entity?>
 
     @Query("DELETE FROM spo2 WHERE timestamp < :before")
@@ -156,7 +159,7 @@ interface WorkoutDao {
         NotificationHistoryEntity::class,
         WorkoutEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class FitnessDatabase : RoomDatabase() {

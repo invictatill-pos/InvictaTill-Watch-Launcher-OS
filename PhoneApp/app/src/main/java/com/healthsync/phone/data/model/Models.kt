@@ -197,7 +197,10 @@ enum class CallState { INCOMING, ANSWERED, ENDED, MISSED }
 
 data class HeartRatePayload(
     val bpm: Int,
-    val accuracy: Int
+    val accuracy: Int,
+    val source: String = "WATCH_SENSOR",
+    val sourcePackage: String = "",
+    val sourceLabel: String = ""
 )
 data class HeartRateStatusPayload(val status: String, val bpm: Int = -1, val readingTime: Long = 0L,
                                  val diagnosticReport: String? = null,
@@ -210,7 +213,9 @@ data class StepsPayload(
 
 data class SpO2Payload(
     val percentage: Float,
-    val source: String = "WATCH_SENSOR"
+    val source: String = "WATCH_SENSOR",
+    val sourcePackage: String = "",
+    val sourceLabel: String = ""
 )
 
 data class SleepPayload(
@@ -309,7 +314,10 @@ data class HeartRateEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val bpm: Int,
     val accuracy: Int,
-    val timestamp: Long
+    val timestamp: Long,
+    @ColumnInfo(defaultValue = "'WATCH_SENSOR'") val source: String = "WATCH_SENSOR",
+    @ColumnInfo(defaultValue = "''") val sourcePackage: String = "",
+    @ColumnInfo(defaultValue = "''") val sourceLabel: String = ""
 )
 
 @Entity(tableName = "steps")
@@ -333,7 +341,9 @@ data class SpO2Entity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val percentage: Float,
     val timestamp: Long,
-    @ColumnInfo(defaultValue = "'LEGACY_UNVERIFIED'") val source: String = "LEGACY_UNVERIFIED"
+    @ColumnInfo(defaultValue = "'LEGACY_UNVERIFIED'") val source: String = "LEGACY_UNVERIFIED",
+    @ColumnInfo(defaultValue = "''") val sourcePackage: String = "",
+    @ColumnInfo(defaultValue = "''") val sourceLabel: String = ""
 )
 
 @Entity(tableName = "sleep")

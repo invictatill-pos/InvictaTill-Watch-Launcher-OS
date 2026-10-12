@@ -30,6 +30,49 @@ class WorkoutLocationRulesTest {
         assertEquals(WorkoutLocationState.STALE, state(fix = 10_001, now = 10_000))
     }
 
+    @Test fun installedAppLocationsAreAcceptedThroughPassiveProviderWithoutMislabelingTheirSource() {
+        assertEquals(setOf("gps", "network", "fused", "passive"),
+            workoutLocationProviders(listOf("gps", "network", "fused", "passive", ""), fine = true))
+        assertEquals(setOf("network"), workoutLocationProviders(listOf("gps", "network", "fused", "passive"), fine = false))
+        assertTrue(workoutLocationSourceAllowed("gps", setOf("gps")))
+        assertTrue(workoutLocationSourceAllowed("oem_fused", setOf("passive")))
+        assertFalse(workoutLocationSourceAllowed("oem_fused", setOf("network")))
+        assertFalse(workoutLocationSourceAllowed(null, setOf("passive")))
+        assertFalse(workoutLocationSourceAllowed("passive", setOf("passive")))
+        assertFalse(workoutLocationSourceAllowed("gps", setOf("passive", "gps"), enabled = false))
+        // An actual accepted shared fix is usable even when its OEM source is not enumerated.
+        assertEquals(WorkoutLocationState.LOCATION_FIX, state(available = emptySet(), enabled = emptySet(),
+            registered = setOf("passive"), fix = 9_000, provider = "oem_fused"))
+        assertEquals(WorkoutLocationState.GPS_FIX, state(available = emptySet(), enabled = emptySet(),
+            registered = setOf("passive"), fix = 9_000, provider = "gps"))
+    }
+
+    @Test fun disablingAProviderCannotBeOverriddenByItsFreshCachedFix() {
+        assertEquals(WorkoutLocationState.DISABLED, state(enabled = emptySet(), fix = 9_000))
+        assertEquals(WorkoutLocationState.GPS_DISABLED, state(available = setOf("gps", "network"),
+            enabled = setOf("network"), registered = setOf("gps", "network"), fix = 9_000))
+        assertEquals(WorkoutLocationState.LOCATION_FIX, state(available = setOf("gps", "network"),
+            enabled = setOf("network"), registered = setOf("network"), fix = 9_000, provider = "network"))
+    }
+
+    @Test fun stalledLocationRecoveryWaitsForColdStartAndDoesNotInterruptRecentFixes() {
+        assertFalse(shouldRecoverWorkoutLocation(-1, -1, -1, 200_000))
+        assertFalse(shouldRecoverWorkoutLocation(1_000, -1, -1, 120_999))
+        assertTrue(shouldRecoverWorkoutLocation(1_000, -1, -1, 121_000))
+        assertFalse(shouldRecoverWorkoutLocation(1_000, 120_000, -1, 121_000))
+        assertFalse(shouldRecoverWorkoutLocation(1_000, -1, 120_000, 121_000))
+        assertFalse(shouldRecoverWorkoutLocation(10_000, -1, -1, 9_000))
+    }
+
+    @Test fun aFreshPoorAccuracyFixShowsAWeakSignalButNeverEntersTheRoute() {
+        assertEquals(WorkoutLocationState.WEAK_FIX, state(signal = 9_000, accuracy = 120f))
+        assertEquals(WorkoutLocationState.SEARCHING, state(signal = 9_000, now = 39_001, accuracy = 120f))
+        assertEquals(WorkoutLocationState.SEARCHING, state(signal = 9_000, accuracy = Float.NaN))
+        assertEquals(WorkoutLocationState.GPS_FIX, state(fix = 8_000, signal = 9_000, accuracy = 120f))
+        assertFalse(validWorkoutLocation(12.0, 77.0, 120f, 9_000, 10_000))
+        assertFalse(validWorkoutLocation(12.0, 77.0, 8f, 9_000, 10_000, mock = true))
+    }
+
     @Test fun staleUnknownAccuracyAndInvalidCoordinatesNeverEnterRoutes() {
         assertTrue(validWorkoutLocation(12.0, 77.0, 8f, 9_000, 10_000))
         assertFalse(validWorkoutLocation(12.0, 77.0, null, 9_000, 10_000))
@@ -109,6 +152,6 @@ class WorkoutLocationRulesTest {
 
     private fun state(fine: Boolean = true, coarse: Boolean = true, paused: Boolean = false,
         available: Set<String> = setOf("gps"), enabled: Set<String> = setOf("gps"), registered: Set<String> = setOf("gps"),
-        fix: Long = -1, now: Long = 10_000, provider: String = "gps") =
-        workoutLocationState(true, paused, fine, coarse, available, enabled, registered, fix, now, provider)
+        fix: Long = -1, now: Long = 10_000, provider: String = "gps", signal: Long = -1, accuracy: Float = -1f) =
+        workoutLocationState(true, paused, fine, coarse, available, enabled, registered, fix, now, provider, signal, accuracy)
 }

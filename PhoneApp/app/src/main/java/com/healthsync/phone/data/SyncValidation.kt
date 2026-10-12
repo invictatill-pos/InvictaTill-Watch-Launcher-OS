@@ -18,6 +18,23 @@ object SyncValidation {
     fun validSpO2(percentage: Float, timestamp: Long, now: Long = System.currentTimeMillis()) =
         percentage.isFinite() && percentage in 50f..100f && validTimestamp(timestamp, now)
 
+    fun validCapturedHeartRate(bpm: Int, accuracy: Int, timestamp: Long, source: String?,
+                              sourcePackage: String?, sourceLabel: String?, now: Long = System.currentTimeMillis()): Boolean =
+        bpm in 25..240 && validTimestamp(timestamp, now) && when (source) {
+            "WATCH_SENSOR" -> accuracy in 1..3 && sourcePackage.isNullOrEmpty() && sourceLabel.isNullOrEmpty()
+            // Accuracy zero records that the providing app supplied no sensor accuracy.
+            "WATCH_HEALTH_APP" -> accuracy in 0..3 && validHealthAppIdentity(sourcePackage, sourceLabel)
+            else -> false
+        }
+
+    fun validCapturedSpO2(percentage: Float, timestamp: Long, source: String?,
+                         sourcePackage: String?, sourceLabel: String?, now: Long = System.currentTimeMillis()): Boolean =
+        validSpO2(percentage, timestamp, now) && when (source) {
+            "WATCH_SENSOR" -> sourcePackage.isNullOrEmpty() && sourceLabel.isNullOrEmpty()
+            "WATCH_HEALTH_APP" -> validHealthAppIdentity(sourcePackage, sourceLabel)
+            else -> false
+        }
+
     fun validSteps(steps: Int, calories: Double) =
         steps in 0..1_000_000 && calories.isFinite() && calories in 0.0..100_000.0
 
@@ -85,11 +102,18 @@ object SyncValidation {
                                    now: Long = System.currentTimeMillis()): Boolean = runCatching {
         val obj = jsonObject(payloadJson) ?: return false
         when (type) {
-            MessageType.HEART_RATE -> validHeartRate(obj.int("bpm") ?: return false,
-                obj.int("accuracy") ?: return false, timestamp, now)
+            MessageType.HEART_RATE -> {
+                // Original sensor-only watches omitted source. Explicit null/unknown sources stay invalid.
+                val source = if (!obj.has("source")) "WATCH_SENSOR" else obj.text("source") ?: return false
+                validCapturedHeartRate(obj.int("bpm") ?: return false, obj.int("accuracy") ?: return false,
+                    timestamp, source, obj.optionalText("sourcePackage") ?: return false,
+                    obj.optionalText("sourceLabel") ?: return false, now)
+            }
             MessageType.SPO2 -> {
                 val percentage = obj.number("percentage") ?: return false
-                obj.text("source") == "WATCH_SENSOR" && percentage in 50.0..100.0 && validSpO2(percentage.toFloat(), timestamp, now)
+                percentage in 50.0..100.0 && validCapturedSpO2(percentage.toFloat(), timestamp,
+                    obj.text("source") ?: return false, obj.optionalText("sourcePackage") ?: return false,
+                    obj.optionalText("sourceLabel") ?: return false, now)
             }
             MessageType.STEPS -> validTimestamp(timestamp, now) && validSteps(
                 obj.int("steps") ?: return false, obj.number("calories") ?: return false)
@@ -143,6 +167,7 @@ object SyncValidation {
     private fun jsonObject(json: String): JsonObject? = JsonParser.parseString(json).takeIf { it.isJsonObject }?.asJsonObject
     private fun optionalArray(obj: JsonObject, key: String) = !obj.has(key) || obj.get(key).isJsonArray
     private fun JsonObject.text(key: String): String? = get(key)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
+    private fun JsonObject.optionalText(key: String): String? = if (!has(key)) "" else text(key)
     private fun JsonObject.boolean(key: String): Boolean? = get(key)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }?.asBoolean
     private fun JsonObject.number(key: String): Double? = get(key)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }
         ?.asDouble?.takeIf { it.isFinite() }

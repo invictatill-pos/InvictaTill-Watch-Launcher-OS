@@ -44,11 +44,11 @@ internal fun validatedHeartRateStatus(payload: HeartRateStatusPayload?, now: Lon
     val status = payload?.status?.trim()?.lowercase(Locale.ROOT) ?: return null
     if (status !in setOf("missing_sensor", "permission_required", "measuring", "reading", "no_contact",
             "sensor_error", "service_unavailable", "disabled", "idle", "no_events", "invalid_samples",
-            "unreliable_accuracy", "background_permission_required")) return null
+            "unreliable_accuracy", "background_permission_required", "checking_health_apps", "app_reading")) return null
     if (payload.bpm != -1 && payload.bpm !in 25..240) return null
     if (payload.readingTime != 0L && !SyncValidation.validTimestamp(payload.readingTime, now)) return null
     if (payload.bpm in 25..240 && payload.readingTime <= 0L) return null
-    if (status == "reading" && (payload.bpm !in 25..240 || payload.readingTime <= 0L)) return null
+    if (status in setOf("reading", "app_reading") && (payload.bpm !in 25..240 || payload.readingTime <= 0L)) return null
     return status
 }
 
@@ -106,11 +106,12 @@ fun heartRateFeedbackText(feedback: HeartRateFeedback?, connected: Boolean,
         return "$prefix · unverified signal · ${sensorPreviewAge(it, now)}"
     }
     val status = feedback?.status
-    if (status in setOf("requesting", "measuring") && feedback != null &&
+    if (status in setOf("requesting", "measuring", "checking_health_apps") && feedback != null &&
         now - feedback.updatedAt > 90_000L) return "No response · check Health on watch"
     return when (status) {
         "requesting" -> "Request sent · waiting for watch"
         "measuring" -> "Measuring · keep wrist still"
+        "checking_health_apps" -> "Checking shared readings from watch apps"
         "missing_sensor" -> "Heart-rate sensor unavailable on watch"
         "permission_required" -> "Allow Sensors in watch settings"
         "background_permission_required" -> "Open Health on watch or allow all-time Sensors"

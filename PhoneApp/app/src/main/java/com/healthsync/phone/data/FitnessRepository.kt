@@ -31,16 +31,20 @@ class FitnessRepository @Inject constructor(
     // ── Heart Rate ────────────────────────────────────────────────────────────
 
     suspend fun saveHeartRate(payload: HeartRatePayload?, timestamp: Long = System.currentTimeMillis()) {
-        if (payload == null || !SyncValidation.validHeartRate(payload.bpm, payload.accuracy, timestamp)) return
+        if (payload == null || !SyncValidation.validCapturedHeartRate(payload.bpm, payload.accuracy,
+                timestamp, payload.source, payload.sourcePackage, payload.sourceLabel)) return
         // A reconnect replays the last sample with its original timestamp. Keep
         // that history available without counting it as a second measurement.
         db.withTransaction {
-            if (db.heartRateDao().hasReading(timestamp, payload.bpm)) return@withTransaction
+            if (db.heartRateDao().hasReading(timestamp, payload.bpm, payload.source, payload.sourcePackage)) return@withTransaction
             db.heartRateDao().insert(
                 HeartRateEntity(
                     bpm = payload.bpm,
                     accuracy = payload.accuracy,
-                    timestamp = timestamp
+                    timestamp = timestamp,
+                    source = payload.source,
+                    sourcePackage = payload.sourcePackage,
+                    sourceLabel = payload.sourceLabel
                 )
             )
         }
@@ -141,14 +145,17 @@ class FitnessRepository @Inject constructor(
     // ── SpO2 ──────────────────────────────────────────────────────────────────
 
     suspend fun saveSpO2(payload: SpO2Payload?, timestamp: Long = System.currentTimeMillis()) {
-        if (payload == null || payload.source != "WATCH_SENSOR" || !SyncValidation.validSpO2(payload.percentage, timestamp)) return
+        if (payload == null || !SyncValidation.validCapturedSpO2(payload.percentage, timestamp,
+                payload.source, payload.sourcePackage, payload.sourceLabel)) return
         db.withTransaction {
-            if (db.spO2Dao().hasReading(timestamp, payload.percentage)) return@withTransaction
+            if (db.spO2Dao().hasReading(timestamp, payload.percentage, payload.source, payload.sourcePackage)) return@withTransaction
             db.spO2Dao().insert(
                 SpO2Entity(
                     percentage = payload.percentage,
                     timestamp = timestamp,
-                    source = payload.source
+                    source = payload.source,
+                    sourcePackage = payload.sourcePackage,
+                    sourceLabel = payload.sourceLabel
                 )
             )
         }

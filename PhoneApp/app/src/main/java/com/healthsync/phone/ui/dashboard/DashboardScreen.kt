@@ -87,6 +87,7 @@ import kotlin.math.roundToInt
 import com.healthsync.phone.service.BluetoothSyncService
 import com.healthsync.phone.data.heartRateFeedbackText
 import com.healthsync.phone.data.heartRateMeasurementDetailsText
+import com.healthsync.phone.data.healthReadingSourceLabel
 import com.healthsync.phone.ui.charts.Steps24HourChart
 import com.healthsync.phone.ui.charts.StepsBarChart
 import com.healthsync.phone.ui.charts.HeartRateLineChart
@@ -271,6 +272,7 @@ fun DashboardScreen(
                     value = if ((uiState.latestHeartRate?.bpm ?: 0) > 0) "${uiState.latestHeartRate?.bpm}" else "--",
                     unit = "bpm",
                     recordedAtText = "Last captured: ${readingAge(uiState.latestHeartRate?.timestamp, currentTime)}",
+                    sourceText = uiState.latestHeartRate?.let { healthReadingSourceLabel(it.source, it.sourcePackage, it.sourceLabel) },
                     status = heartRateFeedbackText(heartFeedback, connState.isConnected, uiState.latestHeartRate?.timestamp, currentTime),
                     icon = Icons.Default.Favorite,
                     color = MetricHeart,
@@ -282,9 +284,10 @@ fun DashboardScreen(
                     value = if ((uiState.latestSpO2?.percentage ?: 0f) > 0f) String.format(Locale.getDefault(), "%.1f", uiState.latestSpO2?.percentage) else "--",
                     unit = "%",
                     recordedAtText = "Last captured: ${readingAge(uiState.latestSpO2?.timestamp, currentTime)}",
+                    sourceText = uiState.latestSpO2?.let { healthReadingSourceLabel(it.source, it.sourcePackage, it.sourceLabel) },
                     status = when {
-                        oxygenRequestedAt > (uiState.latestSpO2?.timestamp ?: 0L) && connState.isConnected && currentTime - oxygenRequestedAt < 60_000L -> "Waiting for sensor reading"
-                        oxygenRequestedAt > (uiState.latestSpO2?.timestamp ?: 0L) -> "No new reading received · retry"
+                        oxygenRequestedAt > (uiState.latestSpO2?.timestamp ?: 0L) && connState.isConnected && currentTime - oxygenRequestedAt < 60_000L -> "Checking sensor and shared watch-app data"
+                        oxygenRequestedAt > (uiState.latestSpO2?.timestamp ?: 0L) -> "No newer reading received · retry"
                         else -> readingAge(uiState.latestSpO2?.timestamp, currentTime)
                     },
                     icon = Icons.Default.Bloodtype,
@@ -539,6 +542,7 @@ private fun VitalCard(
     icon: ImageVector,
     color: Color,
     recordedAtText: String? = null,
+    sourceText: String? = null,
     onTap: () -> Unit
 ) {
     HealthCard(modifier = modifier.clickable { onTap() }) {
@@ -558,6 +562,7 @@ private fun VitalCard(
             Text(unit, color = TextDim, fontSize = 12.sp, modifier = Modifier.padding(bottom = 5.dp))
         }
         recordedAtText?.let { Text(it, color = TextDim, fontSize = 11.sp) }
+        sourceText?.let { Text(it, color = TextDim, fontSize = 11.sp) }
         Text(status, color = color, fontSize = 12.sp, fontWeight = FontWeight.Bold)
     }
 }
@@ -581,7 +586,7 @@ private fun CaptureStatusCard(state: DashboardUiState, connected: Boolean, curre
         Text("${state.heartRate24h.size} heart-rate readings · ${state.spO2Last24h.size} oxygen readings in the last 24 hours", color = TextSecondary, fontSize = 13.sp)
         Spacer(Modifier.height(6.dp))
         Text("Steps: ${readingAge(state.todaySteps?.timestamp, currentTime)}", color = TextDim, fontSize = 12.sp)
-        Text("Watch readings retain their capture time. Recorded steps may include motion estimates; the source is unavailable for saved step history. Calories, pace and rest duration are estimates or calculations. Missing measurements stay unavailable.", color = TextDim, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 6.dp))
+        Text("Watch readings retain their capture time and show whether they came from a sensor or a watch app. App readings require the app to share measured data. Recorded steps may include motion estimates; the source is unavailable for saved step history. Calories, pace and rest duration are estimates or calculations. Missing measurements stay unavailable.", color = TextDim, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 6.dp))
         if (!connected) TextButton(onClick = onDeviceClick) { Text("Connect to capture and sync", color = AccentCyan) }
     }
 }

@@ -1,0 +1,111 @@
+{
+  "sqlite_version": "3.49.1",
+  "migrations": [
+    {
+      "from": 4,
+      "to": 7,
+      "schema_matches": true,
+      "history_preserved": true,
+      "unverified_records_archived": true
+    },
+    {
+      "from": 5,
+      "to": 7,
+      "schema_matches": true,
+      "history_preserved": true,
+      "unverified_records_archived": true
+    },
+    {
+      "from": 6,
+      "to": 7,
+      "schema_matches": true,
+      "history_and_archives_preserved": true,
+      "imported_provenance_and_capture_time_retained": true
+    }
+  ],
+  "legacy_preservation": [
+    {
+      "from": 1,
+      "to": 7,
+      "fixture": "empty",
+      "schema_matches": true,
+      "original_rows_columns_indices_preserved": true,
+      "no_guessed_health_recovery": true
+    },
+    {
+      "from": 1,
+      "to": 7,
+      "fixture": "sparse",
+      "schema_matches": true,
+      "original_rows_columns_indices_preserved": true,
+      "no_guessed_health_recovery": true
+    },
+    {
+      "from": 1,
+      "to": 7,
+      "fixture": "all",
+      "schema_matches": true,
+      "original_rows_columns_indices_preserved": true,
+      "no_guessed_health_recovery": true
+    },
+    {
+      "from": 2,
+      "to": 7,
+      "fixture": "empty",
+      "schema_matches": true,
+      "original_rows_columns_indices_preserved": true,
+      "no_guessed_health_recovery": true
+    },
+    {
+      "from": 2,
+      "to": 7,
+      "fixture": "sparse",
+      "schema_matches": true,
+      "original_rows_columns_indices_preserved": true,
+      "no_guessed_health_recovery": true
+    },
+    {
+      "from": 2,
+      "to": 7,
+      "fixture": "all",
+      "schema_matches": true,
+      "original_rows_columns_indices_preserved": true,
+      "no_guessed_health_recovery": true
+    },
+    {
+      "from": 3,
+      "to": 7,
+      "fixture": "empty",
+      "schema_matches": true,
+      "original_rows_columns_indices_preserved": true,
+      "no_guessed_health_recovery": true
+    },
+    {
+      "from": 3,
+      "to": 7,
+      "fixture": "sparse",
+      "schema_matches": true,
+      "original_rows_columns_indices_preserved": true,
+      "no_guessed_health_recovery": true
+    },
+    {
+      "from": 3,
+      "to": 7,
+      "fixture": "all",
+      "schema_matches": true,
+      "original_rows_columns_indices_preserved": true,
+      "no_guessed_health_recovery": true
+    }
+  ],
+  "archive_collision": {
+    "archive_collision_rejected": true,
+    "original_records_preserved": true,
+    "partial_migration_rolled_back": true
+  },
+  "captured_source_queries": {
+    "generated_room_queries_verified": true,
+    "captured_app_records_included": true,
+    "invalid_and_legacy_records_excluded": true,
+    "dedup_includes_source_identity": true
+  }
+}

@@ -265,6 +265,7 @@ class ActiveWorkoutActivity : AppCompatActivity() {
             WorkoutLocationState.GPS_DISABLED -> "GPS off • tap to enable"
             WorkoutLocationState.NO_PROVIDER -> "Watch has no location provider$estimate"
             WorkoutLocationState.UNAVAILABLE -> "Location unavailable • tap to retry"
+            WorkoutLocationState.WEAK_FIX -> "Location signal weak$accuracy • go outdoors$estimate"
             WorkoutLocationState.STALE -> "GPS signal lost • go outdoors$estimate"
             else -> "GPS searching • go outdoors$estimate"
         }
@@ -282,10 +283,11 @@ class ActiveWorkoutActivity : AppCompatActivity() {
         locationPermissions.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
     }
 
-    private fun startOrRefreshWorkout() {
+    private fun startOrRefreshWorkout(retryLocation: Boolean = false) {
         if (locationPermissionPending || ending) return
         if (WorkoutTrackingService.isActive) {
-            runCatching { startService(Intent(this, WorkoutTrackingService::class.java).setAction(WorkoutTrackingService.ACTION_REQUEST_UPDATE)) }
+            runCatching { startService(Intent(this, WorkoutTrackingService::class.java).setAction(WorkoutTrackingService.ACTION_REQUEST_UPDATE)
+                .putExtra(WorkoutTrackingService.EXTRA_RETRY_LOCATION, retryLocation)) }
         } else if (!workoutStartRequested) {
             workoutStartRequested = true
             runCatching {
@@ -310,7 +312,7 @@ class ActiveWorkoutActivity : AppCompatActivity() {
             runCatching { startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }
                 .onFailure { Toast.makeText(this, "Enable Location in Android settings.", Toast.LENGTH_LONG).show() }
         } else {
-            startOrRefreshWorkout()
+            startOrRefreshWorkout(retryLocation = true)
             Toast.makeText(this, if (gpsState == WorkoutLocationState.NO_PROVIDER) "This watch does not expose a location provider."
                 else "Move outdoors and keep the watch clear of obstructions while GPS finds a fix.", Toast.LENGTH_LONG).show()
         }

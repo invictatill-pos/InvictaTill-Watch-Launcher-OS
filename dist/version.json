@@ -1,18 +1,18 @@
 {
   "phone": {
-    "versionCode": 20,
-    "versionName": "2.7.0",
-    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.7.0/HealthSync-Phone.apk",
-    "changelog": "A refreshed cream-and-forest design, clearer navigation, readable cards and consistent controls throughout. Real captured health records with original timestamps; clearly labeled estimates and unavailable states. Removes fabricated readiness, sleep stages and workout heart-rate zones. Adds accurate workout history and exports, improved face previews, and verified updates. Install both phone and watch apps.",
+    "versionCode": 21,
+    "versionName": "2.7.1",
+    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.7.1/HealthSync-Phone.apk",
+    "changelog": "Heart rate and oxygen can import timestamped readings shared by installed watch health apps. Displays the source app and original capture time; preserves existing history and archives. Install both 2.7.1 apps for sensor retries, app fallback and workout location recovery.",
     "forceUpdate": false,
-    "sha256": "3af68e9a11b6f171d98d3099dc476a28568695f967357254e57409e7ca784740"
+    "sha256": "b1203adf24b19a5803b3ca561d6e0ca0b009745fe8638acaf2971c3894a743dc"
   },
   "watch": {
-    "versionCode": 26,
-    "versionName": "2.7.0",
-    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.7.0/HealthSync-Watch.apk",
-    "changelog": "A consistent dark-and-mint design across menus, settings, workouts, faces and health pages, with visible Back and Clock controls. Real sensor capture, honest missing values and clear capture status. Removes generated oxygen/stress/sleep values. Adds motion-rest estimates, guided breathing, manual hydration, reliable compass states, stricter steps/heart-rate capture and verified updates. Install both apps; unverifiable legacy live step counts restart after upgrade.",
+    "versionCode": 27,
+    "versionName": "2.7.1",
+    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.7.1/HealthSync-Watch.apk",
+    "changelog": "Retries compatible heart rate and oxygen sensors when the preferred sensor does not deliver a usable sample. Shows accuracy-zero sensor feedback as unverified; checks shared health-app exports on failed capture. Adds original health-app opening, immediate export checks, passive workout locations and stalled GPS recovery. Imported readings retain their original app/time. Private app data and unavailable hardware remain explicitly unavailable.",
     "forceUpdate": false,
-    "sha256": "978112717df5f60675479878f34852b8c6cf750672b29f5bc01e3cbdedff275d"
+    "sha256": "2164a8bcdf3091f69e68927862e8ed14c9968a75daaf6c79e75f925388e89d4c"
   }
 }

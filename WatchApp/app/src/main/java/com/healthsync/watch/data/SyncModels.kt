@@ -170,12 +170,14 @@ data class ActiveCallPayload(
 
 enum class CallState { INCOMING, ANSWERED, ENDED, MISSED }
 
-data class HeartRatePayload(val bpm: Int, val accuracy: Int)
+data class HeartRatePayload(val bpm: Int, val accuracy: Int, val source: String = "WATCH_SENSOR",
+                            val sourcePackage: String = "", val sourceLabel: String = "")
 data class HeartRateStatusPayload(val status: String, val bpm: Int = -1, val readingTime: Long = 0L,
                                  val diagnosticReport: String? = null,
                                  val sensorBpm: Int = -1, val sensorReadingTime: Long = 0L)
 data class StepsPayload(val steps: Int, val calories: Double)
-data class SpO2Payload(val percentage: Float, val source: String = "WATCH_SENSOR")
+data class SpO2Payload(val percentage: Float, val source: String = "WATCH_SENSOR",
+                      val sourcePackage: String = "", val sourceLabel: String = "")
 data class SleepPayload(
     val startTime: Long,
     val endTime: Long,

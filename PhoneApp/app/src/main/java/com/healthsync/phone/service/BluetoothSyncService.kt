@@ -542,10 +542,16 @@ class BluetoothSyncService : android.app.Service() {
                     Log.d(TAG, "Sent SYNC_ACK confirmation to Watch for ${processedSessionIds.size} workouts & ${processedStepTimestamps.size} step buckets.")
                 }
                 MessageType.HEART_RATE -> {
-                    val reading = gson.fromJson(msg.payload, HeartRatePayload::class.java)
+                    val decoded = gson.fromJson(msg.payload, HeartRatePayload::class.java)
+                    // Gson bypasses Kotlin defaults on older sensor-only payloads.
+                    // Raw validation above has already rejected explicit null/unknown provenance.
+                    val reading = decoded.copy(source = decoded.source ?: "WATCH_SENSOR",
+                        sourcePackage = decoded.sourcePackage.orEmpty(), sourceLabel = decoded.sourceLabel.orEmpty())
                     repository.saveHeartRate(reading, msg.timestamp)
-                    if (SyncValidation.validHeartRate(reading.bpm, reading.accuracy, msg.timestamp)) {
-                        _heartRateFeedback.value = HeartRateFeedback("reading", System.currentTimeMillis())
+                    if (SyncValidation.validCapturedHeartRate(reading.bpm, reading.accuracy, msg.timestamp,
+                            reading.source, reading.sourcePackage, reading.sourceLabel)) {
+                        _heartRateFeedback.value = HeartRateFeedback(
+                            if (reading.source == "WATCH_HEALTH_APP") "app_reading" else "reading", System.currentTimeMillis())
                     }
                 }
                 MessageType.HEART_RATE_STATUS -> {
@@ -553,7 +559,11 @@ class BluetoothSyncService : android.app.Service() {
                     _heartRateFeedback.value = heartRateFeedbackFromJson(msg.payload, System.currentTimeMillis())
                 }
                 MessageType.STEPS        -> repository.saveSteps(gson.fromJson(msg.payload, StepsPayload::class.java), msg.timestamp)
-                MessageType.SPO2         -> repository.saveSpO2(gson.fromJson(msg.payload, SpO2Payload::class.java), msg.timestamp)
+                MessageType.SPO2 -> {
+                    val decoded = gson.fromJson(msg.payload, SpO2Payload::class.java)
+                    repository.saveSpO2(decoded.copy(sourcePackage = decoded.sourcePackage.orEmpty(),
+                        sourceLabel = decoded.sourceLabel.orEmpty()), msg.timestamp)
+                }
                 MessageType.SLEEP        -> repository.saveSleep(gson.fromJson(msg.payload, SleepPayload::class.java))
                 MessageType.FALL_DETECTED -> postFallAlert(gson.fromJson(msg.payload, FallDetectedPayload::class.java))
                 MessageType.WORKOUT_SESSION -> {

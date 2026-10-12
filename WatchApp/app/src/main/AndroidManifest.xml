@@ -178,6 +178,8 @@
             android:exported="false" />
 
         <!-- Sensor Collector Service -->
+        <service android:name=".service.HealthAppImportService" android:exported="false"
+            android:foregroundServiceType="shortService" />
         <service
             android:name=".service.SensorCollectorService"
             android:foregroundServiceType="health"

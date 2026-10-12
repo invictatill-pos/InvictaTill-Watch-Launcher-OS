@@ -71,6 +71,7 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
         const val EXTRA_GPS_STATE = "gps_state"
         const val EXTRA_GPS_ACCURACY = "gps_accuracy"
         const val EXTRA_LOCATION_CHECKED = "location_permission_checked"
+        const val EXTRA_RETRY_LOCATION = "retry_location"
 
         @Volatile var isActive = false; private set
         @Volatile var activeActivityType = "Walk"; private set
@@ -106,6 +107,10 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
     private var gpsSatCount = 0
     private var lastLocationProvider = ""
     private var lastReportedAccuracy = -1f
+    private var lastLocationSignalElapsed = -1L
+    private var locationCaptureStartElapsed = -1L
+    private var lastLocationRecoveryElapsed = -1L
+    private val availableLocationProviders = mutableSetOf<String>()
     private val registeredLocationProviders = mutableSetOf<String>()
     private val locationProviderStart = mutableMapOf<String, Long>()
     private val routePoints = mutableListOf<LatLngPoint>()
@@ -156,7 +161,7 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
                 repDetector.reset(currentReps); swingDetector.reset(currentSwings)
                 registerTrackingSensors(); publishState(); checkpoint()
             }
-            ACTION_REQUEST_UPDATE -> if (tracking && !paused) registerLocationProviders()
+            ACTION_REQUEST_UPDATE -> if (tracking && !paused) registerLocationProviders(intent.getBooleanExtra(EXTRA_RETRY_LOCATION, false))
             ACTION_SET_REPS -> if (tracking && activityType == "Home Workout") {
                 currentReps = intent.getIntExtra(EXTRA_REPS, currentReps).coerceIn(0, 100_000)
                 currentSets = intent.getIntExtra(EXTRA_SETS, currentSets).coerceIn(0, 10_000)
@@ -202,6 +207,7 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
         workoutSteps = 0; activeStartSteps = SensorCollectorService.latestSteps; lastStepTotal = lifetimeSteps()
         totalDistanceMeters = 0f; fallbackDistanceMeters = 0f; routePoints.clear(); lastLocation = null; gpsLocked = false; gpsSatCount = 0
         lastFixElapsed = -1L; lastGpsFixElapsed = -1L; lastLocationProvider = ""; lastReportedAccuracy = -1f
+        lastLocationSignalElapsed = -1L
         hrSum = 0L; hrCount = 0L; lastHrSampleTime = 0L; peakHr = 0
         currentReps = 0; currentSwings = 0; currentSets = 0
         cadenceTracker.reset(); repDetector.reset(); swingDetector.reset()
@@ -211,6 +217,8 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
     @SuppressLint("MissingPermission")
     private fun registerTrackingSensors() {
         motionRegisteredAt = SystemClock.elapsedRealtime()
+        locationCaptureStartElapsed = motionRegisteredAt
+        lastLocationSignalElapsed = -1L; lastLocationRecoveryElapsed = -1L
         lastAccelMs = -1L; lastGyroMs = -1L
         if (activityType in setOf("Home Workout", "Badminton", "Basketball", "Cricket")) {
             try {
@@ -222,7 +230,7 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
     }
 
     @SuppressLint("MissingPermission")
-    private fun registerLocationProviders() {
+    private fun registerLocationProviders(retry: Boolean = false) {
         if (!tracking || paused || !workoutUsesLocation(activityType)) return
         val fine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         val coarse = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -238,14 +246,18 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
             Log.w(TAG, "Location providers unavailable: ${e.message}")
             return
         }
-        val providers = availableProviders.filter { provider ->
-            provider != LocationManager.PASSIVE_PROVIDER &&
-                (fine || provider == LocationManager.NETWORK_PROVIDER)
-        }
-        val obsolete = registeredLocationProviders - providers.toSet()
-        if (obsolete.isNotEmpty()) {
+        availableLocationProviders.clear(); availableLocationProviders.addAll(availableProviders)
+        // Passive updates include fixes requested by an installed watch application or OEM service.
+        // They retain the underlying GPS/network/fused provider, not the name "passive".
+        val providers = workoutLocationProviders(availableProviders, fine)
+        val nowElapsed = SystemClock.elapsedRealtime()
+        val stalled = shouldRecoverWorkoutLocation(locationProviderStart.values.minOrNull() ?: -1L,
+            lastFixElapsed, lastLocationRecoveryElapsed, nowElapsed)
+        val obsolete = registeredLocationProviders - providers
+        if (obsolete.isNotEmpty() || retry || stalled) {
             runCatching { locationManager.removeUpdates(this) }
-            registeredLocationProviders.clear(); locationProviderStart.clear(); lastLocation = null; lastFixElapsed = -1L; lastGpsFixElapsed = -1L
+            registeredLocationProviders.clear(); locationProviderStart.clear(); lastLocation = null
+            lastLocationRecoveryElapsed = nowElapsed
         }
         providers.distinct().filterNot { it in registeredLocationProviders }.forEach { provider ->
             try {
@@ -255,7 +267,11 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
                 Log.d(TAG, "Tracking location on provider: $provider")
             } catch (e: Exception) { Log.w(TAG, "$provider unavailable: ${e.message}") }
         }
-        // Fresh live fixes establish route origin; old cached positions add no distance.
+        // A fix another app captured since this workout/resume can establish an origin.
+        // The same validation rejects stale, mock, pre-session and reordered cached positions.
+        if (fine) providers.forEach { provider ->
+            runCatching { locationManager.getLastKnownLocation(provider) }.getOrNull()?.let(::onLocationChanged)
+        }
         broadcastGpsStatus()
     }
 
@@ -267,7 +283,7 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
                 collectSteps()
                 if (!paused) {
                     // Keep requesting real readings during the workout; unavailable readings remain empty.
-                    if (tick % 20 == 0 || SensorCollectorService.hrStatus !in setOf("measuring", "reading")) {
+                    if (tick % 20 == 0 && SensorCollectorService.hrStatus !in setOf("measuring", "checking_health_apps")) {
                         SensorCollectorService.forceMeasureHr(this@WorkoutTrackingService)
                     }
                     val sampleTime = SensorCollectorService.latestBpmTimeMs
@@ -421,18 +437,30 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
         val nowElapsed = SystemClock.elapsedRealtime()
         val fixElapsed = workoutFixElapsedTime(location.elapsedRealtimeNanos, location.time, nowElapsed, System.currentTimeMillis())
         val accuracy = location.accuracy.takeIf { location.hasAccuracy() }
-        if (fixElapsed == null || !validWorkoutLocation(location.latitude, location.longitude, accuracy, fixElapsed, nowElapsed)) {
+        val providerEnabled = location.provider !in availableLocationProviders ||
+            runCatching { locationManager.isProviderEnabled(location.provider.orEmpty()) }.getOrDefault(false)
+        if (!workoutLocationSourceAllowed(location.provider, registeredLocationProviders, providerEnabled)) return
+        val mock = if (Build.VERSION.SDK_INT >= 31) location.isMock else {
+            @Suppress("DEPRECATION")
+            location.isFromMockProvider
+        }
+        if (fixElapsed != null && validWorkoutFixOrder(fixElapsed, locationCaptureStartElapsed, lastFixElapsed) &&
+            !mock && location.latitude.isFinite() && location.latitude in -90.0..90.0 &&
+            location.longitude.isFinite() && location.longitude in -180.0..180.0 &&
+            nowElapsed - fixElapsed in 0L..30_000L && accuracy != null && accuracy.isFinite() && accuracy >= 0f) {
+            lastLocationSignalElapsed = fixElapsed
+            if (lastFixElapsed < 0 || nowElapsed - lastFixElapsed > 30_000L) lastReportedAccuracy = accuracy
+        }
+        if (fixElapsed == null || !validWorkoutLocation(location.latitude, location.longitude, accuracy, fixElapsed, nowElapsed, mock)) {
             // A discarded new fix breaks continuity; a secondary network callback does not break GPS.
             if (shouldBreakDiscardedWorkoutRoute(location.provider, lastLocation?.provider, fixElapsed, lastFixElapsed)) lastLocation = null
-            if (lastFixElapsed < 0 || nowElapsed - lastFixElapsed > 30_000L)
-                lastReportedAccuracy = accuracy?.takeIf { it.isFinite() } ?: -1f
             broadcastGpsStatus(); return
         }
         val acceptedAccuracy = accuracy ?: return
         val isGps = location.provider == LocationManager.GPS_PROVIDER
         // Avoid alternating network/GPS points and drawing a false zigzag while GPS is fresh.
         if (!isGps && lastGpsFixElapsed >= 0 && nowElapsed - lastGpsFixElapsed in 0L..15_000L) return
-        if (!validWorkoutFixOrder(fixElapsed, locationProviderStart[location.provider] ?: return, lastFixElapsed)) return
+        if (!validWorkoutFixOrder(fixElapsed, locationCaptureStartElapsed, lastFixElapsed)) return
         val routeTime = workoutRouteWallTime(fixElapsed, nowElapsed, System.currentTimeMillis()) ?: run { lastLocation = null; return }
         val previous = lastLocation
         val dt = if (previous == null) 0.0 else (fixElapsed - lastLocationAnchorElapsed) / 1000.0
@@ -501,7 +529,8 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
         val available = runCatching { locationManager.allProviders.filter { it != LocationManager.PASSIVE_PROVIDER }.toSet() }.getOrDefault(emptySet())
         val enabled = available.filter { runCatching { locationManager.isProviderEnabled(it) }.getOrDefault(false) }.toSet()
         currentLocationState = workoutLocationState(workoutUsesLocation(activityType), paused, fine, coarse, available, enabled,
-            registeredLocationProviders, lastFixElapsed, SystemClock.elapsedRealtime(), lastLocationProvider)
+            registeredLocationProviders, lastFixElapsed, SystemClock.elapsedRealtime(), lastLocationProvider,
+            lastLocationSignalElapsed, lastReportedAccuracy)
         gpsLocked = currentLocationState == WorkoutLocationState.GPS_FIX
         sendBroadcast(Intent(ACTION_GPS_STATUS).setPackage(packageName)
             .putExtra(EXTRA_GPS_LOCKED, gpsLocked).putExtra(EXTRA_GPS_SATS, gpsSatCount)

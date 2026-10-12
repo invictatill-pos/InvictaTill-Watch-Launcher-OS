@@ -20,7 +20,7 @@ import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Only a compatible oxygen sensor can produce a reading on this screen. */
+/** Show the watch sensor first, then explicitly shared readings from installed health apps. */
 class SpO2Activity : LauncherPanelActivity() {
     private lateinit var value: TextView
     private lateinit var status: TextView
@@ -31,8 +31,8 @@ class SpO2Activity : LauncherPanelActivity() {
     private var resumed = false
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) requestMeasurement() else {
-            refresh()
-            status.text = "Sensor permission was not granted. Allow it in App permissions to measure."
+            // App exports have their own permissions and remain usable without BODY_SENSORS.
+            requestMeasurement()
         }
     }
     private val updates = object : BroadcastReceiver() {
@@ -53,7 +53,7 @@ class SpO2Activity : LauncherPanelActivity() {
         val content = roundContent()
         navigationHeader(content, "Blood oxygen")
         val readingCard = card(content)
-        label(readingCard, "SENSOR CAPTURE", 10f, accent, bold = true)
+        label(readingCard, "LATEST READING", 10f, accent, bold = true)
         value = label(readingCard, "—%", 40f, Color.WHITE, bold = true)
         capturedAt = label(readingCard, "No captured reading", 11f)
         val statusCard = card(content)
@@ -63,10 +63,12 @@ class SpO2Activity : LauncherPanelActivity() {
             if (!hasSensorPermission()) permission.launch(Manifest.permission.BODY_SENSORS)
             else requestMeasurement()
         }
+        action(content, "Check watch app data") { SensorCollectorService.checkHealthAppOxygen(this) }
+        action(content, "Open watch health app") { showHealthApps(this) }
         val guidance = card(content)
         label(guidance, "For a clear reading", 13f, Color.WHITE, bold = true)
         label(guidance, "Rest your wrist and keep still. A heart rate sensor alone cannot measure blood oxygen.")
-        label(guidance, "No result appears without a valid oxygen sample.", 11f)
+        label(guidance, "If the sensor cannot respond, shared readings from the watch's health apps are checked automatically.", 11f)
         action(content, "Sensor permissions") { openAppPermissions() }
         action(content, "Back to clock") { backToClock() }
         refresh()
@@ -113,13 +115,15 @@ class SpO2Activity : LauncherPanelActivity() {
 
     private fun refresh() {
         if (!::value.isInitialized) return
-        val reading = SensorCollectorService.displaySpO2().takeIf { it > 0f }
+        val display = SensorCollectorService.watchOxygenReading()
+        val reading = display.percentage.takeIf { it > 0f }
         value.text = reading?.let { String.format(Locale.getDefault(), "%.0f%%", it) } ?: "—%"
         capturedAt.text = if (reading == null) "No recent captured reading" else
-            "Captured ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(SensorCollectorService.latestSpo2TimeMs))}"
+            "${if (display.unverified) "Unverified sensor" else "Captured"} ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(display.capturedAt))}"
         status.text = SensorCollectorService.oxygenStatusText(this)
-        val measuring = SensorCollectorService.spo2Status == "measuring"
+        val measuring = SensorCollectorService.spo2Status in setOf("measuring", "checking_health_apps", "unreliable_accuracy")
         measure.text = when {
+            SensorCollectorService.spo2Status == "checking_health_apps" -> "Checking watch apps…"
             !hasSensorPermission() -> "Allow sensor access"
             measuring -> "Measuring…"
             else -> "Measure oxygen"

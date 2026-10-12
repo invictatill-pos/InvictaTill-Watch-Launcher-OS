@@ -14,29 +14,45 @@ fun workoutDistanceSource(usesLocation: Boolean, observedRoute: Boolean, stepEst
     else -> "UNAVAILABLE"
 }
 
-enum class WorkoutLocationState { NOT_USED, PAUSED, PERMISSION_REQUIRED, PRECISE_REQUIRED, NO_PROVIDER, DISABLED, GPS_DISABLED, UNAVAILABLE, SEARCHING, STALE, GPS_FIX, LOCATION_FIX }
+enum class WorkoutLocationState { NOT_USED, PAUSED, PERMISSION_REQUIRED, PRECISE_REQUIRED, NO_PROVIDER, DISABLED, GPS_DISABLED, UNAVAILABLE, SEARCHING, WEAK_FIX, STALE, GPS_FIX, LOCATION_FIX }
+
+/** Passive locations originate in another provider; keep that provider as their real source. */
+internal fun workoutLocationProviders(available: Collection<String>, fine: Boolean): Set<String> =
+    available.filter { it.isNotBlank() && (fine || it == "network") }.toSet()
+
+internal fun workoutLocationSourceAllowed(provider: String?, registered: Set<String>, enabled: Boolean = true): Boolean =
+    enabled && !provider.isNullOrBlank() && provider != "passive" && (provider in registered || "passive" in registered)
+
+/** Give a cold GNSS receiver time to acquire satellites, then recover a stalled subscription. */
+internal fun shouldRecoverWorkoutLocation(registeredAt: Long, lastFixElapsed: Long, lastRecoveryElapsed: Long, nowElapsed: Long): Boolean {
+    val latestProgress = maxOf(registeredAt, lastFixElapsed, lastRecoveryElapsed)
+    return registeredAt >= 0 && nowElapsed - latestProgress >= 120_000L
+}
 
 internal fun workoutLocationState(
     usesLocation: Boolean, paused: Boolean, fine: Boolean, coarse: Boolean,
     availableProviders: Set<String>, enabledProviders: Set<String>, registeredProviders: Set<String>,
-    lastFixElapsed: Long, nowElapsed: Long, lastProvider: String
+    lastFixElapsed: Long, nowElapsed: Long, lastProvider: String,
+    lastSignalElapsed: Long = -1, reportedAccuracy: Float = -1f
 ): WorkoutLocationState = when {
     !usesLocation -> WorkoutLocationState.NOT_USED
     paused -> WorkoutLocationState.PAUSED
     !fine && !coarse -> WorkoutLocationState.PERMISSION_REQUIRED
     !fine -> WorkoutLocationState.PRECISE_REQUIRED
+    lastFixElapsed > 0 && nowElapsed - lastFixElapsed in 0L..30_000L &&
+        (lastProvider !in availableProviders || lastProvider in enabledProviders) ->
+        if (lastProvider == "gps") WorkoutLocationState.GPS_FIX else WorkoutLocationState.LOCATION_FIX
     availableProviders.isEmpty() -> WorkoutLocationState.NO_PROVIDER
     enabledProviders.isEmpty() -> WorkoutLocationState.DISABLED
     registeredProviders.intersect(enabledProviders).isEmpty() -> WorkoutLocationState.UNAVAILABLE
-    "gps" in availableProviders && "gps" !in enabledProviders &&
-        (lastFixElapsed < 0 || nowElapsed - lastFixElapsed !in 0L..30_000L) -> WorkoutLocationState.GPS_DISABLED
+    "gps" in availableProviders && "gps" !in enabledProviders -> WorkoutLocationState.GPS_DISABLED
+    lastSignalElapsed > 0 && nowElapsed - lastSignalElapsed in 0L..30_000L && reportedAccuracy.isFinite() && reportedAccuracy > 50f -> WorkoutLocationState.WEAK_FIX
     lastFixElapsed < 0 -> WorkoutLocationState.SEARCHING
-    nowElapsed - lastFixElapsed !in 0L..30_000L -> WorkoutLocationState.STALE
-    lastProvider == "gps" -> WorkoutLocationState.GPS_FIX
-    else -> WorkoutLocationState.LOCATION_FIX
+    else -> WorkoutLocationState.STALE
 }
 
-internal fun validWorkoutLocation(latitude: Double, longitude: Double, accuracy: Float?, fixElapsed: Long, nowElapsed: Long): Boolean =
+internal fun validWorkoutLocation(latitude: Double, longitude: Double, accuracy: Float?, fixElapsed: Long, nowElapsed: Long, mock: Boolean = false): Boolean =
+    !mock &&
     latitude.isFinite() && longitude.isFinite() && latitude in -90.0..90.0 && longitude in -180.0..180.0 &&
         accuracy != null && accuracy.isFinite() && accuracy in 0f..50f && fixElapsed > 0 && nowElapsed - fixElapsed in 0L..30_000L
 
