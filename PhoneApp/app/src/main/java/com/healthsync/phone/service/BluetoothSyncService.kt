@@ -68,6 +68,9 @@ class BluetoothSyncService : android.app.Service() {
         const val ACTION_FORCE_MEASURE_HR  = "com.healthsync.phone.FORCE_MEASURE_HR"
         const val ACTION_FORCE_MEASURE_SPO2 = "com.healthsync.phone.FORCE_MEASURE_SPO2"
         const val ACTION_SEND_WATCH_FACE   = "com.healthsync.phone.SEND_WATCH_FACE"
+        const val ACTION_FETCH_DEVICE_INFO = "com.healthsync.phone.FETCH_DEVICE_INFO"
+        const val ACTION_SEND_HYDRATION    = "com.healthsync.phone.SEND_HYDRATION"
+        const val ACTION_SEND_WELLNESS     = "com.healthsync.phone.SEND_WELLNESS"
         const val EXTRA_PAYLOAD            = "payload"
 
         // ── Live connection state (observed by UI) ────────────────────────────
@@ -225,6 +228,55 @@ class BluetoothSyncService : android.app.Service() {
             } catch (e: Exception) { Log.e(TAG, "sendForceMeasureSpO2 error: ${e.message}"); return false }
         }
 
+        fun fetchWatchDeviceInfo(context: Context? = null): Boolean {
+            if (activeInstance != null && _connectionState.value.isConnected) {
+                return activeInstance?.sendRaw(SyncMessage(MessageType.FETCH_DEVICE_INFO, payload = "{}")) ?: false
+            }
+            if (context != null) {
+                try {
+                    ContextCompat.startForegroundService(
+                        context,
+                        Intent(context, BluetoothSyncService::class.java).apply {
+                            action = ACTION_FETCH_DEVICE_INFO
+                        }
+                    )
+                    return true
+                } catch (e: Exception) { Log.e(TAG, "fetchWatchDeviceInfo error: ${e.message}") }
+            }
+            return false
+        }
+
+        fun sendHydrationUpdate(context: Context, payload: HydrationPayload): Boolean {
+            if (activeInstance != null && _connectionState.value.isConnected) {
+                return activeInstance?.sendRaw(SyncMessage(MessageType.HYDRATION_UPDATE, payload = Gson().toJson(payload))) ?: false
+            }
+            try {
+                ContextCompat.startForegroundService(
+                    context,
+                    Intent(context, BluetoothSyncService::class.java).apply {
+                        action = ACTION_SEND_HYDRATION
+                        putExtra(EXTRA_PAYLOAD, Gson().toJson(payload))
+                    }
+                )
+                return true
+            } catch (e: Exception) { Log.e(TAG, "sendHydrationUpdate error: ${e.message}"); return false }
+        }
+
+        fun sendWellnessSettings(context: Context, payload: WellnessSettingsPayload): Boolean {
+            if (activeInstance != null && _connectionState.value.isConnected) {
+                return activeInstance?.sendRaw(SyncMessage(MessageType.WELLNESS_SETTINGS, payload = Gson().toJson(payload))) ?: false
+            }
+            try {
+                ContextCompat.startForegroundService(
+                    context,
+                    Intent(context, BluetoothSyncService::class.java).apply {
+                        action = ACTION_SEND_WELLNESS
+                        putExtra(EXTRA_PAYLOAD, Gson().toJson(payload))
+                    }
+                )
+                return true
+            } catch (e: Exception) { Log.e(TAG, "sendWellnessSettings error: ${e.message}"); return false }
+        }
     }
 
     @Inject lateinit var repository: FitnessRepository
@@ -349,6 +401,20 @@ class BluetoothSyncService : android.app.Service() {
                     sendRaw(SyncMessage(MessageType.FORCE_MEASURE_SPO2, payload = "{}"))
                     Log.d(TAG, "Force measure SpO2 command sent to watch")
                 }
+                ACTION_FETCH_DEVICE_INFO -> {
+                    sendRaw(SyncMessage(MessageType.FETCH_DEVICE_INFO, payload = "{}"))
+                    Log.d(TAG, "Fetch device info requested from watch")
+                }
+                ACTION_SEND_HYDRATION -> {
+                    val json = intent.getStringExtra(EXTRA_PAYLOAD) ?: return START_STICKY
+                    sendRaw(SyncMessage(MessageType.HYDRATION_UPDATE, payload = json))
+                    Log.d(TAG, "Hydration update sent to watch")
+                }
+                ACTION_SEND_WELLNESS -> {
+                    val json = intent.getStringExtra(EXTRA_PAYLOAD) ?: return START_STICKY
+                    sendRaw(SyncMessage(MessageType.WELLNESS_SETTINGS, payload = json))
+                    Log.d(TAG, "Wellness settings sent to watch")
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "onStartCommand error: ${e.message}")
@@ -437,6 +503,8 @@ class BluetoothSyncService : android.app.Service() {
             val call = if (preferences.syncCalls) CallMonitorService.latestCallPayload
                 else CallPayload(CallState.ENDED, "", "")
             sendRaw(SyncMessage(MessageType.CALL_EVENT, payload = gson.toJson(call)))
+            // Request fresh watch device telemetry & hardware status upon connecting
+            sendRaw(SyncMessage(MessageType.FETCH_DEVICE_INFO, payload = "{}"))
             val lastReceivedAt = AtomicLong(SystemClock.elapsedRealtime())
             val heartbeat = scope.launch {
                 while (isActive) {
@@ -507,10 +575,15 @@ class BluetoothSyncService : android.app.Service() {
                     val batch = JsonParser.parseString(msg.payload).asJsonObject
                     val workoutRows = batch.getAsJsonArray("workouts") ?: JsonArray()
                     val stepRows = batch.getAsJsonArray("daily_steps") ?: JsonArray()
-                    Log.d(TAG, "Received BATCHED_SYNC from watch: ${workoutRows.size()} workouts, ${stepRows.size()} step buckets")
+                    val hrRows = batch.getAsJsonArray("heart_rates") ?: JsonArray()
+                    val spo2Rows = batch.getAsJsonArray("spo2_readings") ?: JsonArray()
+                    val hydrationElem = batch.get("hydration")
+                    Log.d(TAG, "Received BATCHED_SYNC from watch: ${workoutRows.size()} workouts, ${stepRows.size()} steps, ${hrRows.size()} HR, ${spo2Rows.size()} SpO2")
 
                     val processedSessionIds = mutableListOf<String>()
                     val processedStepTimestamps = mutableListOf<Long>()
+                    val processedHrTimestamps = mutableListOf<Long>()
+                    val processedSpO2Timestamps = mutableListOf<Long>()
 
                     for (row in workoutRows) {
                         try {
@@ -533,13 +606,47 @@ class BluetoothSyncService : android.app.Service() {
                     }
                     processedStepTimestamps.addAll(repository.saveStepBuckets(validBuckets))
 
+                    val hrRecords = hrRows.mapNotNull { row ->
+                        try {
+                            val record = gson.fromJson(row.toString(), HeartRateRecordPayload::class.java)
+                            if (SyncValidation.validCapturedHeartRate(record.bpm, record.accuracy, record.timestamp, record.source, record.sourcePackage, record.sourceLabel)) record else null
+                        } catch (e: Exception) { null }
+                    }
+                    if (hrRecords.isNotEmpty()) {
+                        processedHrTimestamps.addAll(repository.saveBatchedHeartRates(hrRecords))
+                    }
+
+                    val spo2Records = spo2Rows.mapNotNull { row ->
+                        try {
+                            val record = gson.fromJson(row.toString(), SpO2RecordPayload::class.java)
+                            if (SyncValidation.validCapturedSpO2(record.percentage, record.timestamp, record.source, record.sourcePackage, record.sourceLabel)) record else null
+                        } catch (e: Exception) { null }
+                    }
+                    if (spo2Records.isNotEmpty()) {
+                        processedSpO2Timestamps.addAll(repository.saveBatchedSpO2(spo2Records))
+                    }
+
+                    if (hydrationElem != null && hydrationElem.isJsonObject) {
+                        try {
+                            val hydObj = hydrationElem.asJsonObject
+                            if (SyncValidation.validIncomingHydration(hydObj, msg.timestamp)) {
+                                val hydration = gson.fromJson(hydObj, HydrationPayload::class.java)
+                                repository.saveHydration(hydration.amountMl, hydration.goalMl, hydration.timestamp)
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error saving batch hydration: ${e.message}")
+                        }
+                    }
+
                     // Respond with SYNC_ACK so Watch marks these records as is_synced = 1
                     val ackPayload = SyncAckPayload(
                         session_ids = processedSessionIds,
-                        step_timestamps = processedStepTimestamps
+                        step_timestamps = processedStepTimestamps,
+                        hr_timestamps = processedHrTimestamps,
+                        spo2_timestamps = processedSpO2Timestamps
                     )
                     sendRaw(SyncMessage(MessageType.SYNC_ACK, payload = gson.toJson(ackPayload)))
-                    Log.d(TAG, "Sent SYNC_ACK confirmation to Watch for ${processedSessionIds.size} workouts & ${processedStepTimestamps.size} step buckets.")
+                    Log.d(TAG, "Sent SYNC_ACK confirmation to Watch for ${processedSessionIds.size} workouts, ${processedStepTimestamps.size} step buckets, ${processedHrTimestamps.size} HRs, ${processedSpO2Timestamps.size} SpO2s.")
                 }
                 MessageType.HEART_RATE -> {
                     val decoded = gson.fromJson(msg.payload, HeartRatePayload::class.java)
@@ -592,6 +699,15 @@ class BluetoothSyncService : android.app.Service() {
                     Log.d(TAG, "Received CALL_ACTION from watch: ${callAction.action}")
                     handleCallAction(callAction)
                 }
+                MessageType.HYDRATION_UPDATE -> {
+                    try {
+                        val hydration = gson.fromJson(msg.payload, HydrationPayload::class.java)
+                        repository.saveHydration(hydration.amountMl, hydration.goalMl, hydration.timestamp)
+                        Log.d(TAG, "Processed HYDRATION_UPDATE from watch: ${hydration.amountMl}ml / ${hydration.goalMl}ml")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error handling HYDRATION_UPDATE: ${e.message}")
+                    }
+                }
                 MessageType.DEVICE_INFO -> {
                     try {
                         val info = gson.fromJson(msg.payload, DeviceInfoPayload::class.java)
@@ -599,10 +715,22 @@ class BluetoothSyncService : android.app.Service() {
                         _connectedWatchVersionName.value = info.versionName
                         preferences.lastKnownWatchVersion = info.versionName
                         preferences.lastKnownWatchVersionCode = info.versionCode
-                        if (info.batteryPercent in 0..100) {
-                            updateState(_connectionState.value.copy(batteryPercent = info.batteryPercent))
-                        }
-                        Log.i(TAG, "Connected Watch Info: ${info.model} v${info.versionName} (build ${info.versionCode}, battery ${info.batteryPercent}%)")
+                        val current = _connectionState.value
+                        val updated = current.copy(
+                            batteryPercent = if (info.batteryPercent in 0..100) info.batteryPercent else current.batteryPercent,
+                            isCharging = info.isCharging,
+                            powerSaveMode = info.powerSaveMode,
+                            storageFreeMb = info.storageFreeMb,
+                            storageTotalMb = info.storageTotalMb,
+                            androidVersion = info.androidVersion,
+                            manufacturer = info.manufacturer,
+                            hasHeartRateSensor = info.hasHeartRateSensor,
+                            hasSpO2Sensor = info.hasSpO2Sensor,
+                            hasStepSensor = info.hasStepSensor,
+                            lastUpdated = if (info.lastUpdated > 0) info.lastUpdated else System.currentTimeMillis()
+                        )
+                        updateState(updated)
+                        Log.i(TAG, "Connected Watch Info: ${info.model} v${info.versionName} (build ${info.versionCode}, battery ${info.batteryPercent}%, charging=${info.isCharging}, powerSave=${info.powerSaveMode}, storage=${info.storageFreeMb}/${info.storageTotalMb}MB)")
                     } catch (e: Exception) { Log.w(TAG, "Error parsing DEVICE_INFO: ${e.message}") }
                 }
                 MessageType.OTA_PROGRESS -> {

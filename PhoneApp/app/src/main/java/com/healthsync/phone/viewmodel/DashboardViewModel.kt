@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.healthsync.phone.data.FitnessRepository
 import com.healthsync.phone.data.PhonePreferences
 import com.healthsync.phone.data.model.*
+import com.healthsync.phone.service.BluetoothSyncService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -25,6 +26,7 @@ data class DashboardUiState(
     val latestSleep: SleepEntity? = null,
     val sleepLast7Nights: List<SleepEntity> = emptyList(),
     val recentWorkouts: List<WorkoutEntity> = emptyList(),
+    val todayHydration: HydrationEntity? = null,
     val selectedWorkout: WorkoutEntity? = null,
     val stepGoal: Int = 10000,
     val isLoading: Boolean = false,
@@ -63,7 +65,8 @@ class DashboardViewModel @Inject constructor(
             repository.getSpO2Last24h(),
             repository.getLatestSleep(),
             repository.getLast7NightsSleep(),
-            repository.getRecentWorkouts()
+            repository.getRecentWorkouts(),
+            repository.getTodayHydration()
         ) { values ->
             @Suppress("UNCHECKED_CAST")
             DashboardUiState(
@@ -77,6 +80,7 @@ class DashboardViewModel @Inject constructor(
                 latestSleep = values[7] as SleepEntity?,
                 sleepLast7Nights = values[8] as List<SleepEntity>,
                 recentWorkouts = values[9] as List<WorkoutEntity>,
+                todayHydration = values[10] as HydrationEntity?,
                 selectedWorkout = _uiState.value.selectedWorkout,
                 stepGoal = preferences.stepGoal,
                 isLoading = false
@@ -92,6 +96,25 @@ class DashboardViewModel @Inject constructor(
         val failed = _uiState.value.errorMessage != null
         _uiState.update { it.copy(stepGoal = preferences.stepGoal, errorMessage = null) }
         if (failed) observeData()
+    }
+
+    fun logWater(amountDeltaMl: Int) {
+        viewModelScope.launch {
+            val currentAmount = _uiState.value.todayHydration?.amountMl ?: 0
+            val goal = _uiState.value.todayHydration?.goalMl ?: preferences.waterGoalMl
+            val newAmount = (currentAmount + amountDeltaMl).coerceIn(0, 20_000)
+            val now = System.currentTimeMillis()
+            repository.saveHydration(newAmount, goal, now)
+            val cal = java.util.Calendar.getInstance().apply { timeInMillis = now }
+            val todayStr = String.format(java.util.Locale.US, "%04d-%02d-%02d",
+                cal.get(java.util.Calendar.YEAR),
+                cal.get(java.util.Calendar.MONTH) + 1,
+                cal.get(java.util.Calendar.DAY_OF_MONTH))
+            BluetoothSyncService.sendHydrationUpdate(
+                getApplication(),
+                HydrationPayload(date = todayStr, amountMl = newAmount, goalMl = goal, timestamp = now)
+            )
+        }
     }
 
     fun selectWorkout(workout: WorkoutEntity?) {

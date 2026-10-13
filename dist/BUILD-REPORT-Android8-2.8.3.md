@@ -1,6 +1,6 @@
 # HealthSync 2.8.3 build report
 
-Prepared 13 October 2026 for the Kolabee U8 Ultra Multi-Tier Battery & Power Saver System and Full QA Release.
+Prepared 13 October 2026 for the Kolabee U8 Ultra Multi-Tier Battery & Power Saver System, Hardware Telemetry, Two-Way Hydration, and Sensor Sync Release.
 
 | Package | Variant | Version | Build code | Minimum Android |
 | --- | --- | --- | --- | --- |
@@ -11,40 +11,39 @@ Both packages use the existing Android development certificate. Signature verifi
 
 ## Changes
 
-- **Multi-Tier Power Saving System Hardening**:
-  - Implemented and QA-hardened `PowerSaveManager` orchestrating three distinct performance & endurance tiers across the watch platform:
-    1. **Normal Mode**: Full 60 FPS animations, regular health sensor polling intervals, active phone companion sync (~24 hrs stamina).
-    2. **Extreme Power Saver Mode (Stamina)**:
-       - Saves battery at an extreme level (~72 hrs / 3x longevity).
-       - Throttles dials to 1 Hz static ticks, pauses continuous 60 FPS sweep animators in Chrono Ultra and particle shaders in dynamic faces.
-       - Relaxes high-frequency optical sensors (optical HR and SpO₂ periodic polling paused; manual measure available on-demand).
-       - Fully suppresses background wakeup alarms from waking the display.
-       - Disables wallpaper backdrop for true OLED solid black (`#000000`) pixel power savings.
-       - Disables wrist wake gesture to prevent accidental gyroscope wakeups.
-       - **CRITICAL**: **Keeps Bluetooth communication with Phone App 100% alive** — incoming call alerts, phone notifications, and health sync continue without interruption.
-    3. **Super Extreme Power Saver Mode (Emergency)**:
-       - Maximum emergency endurance standby mode (~200+ hrs / 8+ days longevity).
-       - **CRITICAL**: **Completely stops communication with Phone App** — powers off Bluetooth RF transceiver to drop radio current draw to 0 mA.
-       - Suspends all background health sensor listeners and motion fall-detection polling.
-       - Automatically terminates active workouts via `WorkoutTrackingService`.
-       - Switches UI to a dedicated OLED-optimized high-contrast emergency clock display: large digital clock, date, battery endurance remaining, and an amber emergency badge.
-       - Bypasses panel gesture swiping to preserve emergency stamina while providing a prominent **"Exit Super Saver"** button that immediately restores normal mode and reconnects to the phone.
+- **Live Watch Battery & Extended Hardware Telemetry**:
+  - Implemented `WatchDeviceInfoCollector` capturing exact battery levels and charging states using Android's sticky `ACTION_BATTERY_CHANGED` intent filter (eliminating `-1` battery readings from custom watch HALs).
+  - Added full hardware telemetry extraction: available & total internal storage (`StatFs`), power saver state, Android OS version, manufacturer, and detected hardware sensor flags (Heart Rate PPG, SpO₂ Optical, Pedometer).
+  - Telemetry is transmitted automatically upon Bluetooth connection, during battery changes, and on-demand via the new `FETCH_DEVICE_INFO` protocol message.
+  - Rendered a dedicated **"Watch Hardware & Telemetry"** card and live charging indicator badge on the companion Phone App (`DeviceScreen`) with a **"Refresh"** action button.
 
-- **QA & Reliability Hardening**:
-  - **SensorCollectorService Lifecycle & Alarms**: Enforced battery saver checks across `onCreate`, `onStartCommand`, `ensureIntervalJobs`, `updateMeasurementAlarms`, and `handleScheduledAlarm` to prevent accidental sensor re-registration or alarm scheduling in stamina modes.
-  - **Dynamic Watch Face ACK Resilience**: Handled install errors in `BluetoothClientService` to immediately send failure ACKs, avoiding 10-second client timeouts on malformed packages.
-  - **Live Watch Battery Diagnostics**: Added real-time watch battery percentage display pill in companion phone `DeviceScreen` connection card (`🔋 Watch battery: XX%`).
+- **Two-Way Hydration Tracking & Synchronization**:
+  - Implemented bidirectional hydration logging between Watch and Phone.
+  - **Phone App**: Added interactive **HydrationCard** to `DashboardScreen` displaying current intake, daily goal, progress bar, and quick-log buttons (`+250 ml`, `+500 ml`).
+  - **Watch App**: Added Bluetooth synchronization to `HydrationActivity` so logging water or adjusting goals on the watch instantly synchronizes to the phone, and phone logging broadcasts to the watch UI.
+  - Added Room database `HydrationEntity`, `HydrationDao`, and non-destructive migration (`migration7To8`).
+
+- **Heart Rate & SpO₂ Offline Persistence & Batch Sync**:
+  - Created `TABLE_HEART_RATE` and `TABLE_SPO2` in `WatchDatabaseHelper` (DB version 4).
+  - Persisted all sensor-captured and companion-imported readings to SQLite on the watch, enabling offline logging.
+  - Enhanced `BatchedSyncPayload` and `SyncAckPayload` to transmit and acknowledge offline heart rate and SpO₂ readings with timestamp confirmation upon reconnection.
+
+- **Wellness Settings**:
+  - Added configurable Daily Water Goal, Hydration Reminder, and Stand / Movement Reminder controls in `SettingsScreen` and synchronized them to the watch via `WELLNESS_SETTINGS`.
+
+- **Multi-Tier Power Saving System**:
+  - Normal Mode, Extreme Power Saver Mode (Stamina with active BT communication), and Super Extreme Power Saver Mode (Emergency standby with RF radio shutoff and emergency digital dial).
 
 ## Validation completed
 
 | Check | Result |
 | --- | --- |
-| Watch unit tests | All tests passed, zero failures/errors |
-| Phone unit tests | All tests passed, zero failures/errors |
-| PowerSaveManager unit tests | Verified tier transitions, communication boundary policy, and stamina math |
-| Watch debug APK | Built successfully (`com.healthsync.watch` v2.8.3 code 31) |
-| Phone release APK | Built successfully (`com.healthsync.phone` v2.8.3 code 25) |
-| APK signatures | Verified; watch v1/v2, phone v2 |
+| Watch unit tests (`:WatchApp:app:testDebugUnitTest`) | 225 tests passed, 0 failures |
+| Phone unit tests (`:PhoneApp:app:testDebugUnitTest`) | 104 tests passed, 0 failures |
+| Protocol parity | 1-to-1 matching `MessageType`, `DeviceInfoPayload`, `BatchedSyncPayload`, `HydrationPayload`, `WellnessSettingsPayload` |
+| Watch debug APK | Built successfully (`HealthSync-Watch-2.8.3-Android8.apk`) |
+| Phone release APK | Built successfully (`HealthSync-Phone-2.8.3.apk`) |
+| Distribution bundle | Packaged with SHA256 checksums in `dist/` |
 
 Commands:
 
@@ -53,3 +52,4 @@ Commands:
 .\gradlew.bat :WatchApp:app:assembleDebug :PhoneApp:app:assembleRelease
 .\tools\update_dist.ps1 -WatchVersion 2.8.3 -PhoneVersion 2.8.3
 ```
+

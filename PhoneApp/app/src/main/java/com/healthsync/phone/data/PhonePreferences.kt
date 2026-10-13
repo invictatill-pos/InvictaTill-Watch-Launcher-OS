@@ -120,5 +120,21 @@ class PhonePreferences(context: Context) {
         get() = prefs.getInt("last_known_watch_version_code", 0)
         set(v) { prefs.edit().putInt("last_known_watch_version_code", v).apply() }
 
+    var waterGoalMl: Int
+        get() = prefs.getInt("water_goal_ml", 2000).coerceIn(250, 10_000)
+        set(v) { prefs.edit().putInt("water_goal_ml", v.coerceIn(250, 10_000)).apply() }
+
+    var hydrationReminderEnabled: Boolean
+        get() = prefs.getBoolean("hydration_reminder_enabled", true)
+        set(v) { prefs.edit().putBoolean("hydration_reminder_enabled", v).apply() }
+
+    var hydrationReminderIntervalMinutes: Int
+        get() = prefs.getInt("hydration_reminder_interval_min", 60).coerceIn(15, 240)
+        set(v) { prefs.edit().putInt("hydration_reminder_interval_min", v.coerceIn(15, 240)).apply() }
+
+    var standReminderEnabled: Boolean
+        get() = prefs.getBoolean("stand_reminder_enabled", true)
+        set(v) { prefs.edit().putBoolean("stand_reminder_enabled", v).apply() }
+
     private fun validInterval(value: Long) = if (value == -1L) value else value.coerceIn(30_000L, 3_600_000L)
 }

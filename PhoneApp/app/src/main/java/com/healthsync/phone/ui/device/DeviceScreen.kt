@@ -160,6 +160,10 @@ fun DeviceScreen(
             item { ConnectionStepsCard() }
         } else {
             item {
+                WatchHardwareCard(state = state, onRefresh = { viewModel.refreshWatchDetails() })
+            }
+
+            item {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
@@ -324,18 +328,24 @@ private fun ConnectionStatusCard(state: ConnectionInfo, phoneName: String) {
             }
             Text(detail ?: "", color = TextSecondary, fontSize = 13.sp, textAlign = TextAlign.Center, lineHeight = 18.sp)
             if (isConnected && state.batteryPercent >= 0) {
+                val badgeColor = if (state.isCharging) StatusSuccess else AccentCyan
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = AccentCyan.copy(alpha = 0.12f),
-                    border = BorderStroke(1.dp, AccentCyan.copy(alpha = 0.3f))
+                    color = badgeColor.copy(alpha = 0.12f),
+                    border = BorderStroke(1.dp, badgeColor.copy(alpha = 0.3f))
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Icon(Icons.Default.BatteryChargingFull, contentDescription = null, tint = AccentCyan, modifier = Modifier.size(14.dp))
-                        Text("Watch battery: ${state.batteryPercent}%", color = AccentCyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Icon(Icons.Default.BatteryChargingFull, contentDescription = null, tint = badgeColor, modifier = Modifier.size(14.dp))
+                        Text(
+                            text = if (state.isCharging) "Watch battery: ${state.batteryPercent}% ⚡ Charging" else "Watch battery: ${state.batteryPercent}%",
+                            color = badgeColor,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
             }
@@ -456,3 +466,174 @@ private fun InfoRow(label: String, value: String, icon: ImageVector, tint: Color
         Text(value, color = TextWhite, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
+
+@Composable
+private fun WatchHardwareCard(state: ConnectionInfo, onRefresh: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = BgCard,
+        border = BorderStroke(1.dp, BorderSubtle)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Watch, null, tint = AccentCyan, modifier = Modifier.size(18.dp))
+                    Text("Watch Hardware & Telemetry", color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                }
+                Surface(
+                    onClick = onRefresh,
+                    shape = RoundedCornerShape(8.dp),
+                    color = AccentCyan.copy(alpha = 0.12f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = AccentCyan, modifier = Modifier.size(12.dp))
+                        Text("Refresh", color = AccentCyan, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+
+            // Battery & Power row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Battery Stat
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    color = BgDeep,
+                    border = BorderStroke(1.dp, BorderSubtle)
+                ) {
+                    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(Icons.Default.BatteryChargingFull, null, tint = if (state.isCharging) StatusSuccess else AccentCyan, modifier = Modifier.size(14.dp))
+                            Text("Battery", color = TextDim, fontSize = 11.sp)
+                        }
+                        Text(
+                            text = if (state.batteryPercent >= 0) "${state.batteryPercent}%" else "Polling…",
+                            color = TextWhite,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = if (state.isCharging) "Charging now" else "Discharging",
+                            color = if (state.isCharging) StatusSuccess else TextDim,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+
+                // Storage Stat
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    color = BgDeep,
+                    border = BorderStroke(1.dp, BorderSubtle)
+                ) {
+                    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(Icons.Default.Info, null, tint = AccentBlue, modifier = Modifier.size(14.dp))
+                            Text("Storage", color = TextDim, fontSize = 11.sp)
+                        }
+                        val storageText = if (state.storageFreeMb >= 0) {
+                            if (state.storageFreeMb >= 1024) String.format(java.util.Locale.US, "%.1f GB free", state.storageFreeMb / 1024.0)
+                            else "${state.storageFreeMb} MB free"
+                        } else "Calculating…"
+                        Text(
+                            text = storageText,
+                            color = TextWhite,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        val totalText = if (state.storageTotalMb > 0) {
+                            if (state.storageTotalMb >= 1024) String.format(java.util.Locale.US, "%.1f GB total", state.storageTotalMb / 1024.0)
+                            else "${state.storageTotalMb} MB total"
+                        } else "Internal storage"
+                        Text(
+                            text = totalText,
+                            color = TextDim,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+            }
+
+            // Power save and OS details
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(BgDeep)
+                    .padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Power Mode", color = TextDim, fontSize = 12.sp)
+                    Text(
+                        text = if (state.powerSaveMode == "LOW_POWER") "Battery Saver Active" else "Normal Performance",
+                        color = if (state.powerSaveMode == "LOW_POWER") StatusWarning else StatusSuccess,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                if (state.androidVersion.isNotBlank()) {
+                    HorizontalDivider(color = BorderSubtle)
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Watch OS", color = TextDim, fontSize = 12.sp)
+                        Text(state.androidVersion, color = TextWhite, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                if (state.manufacturer.isNotBlank()) {
+                    HorizontalDivider(color = BorderSubtle)
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Manufacturer", color = TextDim, fontSize = 12.sp)
+                        Text(state.manufacturer, color = TextWhite, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+
+            // Hardware Sensors detected
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("HARDWARE SENSORS DETECTED", color = TextDim, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SensorBadge("Heart Rate PPG", state.hasHeartRateSensor)
+                    SensorBadge("SpO2 Optical", state.hasSpO2Sensor)
+                    SensorBadge("Pedometer", state.hasStepSensor)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SensorBadge(name: String, available: Boolean) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = if (available) StatusSuccess.copy(alpha = 0.12f) else TextDim.copy(alpha = 0.1f),
+        border = BorderStroke(1.dp, if (available) StatusSuccess.copy(alpha = 0.25f) else BorderSubtle)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(if (available) StatusSuccess else TextDim)
+            )
+            Text(name, color = if (available) TextWhite else TextDim, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+        }
+    }
+}
+

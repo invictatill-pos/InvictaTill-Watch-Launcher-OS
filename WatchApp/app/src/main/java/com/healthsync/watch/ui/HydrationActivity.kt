@@ -12,6 +12,15 @@ import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.content.BroadcastReceiver
+import android.content.Intent
+import android.content.IntentFilter
+import androidx.core.content.ContextCompat
+import com.google.gson.Gson
+import com.healthsync.watch.data.HydrationPayload
+import com.healthsync.watch.data.MessageType
+import com.healthsync.watch.data.SyncMessage
+import com.healthsync.watch.service.BluetoothClientService
 import com.healthsync.watch.ui.launcher.LauncherPanelActivity
 import java.text.DateFormat
 import java.text.NumberFormat
@@ -33,6 +42,12 @@ class HydrationActivity : LauncherPanelActivity() {
     private var goalMl = 2_000
     private val handler = Handler(Looper.getMainLooper())
     private var resumed = false
+    private val hydrationReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            loadData()
+            refresh()
+        }
+    }
     private val tick = object : Runnable {
         override fun run() {
             if (!resumed) return
@@ -87,11 +102,16 @@ class HydrationActivity : LauncherPanelActivity() {
         resumed = true
         handler.removeCallbacks(tick)
         handler.post(tick)
+        runCatching {
+            ContextCompat.registerReceiver(this, hydrationReceiver,
+                IntentFilter("com.healthsync.watch.HYDRATION_UPDATE"), ContextCompat.RECEIVER_NOT_EXPORTED)
+        }
     }
 
     override fun onPause() {
         resumed = false
         handler.removeCallbacks(tick)
+        runCatching { unregisterReceiver(hydrationReceiver) }
         super.onPause()
     }
 
@@ -106,6 +126,11 @@ class HydrationActivity : LauncherPanelActivity() {
     private fun saveData() {
         prefs.edit().putString("saved_date", state.date).putInt("intake_ml", state.amountMl)
             .putInt("undo_ml", state.undoAmountMl).putLong("entry_time", state.capturedAt).apply()
+        // Sync to Phone App
+        try {
+            val payload = HydrationPayload(state.date, state.amountMl, goalMl, state.capturedAt)
+            BluetoothClientService.sendRawMsg(SyncMessage(MessageType.HYDRATION_UPDATE, payload = Gson().toJson(payload)))
+        } catch (_: Exception) {}
     }
 
     private fun record(ml: Int) {
@@ -119,6 +144,10 @@ class HydrationActivity : LauncherPanelActivity() {
         goalMl = HydrationLogPolicy.goal(goalMl + delta)
         prefs.edit().putInt("goal_ml", goalMl).apply()
         refresh()
+        try {
+            val payload = HydrationPayload(state.date, state.amountMl, goalMl, System.currentTimeMillis())
+            BluetoothClientService.sendRawMsg(SyncMessage(MessageType.HYDRATION_UPDATE, payload = Gson().toJson(payload)))
+        } catch (_: Exception) {}
     }
 
     private fun refresh() {

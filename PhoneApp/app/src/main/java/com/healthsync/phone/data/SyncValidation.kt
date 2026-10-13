@@ -126,10 +126,19 @@ object SyncValidation {
             MessageType.FALL_DETECTED -> validTimestamp(timestamp, now) && obj.text("severity") in setOf("LOW", "HIGH")
             MessageType.WORKOUT_SESSION -> validTimestamp(timestamp, now) && validIncomingWorkout(obj, false, now)
             // Record checks happen independently so a corrupt row does not block valid rows or get an ACK.
-            MessageType.BATCHED_SYNC -> optionalArray(obj, "workouts") && optionalArray(obj, "daily_steps")
+            MessageType.BATCHED_SYNC -> optionalArray(obj, "workouts") && optionalArray(obj, "daily_steps") &&
+                optionalArray(obj, "heart_rates") && optionalArray(obj, "spo2_readings")
+            MessageType.HYDRATION_UPDATE -> validIncomingHydration(obj, timestamp, now)
             else -> true
         }
     }.getOrDefault(false)
+
+    fun validIncomingHydration(obj: JsonObject, timestamp: Long, now: Long = System.currentTimeMillis()): Boolean {
+        val amount = obj.int("amountMl") ?: return false
+        val goal = obj.int("goalMl") ?: return false
+        val date = obj.text("date") ?: return false
+        return amount in 0..20_000 && goal in 250..10_000 && date.isNotBlank() && validTimestamp(timestamp, now)
+    }
 
     fun validIncomingWorkoutSession(json: String, now: Long = System.currentTimeMillis()): Boolean = runCatching {
         validIncomingWorkout(jsonObject(json) ?: return false, true, now)

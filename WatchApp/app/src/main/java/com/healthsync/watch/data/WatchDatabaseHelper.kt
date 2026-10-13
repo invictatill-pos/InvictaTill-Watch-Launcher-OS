@@ -11,10 +11,12 @@ class WatchDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE
     companion object {
         private const val TAG = "WatchDatabase"
         private const val DATABASE_NAME = "healthsync_watch.db"
-        private const val DATABASE_VERSION = 3
+        private const val DATABASE_VERSION = 4
 
         const val TABLE_WORKOUTS = "workout_sessions"
         const val TABLE_DAILY_STEPS = "daily_steps"
+        const val TABLE_HEART_RATE = "heart_rate"
+        const val TABLE_SPO2 = "spo2"
 
         @Volatile
         private var instance: WatchDatabaseHelper? = null
@@ -55,8 +57,35 @@ class WatchDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE
             );
         """.trimIndent()
 
+        val createHeartRateTable = """
+            CREATE TABLE $TABLE_HEART_RATE (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bpm INTEGER NOT NULL,
+                accuracy INTEGER NOT NULL,
+                timestamp INTEGER NOT NULL,
+                source TEXT NOT NULL DEFAULT 'WATCH_SENSOR',
+                source_package TEXT DEFAULT '',
+                source_label TEXT DEFAULT '',
+                is_synced INTEGER DEFAULT 0
+            );
+        """.trimIndent()
+
+        val createSpO2Table = """
+            CREATE TABLE $TABLE_SPO2 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                percentage REAL NOT NULL,
+                timestamp INTEGER NOT NULL,
+                source TEXT NOT NULL DEFAULT 'WATCH_SENSOR',
+                source_package TEXT DEFAULT '',
+                source_label TEXT DEFAULT '',
+                is_synced INTEGER DEFAULT 0
+            );
+        """.trimIndent()
+
         db.execSQL(createWorkoutsTable)
         db.execSQL(createDailyStepsTable)
+        db.execSQL(createHeartRateTable)
+        db.execSQL(createSpO2Table)
         Log.d(TAG, "Watch database tables created successfully.")
     }
 
@@ -73,6 +102,36 @@ class WatchDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE
         if (oldVersion < 3) {
             db.execSQL("ALTER TABLE $TABLE_WORKOUTS ADD COLUMN distance_source TEXT NOT NULL DEFAULT 'UNKNOWN'")
             db.execSQL("ALTER TABLE $TABLE_WORKOUTS ADD COLUMN calories_estimated INTEGER NOT NULL DEFAULT 1")
+        }
+        if (oldVersion < 4) {
+            try {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS $TABLE_HEART_RATE (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        bpm INTEGER NOT NULL,
+                        accuracy INTEGER NOT NULL,
+                        timestamp INTEGER NOT NULL,
+                        source TEXT NOT NULL DEFAULT 'WATCH_SENSOR',
+                        source_package TEXT DEFAULT '',
+                        source_label TEXT DEFAULT '',
+                        is_synced INTEGER DEFAULT 0
+                    );
+                """.trimIndent())
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS $TABLE_SPO2 (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        percentage REAL NOT NULL,
+                        timestamp INTEGER NOT NULL,
+                        source TEXT NOT NULL DEFAULT 'WATCH_SENSOR',
+                        source_package TEXT DEFAULT '',
+                        source_label TEXT DEFAULT '',
+                        is_synced INTEGER DEFAULT 0
+                    );
+                """.trimIndent())
+                Log.d(TAG, "Migrated Watch DB to v4: added heart_rate and spo2 tables")
+            } catch (e: Exception) {
+                Log.w(TAG, "Migration v3->v4 failed: ${e.message}")
+            }
         }
     }
 
@@ -277,5 +336,137 @@ class WatchDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE
             Log.e(TAG, "Error getting latest workouts: ${e.message}")
         }
         return list
+    }
+
+    // ── Heart Rate Operations ─────────────────────────────────────────────────
+
+    fun insertHeartRate(bpm: Int, accuracy: Int, timestamp: Long, source: String = "WATCH_SENSOR",
+                        sourcePackage: String = "", sourceLabel: String = "", isSynced: Boolean = false): Boolean {
+        if (bpm !in 25..240 || timestamp <= 0) return false
+        return try {
+            val db = writableDatabase
+            val cv = ContentValues().apply {
+                put("bpm", bpm)
+                put("accuracy", accuracy.coerceIn(0, 3))
+                put("timestamp", timestamp)
+                put("source", source)
+                put("source_package", sourcePackage)
+                put("source_label", sourceLabel)
+                put("is_synced", if (isSynced) 1 else 0)
+            }
+            db.insert(TABLE_HEART_RATE, null, cv) > 0
+        } catch (e: Exception) {
+            Log.e(TAG, "Error inserting heart rate: ${e.message}")
+            false
+        }
+    }
+
+    fun getUnsyncedHeartRates(limit: Int = 200): List<HeartRateRecordPayload> {
+        val list = mutableListOf<HeartRateRecordPayload>()
+        try {
+            val db = readableDatabase
+            val cursor = db.rawQuery("SELECT * FROM $TABLE_HEART_RATE WHERE is_synced = 0 ORDER BY timestamp ASC LIMIT ?", arrayOf(limit.coerceIn(1, 1000).toString()))
+            cursor.use {
+                while (it.moveToNext()) {
+                    list.add(
+                        HeartRateRecordPayload(
+                            bpm = it.getInt(it.getColumnIndexOrThrow("bpm")),
+                            accuracy = it.getInt(it.getColumnIndexOrThrow("accuracy")),
+                            timestamp = it.getLong(it.getColumnIndexOrThrow("timestamp")),
+                            source = it.getString(it.getColumnIndexOrThrow("source")),
+                            sourcePackage = it.getString(it.getColumnIndexOrThrow("source_package")) ?: "",
+                            sourceLabel = it.getString(it.getColumnIndexOrThrow("source_label")) ?: ""
+                        )
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting unsynced heart rates: ${e.message}")
+        }
+        return list
+    }
+
+    fun markHeartRatesSynced(timestamps: List<Long>) {
+        if (timestamps.isEmpty()) return
+        try {
+            val db = writableDatabase
+            db.beginTransaction()
+            try {
+                for (ts in timestamps) {
+                    val cv = ContentValues().apply { put("is_synced", 1) }
+                    db.update(TABLE_HEART_RATE, cv, "timestamp = ?", arrayOf(ts.toString()))
+                }
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error marking heart rates synced: ${e.message}")
+        }
+    }
+
+    // ── SpO2 Operations ───────────────────────────────────────────────────────
+
+    fun insertSpO2(percentage: Float, timestamp: Long, source: String = "WATCH_SENSOR",
+                   sourcePackage: String = "", sourceLabel: String = "", isSynced: Boolean = false): Boolean {
+        if (!percentage.isFinite() || percentage !in 50f..100f || timestamp <= 0) return false
+        return try {
+            val db = writableDatabase
+            val cv = ContentValues().apply {
+                put("percentage", percentage)
+                put("timestamp", timestamp)
+                put("source", source)
+                put("source_package", sourcePackage)
+                put("source_label", sourceLabel)
+                put("is_synced", if (isSynced) 1 else 0)
+            }
+            db.insert(TABLE_SPO2, null, cv) > 0
+        } catch (e: Exception) {
+            Log.e(TAG, "Error inserting SpO2: ${e.message}")
+            false
+        }
+    }
+
+    fun getUnsyncedSpO2(limit: Int = 200): List<SpO2RecordPayload> {
+        val list = mutableListOf<SpO2RecordPayload>()
+        try {
+            val db = readableDatabase
+            val cursor = db.rawQuery("SELECT * FROM $TABLE_SPO2 WHERE is_synced = 0 ORDER BY timestamp ASC LIMIT ?", arrayOf(limit.coerceIn(1, 1000).toString()))
+            cursor.use {
+                while (it.moveToNext()) {
+                    list.add(
+                        SpO2RecordPayload(
+                            percentage = it.getFloat(it.getColumnIndexOrThrow("percentage")),
+                            timestamp = it.getLong(it.getColumnIndexOrThrow("timestamp")),
+                            source = it.getString(it.getColumnIndexOrThrow("source")),
+                            sourcePackage = it.getString(it.getColumnIndexOrThrow("source_package")) ?: "",
+                            sourceLabel = it.getString(it.getColumnIndexOrThrow("source_label")) ?: ""
+                        )
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting unsynced SpO2: ${e.message}")
+        }
+        return list
+    }
+
+    fun markSpO2Synced(timestamps: List<Long>) {
+        if (timestamps.isEmpty()) return
+        try {
+            val db = writableDatabase
+            db.beginTransaction()
+            try {
+                for (ts in timestamps) {
+                    val cv = ContentValues().apply { put("is_synced", 1) }
+                    db.update(TABLE_SPO2, cv, "timestamp = ?", arrayOf(ts.toString()))
+                }
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error marking SpO2 synced: ${e.message}")
+        }
     }
 }

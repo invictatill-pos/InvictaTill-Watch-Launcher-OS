@@ -6,5 +6,15 @@ data class ConnectionInfo(
     val deviceName: String? = null,
     val deviceAddress: String? = null,
     val isListening: Boolean = false,  // true when RFCOMM server socket is open
-    val batteryPercent: Int = -1
+    val batteryPercent: Int = -1,
+    val isCharging: Boolean = false,
+    val powerSaveMode: String = "NORMAL",
+    val storageFreeMb: Long = -1L,
+    val storageTotalMb: Long = -1L,
+    val androidVersion: String = "",
+    val manufacturer: String = "",
+    val hasHeartRateSensor: Boolean = true,
+    val hasSpO2Sensor: Boolean = false,
+    val hasStepSensor: Boolean = true,
+    val lastUpdated: Long = 0L
 )

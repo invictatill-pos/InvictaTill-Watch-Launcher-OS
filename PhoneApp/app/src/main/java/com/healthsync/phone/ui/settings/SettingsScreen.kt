@@ -95,13 +95,17 @@ fun SettingsScreen(
     var hasNotifAccess by remember { mutableStateOf(isNotificationAccessGranted(context)) }
     var missingPermissions by remember { mutableStateOf(emptyList<String>()) }
     var watchCallAssociated by remember { mutableStateOf(false) }
+    var waterGoalText by rememberSaveable { mutableStateOf(prefs.waterGoalMl.toString()) }
+    var hydrationReminder by remember { mutableStateOf(prefs.hydrationReminderEnabled) }
+    var standReminder by remember { mutableStateOf(prefs.standReminderEnabled) }
     val connection by BluetoothSyncService.connectionState.collectAsState()
     val validWeight = weightText.replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() && it in 30.0..250.0 }
     val validHeight = heightText.toIntOrNull()?.takeIf { it in 100..230 }
     val validGoal = stepGoal.toIntOrNull()?.takeIf { it in 1..100000 }
+    val validWaterGoal = waterGoalText.toIntOrNull()?.takeIf { it in 250..10_000 }
     val weightUsesDefault = weightText.isBlank() && !prefs.hasUserWeight
     val heightUsesDefault = heightText.isBlank() && !prefs.hasUserHeight
-    val canApply = (validWeight != null || weightUsesDefault) && (validHeight != null || heightUsesDefault) && validGoal != null
+    val canApply = (validWeight != null || weightUsesDefault) && (validHeight != null || heightUsesDefault) && validGoal != null && validWaterGoal != null
     ResumeEffect {
         hasNotifAccess = isNotificationAccessGranted(context)
         watchCallAssociated = WatchCallSetup.associated(context, connection.deviceAddress.orEmpty())
@@ -283,11 +287,67 @@ fun SettingsScreen(
                 }
             }
 
+            // Wellness & Hydration
+            item {
+                SettingsCard("Wellness & Hydration", Icons.Default.WaterDrop) {
+                    Text("Configure hydration goals and activity reminders sent directly to your watch.", color = TextSecondary, fontSize = 13.sp)
+
+                    OutlinedTextField(
+                        value = waterGoalText,
+                        onValueChange = { raw ->
+                            val text = raw.filter(Char::isDigit).take(5)
+                            waterGoalText = text
+                            text.toIntOrNull()?.takeIf { it in 250..10_000 }?.let { prefs.waterGoalMl = it; settingsSent = false }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Daily Water Goal") },
+                        placeholder = { Text("e.g. 2000") },
+                        suffix = { Text("ml") },
+                        supportingText = { Text("Recommended: 2,000–3,000 ml/day") },
+                        isError = validWaterGoal == null,
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+
+                    HorizontalDivider(color = BorderSubtle, modifier = Modifier.padding(vertical = 4.dp))
+
+                    MasterToggle("Hydration Reminder", hydrationReminder) {
+                        hydrationReminder = it
+                        prefs.hydrationReminderEnabled = it
+                        settingsSent = false
+                    }
+                    Text("Remind you on your watch to drink water throughout the day.", color = TextDim, fontSize = 12.sp)
+
+                    Spacer(Modifier.height(4.dp))
+
+                    MasterToggle("Stand / Movement Reminder", standReminder) {
+                        standReminder = it
+                        prefs.standReminderEnabled = it
+                        settingsSent = false
+                    }
+                    Text("Alert you to stand and stretch if inactive for over an hour.", color = TextDim, fontSize = 12.sp)
+                }
+            }
+
             // Apply to Watch
             item {
                 Surface(
                     onClick = {
-                        settingsSent = BluetoothSyncService.sendSettingsToWatch(context, WatchSettingsPayload(hrIntervalMs, spo2IntervalMs, prefs.stepGoal, prefs.userWeightKg, prefs.userHeightCm))
+                        val sentWatch = BluetoothSyncService.sendSettingsToWatch(context, WatchSettingsPayload(hrIntervalMs, spo2IntervalMs, prefs.stepGoal, prefs.userWeightKg, prefs.userHeightCm))
+                        val goal = validWaterGoal ?: prefs.waterGoalMl
+                        prefs.waterGoalMl = goal
+                        prefs.hydrationReminderEnabled = hydrationReminder
+                        prefs.standReminderEnabled = standReminder
+                        val sentWellness = BluetoothSyncService.sendWellnessSettings(
+                            context,
+                            com.healthsync.phone.data.model.WellnessSettingsPayload(
+                                dailyWaterGoalMl = goal,
+                                hydrationReminderEnabled = hydrationReminder,
+                                hydrationReminderIntervalMinutes = prefs.hydrationReminderIntervalMinutes,
+                                standReminderEnabled = standReminder
+                            )
+                        )
+                        settingsSent = sentWatch || sentWellness
                         if (!settingsSent) android.widget.Toast.makeText(context, "Settings could not be sent. Reconnect your watch and try again.", android.widget.Toast.LENGTH_LONG).show()
                     },
                     enabled = connection.isConnected && canApply,

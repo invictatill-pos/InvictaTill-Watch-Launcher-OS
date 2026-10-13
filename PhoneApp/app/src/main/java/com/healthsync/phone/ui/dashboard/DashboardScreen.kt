@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.SportsBasketball
 import androidx.compose.material.icons.filled.SportsCricket
 import androidx.compose.material.icons.filled.SportsTennis
 import androidx.compose.material.icons.filled.Watch
+import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.IconButton
@@ -295,6 +296,13 @@ fun DashboardScreen(
                     onTap = measureOxygen
                 )
             }
+        }
+
+        item {
+            HydrationCard(
+                hydration = uiState.todayHydration,
+                onAddWater = { delta -> viewModel.logWater(delta) }
+            )
         }
 
         if (heartDetails != null) item {
@@ -704,3 +712,97 @@ private fun TrendBadge(text: String, color: Color) {
         Text(text, color = color, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
     }
 }
+
+@Composable
+private fun HydrationCard(
+    hydration: com.healthsync.phone.data.model.HydrationEntity?,
+    onAddWater: (Int) -> Unit
+) {
+    val amount = hydration?.amountMl ?: 0
+    val goal = hydration?.goalMl ?: 2000
+    val progress = (amount.toFloat() / goal.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
+    val percentage = (progress * 100).roundToInt()
+
+    HealthCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(AccentCyan.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.WaterDrop,
+                        contentDescription = "Hydration",
+                        tint = AccentCyan,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Column {
+                    Text("Hydration", color = TextWhite, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text("$amount / $goal ml ($percentage%)", color = TextDim, fontSize = 12.sp)
+                }
+            }
+
+            // Quick add buttons
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Surface(
+                    onClick = { onAddWater(250) },
+                    shape = RoundedCornerShape(12.dp),
+                    color = AccentCyan.copy(alpha = 0.12f),
+                    border = BorderStroke(1.dp, AccentCyan.copy(alpha = 0.3f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text("+250 ml", color = AccentCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Surface(
+                    onClick = { onAddWater(500) },
+                    shape = RoundedCornerShape(12.dp),
+                    color = AccentCyan.copy(alpha = 0.2f),
+                    border = BorderStroke(1.dp, AccentCyan.copy(alpha = 0.45f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text("+500 ml", color = AccentCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        // Progress bar
+        LinearProgressIndicator(
+            progress = { progress },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(RoundedCornerShape(4.dp)),
+            color = AccentCyan,
+            trackColor = BgCardHover
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            if (amount >= goal) "🎉 Daily hydration target accomplished!"
+            else "${goal - amount} ml remaining to reach today’s goal. Synced live with watch.",
+            color = if (amount >= goal) StatusSuccess else TextDim,
+            fontSize = 11.sp
+        )
+    }
+}
+

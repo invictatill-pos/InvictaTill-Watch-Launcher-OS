@@ -53,11 +53,23 @@ object AppModule {
             db.execSQL("ALTER TABLE spo2 ADD COLUMN sourceLabel TEXT NOT NULL DEFAULT ''")
         }
     }
+    val migration7To8 = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `hydration` (
+                    `dayKey` TEXT NOT NULL PRIMARY KEY,
+                    `amountMl` INTEGER NOT NULL,
+                    `goalMl` INTEGER NOT NULL DEFAULT 2000,
+                    `timestamp` INTEGER NOT NULL
+                )
+            """.trimIndent())
+        }
+    }
 
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): FitnessDatabase =
         Room.databaseBuilder(context, FitnessDatabase::class.java, "health_sync_db")
-            .addMigrations(migration1To6, migration2To6, migration3To6, migration4To5, migration5To6, migration6To7)
+            .addMigrations(migration1To6, migration2To6, migration3To6, migration4To5, migration5To6, migration6To7, migration7To8)
             .build()
 }

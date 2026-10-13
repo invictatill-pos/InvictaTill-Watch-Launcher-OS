@@ -105,4 +105,9 @@ class ConnectionViewModel @Inject constructor(
             else device.name ?: device.address
         } catch (e: Exception) { device.address }
     }
+
+    /** Request fresh watch telemetry (battery, storage, hardware sensors) */
+    fun refreshWatchDetails() {
+        BluetoothSyncService.fetchWatchDeviceInfo(context)
+    }
 }

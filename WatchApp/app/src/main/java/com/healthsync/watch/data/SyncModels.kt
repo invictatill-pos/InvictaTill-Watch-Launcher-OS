@@ -34,14 +34,27 @@ enum class MessageType {
     OTA_PROGRESS,
     WATCH_FACE_INSTALL,
     WATCH_FACE_ACK,
-    DEVICE_INFO
+    DEVICE_INFO,
+    FETCH_DEVICE_INFO,
+    HYDRATION_UPDATE,
+    WELLNESS_SETTINGS
 }
 
 data class DeviceInfoPayload(
     val versionName: String,
     val versionCode: Int,
     val model: String = "Kolabee U8 Ultra",
-    val batteryPercent: Int = -1
+    val batteryPercent: Int = -1,
+    val isCharging: Boolean = false,
+    val powerSaveMode: String = "NORMAL",
+    val storageFreeMb: Long = -1L,
+    val storageTotalMb: Long = -1L,
+    val androidVersion: String = "",
+    val manufacturer: String = "",
+    val hasHeartRateSensor: Boolean = true,
+    val hasSpO2Sensor: Boolean = false,
+    val hasStepSensor: Boolean = true,
+    val lastUpdated: Long = System.currentTimeMillis()
 )
 
 data class WatchFaceInstallPayload(
@@ -237,16 +250,52 @@ data class WorkoutSessionPayload(
     val calories_estimated: Boolean = true
 )
 
+data class HeartRateRecordPayload(
+    val bpm: Int,
+    val accuracy: Int = 1,
+    val timestamp: Long,
+    val source: String = "WATCH_SENSOR",
+    val sourcePackage: String = "",
+    val sourceLabel: String = ""
+)
+
+data class SpO2RecordPayload(
+    val percentage: Float,
+    val timestamp: Long,
+    val source: String = "WATCH_SENSOR",
+    val sourcePackage: String = "",
+    val sourceLabel: String = ""
+)
+
+data class HydrationPayload(
+    val date: String,            // "yyyy-MM-dd"
+    val amountMl: Int,
+    val goalMl: Int = 2000,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+data class WellnessSettingsPayload(
+    val dailyWaterGoalMl: Int = 2000,
+    val hydrationReminderEnabled: Boolean = true,
+    val hydrationReminderIntervalMinutes: Int = 60,
+    val standReminderEnabled: Boolean = true
+)
+
 data class BatchedSyncPayload(
     val device_id: String = "WATCH_HEALTHSYNC",
     val sync_timestamp: Long = System.currentTimeMillis(),
     val daily_steps: List<DailyStepBucketPayload> = emptyList(),
-    val workouts: List<WorkoutSessionPayload> = emptyList()
+    val workouts: List<WorkoutSessionPayload> = emptyList(),
+    val heart_rates: List<HeartRateRecordPayload> = emptyList(),
+    val spo2_readings: List<SpO2RecordPayload> = emptyList(),
+    val hydration: HydrationPayload? = null
 )
 
 data class SyncAckPayload(
     val session_ids: List<String> = emptyList(),
-    val step_timestamps: List<Long> = emptyList()
+    val step_timestamps: List<Long> = emptyList(),
+    val hr_timestamps: List<Long> = emptyList(),
+    val spo2_timestamps: List<Long> = emptyList()
 )
 
 /** Sent from phone to watch to configure sensor intervals */

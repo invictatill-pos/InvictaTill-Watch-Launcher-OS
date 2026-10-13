@@ -272,6 +272,74 @@ class FitnessRepository @Inject constructor(
 
     fun getRecentWorkouts(): Flow<List<WorkoutEntity>> = db.workoutDao().getAllWorkouts()
 
+    // ── Hydration ─────────────────────────────────────────────────────────────
+
+    suspend fun saveHydration(amountMl: Int, goalMl: Int = 2000, timestamp: Long = System.currentTimeMillis()) = db.withTransaction {
+        val dayKey = dayKey(timestamp)
+        val validAmount = amountMl.coerceIn(0, 20_000)
+        val validGoal = goalMl.coerceIn(250, 10_000)
+        db.hydrationDao().insert(
+            HydrationEntity(
+                dayKey = dayKey,
+                amountMl = validAmount,
+                goalMl = validGoal,
+                timestamp = timestamp
+            )
+        )
+    }
+
+    fun getTodayHydration(): Flow<HydrationEntity?> =
+        rollingQuery { db.hydrationDao().getForDay(dayKey(it)) }
+
+    fun getHydrationLast7Days(): Flow<List<HydrationEntity>> =
+        rollingQuery { now ->
+            val cal = Calendar.getInstance().apply { timeInMillis = now; add(Calendar.DAY_OF_YEAR, -6) }
+            db.hydrationDao().getLast7Days(dayKey(cal.timeInMillis))
+        }
+
+    // ── Batched HR & SpO2 ─────────────────────────────────────────────────────
+
+    suspend fun saveBatchedHeartRates(records: List<HeartRateRecordPayload?>?): List<Long> = db.withTransaction {
+        val valid = records.orEmpty().filterNotNull().filter {
+            SyncValidation.validCapturedHeartRate(it.bpm, it.accuracy, it.timestamp, it.source, it.sourcePackage, it.sourceLabel)
+        }
+        for (item in valid) {
+            if (!db.heartRateDao().hasReading(item.timestamp, item.bpm, item.source, item.sourcePackage)) {
+                db.heartRateDao().insert(
+                    HeartRateEntity(
+                        bpm = item.bpm,
+                        accuracy = item.accuracy,
+                        timestamp = item.timestamp,
+                        source = item.source,
+                        sourcePackage = item.sourcePackage,
+                        sourceLabel = item.sourceLabel
+                    )
+                )
+            }
+        }
+        valid.map { it.timestamp }
+    }
+
+    suspend fun saveBatchedSpO2(records: List<SpO2RecordPayload?>?): List<Long> = db.withTransaction {
+        val valid = records.orEmpty().filterNotNull().filter {
+            SyncValidation.validCapturedSpO2(it.percentage, it.timestamp, it.source, it.sourcePackage, it.sourceLabel)
+        }
+        for (item in valid) {
+            if (!db.spO2Dao().hasReading(item.timestamp, item.percentage, item.source, item.sourcePackage)) {
+                db.spO2Dao().insert(
+                    SpO2Entity(
+                        percentage = item.percentage,
+                        timestamp = item.timestamp,
+                        source = item.source,
+                        sourcePackage = item.sourcePackage,
+                        sourceLabel = item.sourceLabel
+                    )
+                )
+            }
+        }
+        valid.map { it.timestamp }
+    }
+
     // ── Cleanup ───────────────────────────────────────────────────────────────
 
     suspend fun pruneOldData() {
@@ -282,5 +350,6 @@ class FitnessRepository @Inject constructor(
         db.spO2Dao().deleteOlderThan(thirtyDaysAgo)
         db.sleepDao().deleteOlderThan(thirtyDaysAgo)
         db.notificationHistoryDao().deleteOlderThan(thirtyDaysAgo)
+        db.hydrationDao().deleteOlderThan(thirtyDaysAgo)
     }
 }

@@ -146,6 +146,26 @@ interface WorkoutDao {
     fun getRecentWorkouts(): Flow<List<WorkoutEntity>>
 }
 
+// ── Hydration DAO ─────────────────────────────────────────────────────────────
+
+@Dao
+interface HydrationDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(entity: HydrationEntity)
+
+    @Query("SELECT * FROM hydration WHERE dayKey = :dayKey LIMIT 1")
+    fun getForDay(dayKey: String): Flow<HydrationEntity?>
+
+    @Query("SELECT * FROM hydration WHERE dayKey = :dayKey LIMIT 1")
+    suspend fun getForDayOnce(dayKey: String): HydrationEntity?
+
+    @Query("SELECT * FROM hydration WHERE dayKey >= :fromDay ORDER BY dayKey ASC")
+    fun getLast7Days(fromDay: String): Flow<List<HydrationEntity>>
+
+    @Query("DELETE FROM hydration WHERE timestamp < :before")
+    suspend fun deleteOlderThan(before: Long)
+}
+
 
 // ── Database ──────────────────────────────────────────────────────────────────
 
@@ -157,9 +177,10 @@ interface WorkoutDao {
         SpO2Entity::class,
         SleepEntity::class,
         NotificationHistoryEntity::class,
-        WorkoutEntity::class
+        WorkoutEntity::class,
+        HydrationEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class FitnessDatabase : RoomDatabase() {
@@ -170,4 +191,5 @@ abstract class FitnessDatabase : RoomDatabase() {
     abstract fun sleepDao(): SleepDao
     abstract fun notificationHistoryDao(): NotificationHistoryDao
     abstract fun workoutDao(): WorkoutDao
+    abstract fun hydrationDao(): HydrationDao
 }

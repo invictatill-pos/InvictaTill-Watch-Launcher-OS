@@ -3,16 +3,16 @@
                   "versionCode":  25,
                   "versionName":  "2.8.3",
                   "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.8.3/HealthSync-Phone.apk",
-                  "changelog":  "v2.8.3: Companion watch battery diagnostics, hardened watch face install ACKs, and full multi-tier battery saver synchronization.",
+                  "changelog":  "v2.8.3: Live Watch hardware & battery diagnostics with charging indicator, two-way hydration sync & wellness settings, offline HR & SpO2 batched sync with ACK confirmation.",
                   "forceUpdate":  false,
-                  "sha256":  "03009d9668968d22b8a8eaeef3af452cf9a30902438cb4db502f86ed336b9b1a"
+                  "sha256":  "ad6fe06ffab2e03b2f9c118739e926b63ce97d4460401163cc446b8d5fa8fa1c"
               },
     "watch":  {
                   "versionCode":  31,
                   "versionName":  "2.8.3",
                   "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.8.3/HealthSync-Watch.apk",
-                  "changelog":  "v2.8.3: Hardened Multi-Tier Battery Saver system (Extreme Saver 3x stamina with phone link, Super Extreme 8+ days emergency standby with 0mA radio draw), hardened sensor/alarm lifecycle, and instant dynamic dial ACK feedback.",
+                  "changelog":  "v2.8.3: Precise battery percentage & hardware telemetry reporting, offline SQLite storage for HR & SpO2 with batched sync, two-way hydration logging & wellness goal synchronization.",
                   "forceUpdate":  false,
-                  "sha256":  "9f07af0b9dcc56b68ea52c882511de30bed808ad069bf76f7de7beca11e56ecf"
+                  "sha256":  "fde4e344c6249c6a677ff2522ee7048710b9ee2868c9c1fff464a82587379ce5"
               }
 }

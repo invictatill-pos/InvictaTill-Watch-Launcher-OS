@@ -361,6 +361,7 @@ class SensorCollectorService : Service() {
                     .putLong("last_hr_time", reading.capturedAt).putString("last_hr_source", latestHrSource)
                     .putString("last_hr_source_package", latestHrSourcePackage).putString("last_hr_source_label", latestHrSourceLabel).apply()
                 sendImportedMsg(MessageType.HEART_RATE, HeartRatePayload(latestBpm, latestAcc, latestHrSource, latestHrSourcePackage, latestHrSourceLabel), reading.capturedAt)
+                try { WatchDatabaseHelper.getInstance(context).insertHeartRate(latestBpm, latestAcc, reading.capturedAt, latestHrSource, latestHrSourcePackage, latestHrSourceLabel, isSynced = BluetoothClientService.isConnected) } catch (_: Exception) {}
             } else {
                 if (WatchHealthSourcePolicy.oxygen(reading.value, reading.capturedAt, now, HeartRatePolicy.DISPLAY_MS,
                         WatchHealthSourcePolicy.HEALTH_APP, reading.sourcePackage, reading.sourceLabel) < 0f) return false
@@ -375,6 +376,7 @@ class SensorCollectorService : Service() {
                     .putLong("sensor_oxygen_time", latestSpo2TimeMs).putString("oxygen_source", latestOxygenSource)
                     .putString("oxygen_source_package", latestOxygenSourcePackage).putString("oxygen_source_label", latestOxygenSourceLabel).apply()
                 sendImportedMsg(MessageType.SPO2, SpO2Payload(latestSpo2, latestOxygenSource, latestOxygenSourcePackage, latestOxygenSourceLabel), reading.capturedAt)
+                try { WatchDatabaseHelper.getInstance(context).insertSpO2(latestSpo2, reading.capturedAt, latestOxygenSource, latestOxygenSourcePackage, latestOxygenSourceLabel, isSynced = BluetoothClientService.isConnected) } catch (_: Exception) {}
             }
             return true
         }
@@ -1050,6 +1052,7 @@ class SensorCollectorService : Service() {
                     if (changed || nowWall - lastHrSentMs >= 1000L) {
                         lastHrSentMs = nowWall
                         sendMsg(MessageType.HEART_RATE, HeartRatePayload(bpm, latestAcc), capturedAt)
+                        try { WatchDatabaseHelper.getInstance(this@SensorCollectorService).insertHeartRate(bpm, latestAcc, capturedAt, isSynced = BluetoothClientService.isConnected) } catch (_: Exception) {}
                         broadcastHr()
                     }
                     finishMeasurement(MeasurementKind.HEART_RATE, "reading")
@@ -1122,6 +1125,7 @@ class SensorCollectorService : Service() {
                             .remove("oxygen_source_package").remove("oxygen_source_label").apply()
                         finishMeasurement(MeasurementKind.OXYGEN, "received")
                         sendMsg(MessageType.SPO2, SpO2Payload(reading), capturedAt)
+                        try { WatchDatabaseHelper.getInstance(this@SensorCollectorService).insertSpO2(reading, capturedAt, isSynced = BluetoothClientService.isConnected) } catch (_: Exception) {}
                         updateOxygenStatus("received")
                     }
                 }

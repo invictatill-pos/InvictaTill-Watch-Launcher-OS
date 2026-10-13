@@ -120,6 +120,28 @@ class BluetoothClientService : Service() {
                         val batch = BatchedSyncPayload(daily_steps = steps)
                         if (!sendRawMsg(SyncMessage(MessageType.BATCHED_SYNC, payload = svc.gson.toJson(batch)))) break
                     }
+                    val hrs = dbHelper.getUnsyncedHeartRates(limit = 200)
+                    if (hrs.isNotEmpty()) {
+                        val batch = BatchedSyncPayload(heart_rates = hrs)
+                        sendRawMsg(SyncMessage(MessageType.BATCHED_SYNC, payload = svc.gson.toJson(batch)))
+                    }
+                    val oxygens = dbHelper.getUnsyncedSpO2(limit = 200)
+                    if (oxygens.isNotEmpty()) {
+                        val batch = BatchedSyncPayload(spo2_readings = oxygens)
+                        sendRawMsg(SyncMessage(MessageType.BATCHED_SYNC, payload = svc.gson.toJson(batch)))
+                    }
+                    // Sync today's hydration total
+                    try {
+                        val hydPrefs = context.applicationContext.getSharedPreferences("healthsync_hydration", Context.MODE_PRIVATE)
+                        val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ROOT).format(java.util.Date())
+                        val hydDate = hydPrefs.getString("saved_date", null)
+                        if (hydDate == todayStr) {
+                            val amount = hydPrefs.getInt("intake_ml", 0)
+                            val goal = hydPrefs.getInt("daily_goal_ml", 2000)
+                            val hydBatch = BatchedSyncPayload(hydration = HydrationPayload(todayStr, amount, goal))
+                            sendRawMsg(SyncMessage(MessageType.BATCHED_SYNC, payload = svc.gson.toJson(hydBatch)))
+                        }
+                    } catch (_: Exception) {}
                 }
             }
         }
@@ -256,19 +278,9 @@ class BluetoothClientService : Service() {
                 // PING to confirm channel works
                 sendRawMsg(SyncMessage(MessageType.PING, payload = "{}"), gson)
 
-                // Send Watch Device Info (version, build, model) to Phone Companion
+                // Send Watch Device Info (version, build, model, battery, sensors, storage) to Phone Companion
                 try {
-                    val pInfo = packageManager.getPackageInfo(packageName, 0)
-                    val vCode = if (Build.VERSION.SDK_INT >= 28) pInfo.longVersionCode.toInt() else @Suppress("DEPRECATION") pInfo.versionCode
-                    val devInfo = DeviceInfoPayload(
-                        versionName = pInfo.versionName ?: "2.5.0",
-                        versionCode = vCode,
-                        model = "Kolabee U8 Ultra",
-                        batteryPercent = try {
-                            val bm = getSystemService(Context.BATTERY_SERVICE) as? android.os.BatteryManager
-                            bm?.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
-                        } catch (_: Exception) { -1 }
-                    )
+                    val devInfo = WatchDeviceInfoCollector.collect(applicationContext)
                     sendRawMsg(SyncMessage(MessageType.DEVICE_INFO, payload = gson.toJson(devInfo)), gson)
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed to send DEVICE_INFO: ${e.message}")
@@ -285,6 +297,8 @@ class BluetoothClientService : Service() {
 
                 val heartbeat = serviceScope.launch {
                     var ticks = 0
+                    var lastBatteryPct = -1
+                    var lastCharging = false
                     while (isActive) {
                         delay(20_000)
                         if (SystemClock.elapsedRealtime() - lastReceivedAt.get() > 75_000) {
@@ -293,6 +307,15 @@ class BluetoothClientService : Service() {
                         }
                         sendRawMsg(SyncMessage(MessageType.PING, payload = "{}"), gson)
                         if (++ticks % 3 == 0) syncBatchedPayloads(applicationContext)
+                        // Send periodic device info if battery or charging changed
+                        try {
+                            val info = WatchDeviceInfoCollector.collect(applicationContext)
+                            if (info.batteryPercent != lastBatteryPct || info.isCharging != lastCharging) {
+                                lastBatteryPct = info.batteryPercent
+                                lastCharging = info.isCharging
+                                sendRawMsg(SyncMessage(MessageType.DEVICE_INFO, payload = gson.toJson(info)), gson)
+                            }
+                        } catch (_: Exception) {}
                     }
                 }
                 try { readLoop(s) } finally { heartbeat.cancel() }
@@ -351,7 +374,9 @@ class BluetoothClientService : Service() {
                     val dbHelper = WatchDatabaseHelper.getInstance(applicationContext)
                     dbHelper.markWorkoutsSynced(ackPayload.session_ids)
                     dbHelper.markStepBucketsSynced(ackPayload.step_timestamps)
-                    Log.d(TAG, "Received SYNC_ACK from phone! Marked ${ackPayload.session_ids.size} workouts & ${ackPayload.step_timestamps.size} step buckets as is_synced = 1")
+                    if (ackPayload.hr_timestamps.isNotEmpty()) dbHelper.markHeartRatesSynced(ackPayload.hr_timestamps)
+                    if (ackPayload.spo2_timestamps.isNotEmpty()) dbHelper.markSpO2Synced(ackPayload.spo2_timestamps)
+                    Log.d(TAG, "Received SYNC_ACK from phone! Marked ${ackPayload.session_ids.size} workouts, ${ackPayload.step_timestamps.size} step buckets, ${ackPayload.hr_timestamps.size} HR, ${ackPayload.spo2_timestamps.size} SpO2")
                 }
                 MessageType.NOTIFICATION -> showNotificationAlert(parseNotificationPayload(msg.payload, gson))
                 MessageType.NOTIFICATION_REMOVED -> WatchNotificationAlerts.removed(this, msg.parsePayload<NotificationRemovedPayload>(gson).notificationKey)
@@ -402,6 +427,41 @@ class BluetoothClientService : Service() {
                 MessageType.FORCE_MEASURE_SPO2 -> {
                     Log.d(TAG, "Received FORCE_MEASURE_SPO2 from phone")
                     SensorCollectorService.forceMeasureSpO2(applicationContext)
+                }
+                MessageType.FETCH_DEVICE_INFO -> {
+                    Log.d(TAG, "Received FETCH_DEVICE_INFO request from phone")
+                    try {
+                        val info = WatchDeviceInfoCollector.collect(applicationContext)
+                        sendRawMsg(SyncMessage(MessageType.DEVICE_INFO, payload = gson.toJson(info)), gson)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to respond to FETCH_DEVICE_INFO: ${e.message}")
+                    }
+                }
+                MessageType.HYDRATION_UPDATE -> {
+                    try {
+                        val hyd = msg.parsePayload<HydrationPayload>(gson)
+                        val hydPrefs = applicationContext.getSharedPreferences("healthsync_hydration", Context.MODE_PRIVATE)
+                        hydPrefs.edit().putString("saved_date", hyd.date).putInt("intake_ml", hyd.amountMl).putInt("daily_goal_ml", hyd.goalMl).apply()
+                        applicationContext.sendBroadcast(Intent("com.healthsync.watch.HYDRATION_UPDATE").setPackage(packageName))
+                        Log.d(TAG, "Hydration updated from phone: ${hyd.amountMl} ml / ${hyd.goalMl} ml on ${hyd.date}")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to handle HYDRATION_UPDATE: ${e.message}")
+                    }
+                }
+                MessageType.WELLNESS_SETTINGS -> {
+                    try {
+                        val wellness = msg.parsePayload<WellnessSettingsPayload>(gson)
+                        val hydPrefs = applicationContext.getSharedPreferences("healthsync_hydration", Context.MODE_PRIVATE)
+                        hydPrefs.edit()
+                            .putInt("daily_goal_ml", wellness.dailyWaterGoalMl)
+                            .putBoolean("hydration_reminders_enabled", wellness.hydrationReminderEnabled)
+                            .putInt("hydration_reminder_interval_min", wellness.hydrationReminderIntervalMinutes)
+                            .putBoolean("stand_reminders_enabled", wellness.standReminderEnabled)
+                            .apply()
+                        Log.d(TAG, "Wellness settings updated: goal=${wellness.dailyWaterGoalMl}ml, reminder=${wellness.hydrationReminderEnabled}")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to handle WELLNESS_SETTINGS: ${e.message}")
+                    }
                 }
                 MessageType.OTA_START -> {
                     val payload = msg.parsePayload<OtaStartPayload>(gson)
