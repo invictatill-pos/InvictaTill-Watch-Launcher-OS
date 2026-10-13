@@ -98,10 +98,12 @@ class DynamicFaceStore(private val context: Context) {
             saveFace(createBauhausMinimalSample())
             prefs.edit().putBoolean("starter_faces_v1", true).apply()
         }
-        // Ensure store dials are exclusively installed from Phone App Online Store
-        deleteFace("quantum_sonar_hud")
-        deleteFace("cyberpunk_pulse_ecg")
-        deleteFace("kinetic_tourbillon_haute")
+        if (!prefs.getBoolean("store_cleanup_v1", false)) {
+            deleteFace("quantum_sonar_hud")
+            deleteFace("cyberpunk_pulse_ecg")
+            deleteFace("kinetic_tourbillon_haute")
+            prefs.edit().putBoolean("store_cleanup_v1", true).apply()
+        }
     }
 
     companion object {

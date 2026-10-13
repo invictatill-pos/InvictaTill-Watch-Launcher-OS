@@ -1,2 +1,2 @@
-2478aeaa3242b15f032e423e3082f4bb71af7cf8a6ea334976373c1eafa0e405  HealthSync-Watch.apk
+ce475ec50af95385e64a798977f82ef8e78d36914c3485adeb674148cb53bf52  HealthSync-Watch.apk
 2f889b804c3b6da0a6a3b208ce8d05b3abfd4d790ab24cfcee8ce804874f0a28  HealthSync-Phone.apk

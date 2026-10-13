@@ -13,6 +13,6 @@
                   "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.8.0/HealthSync-Watch.apk",
                   "changelog":  "Adds real-time 60 FPS animation canvas engine and interactive touch controller (tap-to-cycle neon palettes, mode toggles, water ripples) for animated dials installed from the Phone App Store, with zero idle battery drain in ambient/AOD mode.",
                   "forceUpdate":  false,
-                  "sha256":  "2478aeaa3242b15f032e423e3082f4bb71af7cf8a6ea334976373c1eafa0e405"
+                  "sha256":  "ce475ec50af95385e64a798977f82ef8e78d36914c3485adeb674148cb53bf52"
               }
 }
