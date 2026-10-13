@@ -31,6 +31,12 @@ Both packages use the existing Android development certificate. Signature verifi
 - **Wellness Settings**:
   - Added configurable Daily Water Goal, Hydration Reminder, and Stand / Movement Reminder controls in `SettingsScreen` and synchronized them to the watch via `WELLNESS_SETTINGS`.
 
+- **Heart Rate Hardware HAL Normalization & Companion Sync**:
+  - Normalized hardware PPG readings emitted with `accuracy = 0` (`SENSOR_STATUS_UNRELIABLE`) by the watch HAL driver to `accuracy = 1` (`SENSOR_STATUS_ACCURACY_LOW`), enabling genuine readings (`25..240 BPM`) to pass validation and sync immediately over Bluetooth via `MessageType.HEART_RATE`.
+  - Stored normalized accuracy in local watch SQLite `TABLE_HEART_RATE` and batched payload queueing.
+  - Added fallback in Phone `DashboardScreen` VitalCard to display live sensor preview if Room DB history is not yet populated.
+  - Defensively coerced incoming queued readings with uncalibrated accuracy in `BluetoothSyncService` so offline history seamlessly enters Room DB.
+
 - **Multi-Tier Power Saving System**:
   - Normal Mode, Extreme Power Saver Mode (Stamina with active BT communication), and Super Extreme Power Saver Mode (Emergency standby with RF radio shutoff and emergency digital dial).
 

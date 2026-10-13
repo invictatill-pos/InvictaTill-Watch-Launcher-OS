@@ -5,7 +5,7 @@
                   "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.8.4/HealthSync-Phone.apk",
                   "changelog":  "v2.8.4: Live Watch hardware \u0026 battery diagnostics with charging indicator, two-way hydration sync \u0026 wellness settings, offline HR \u0026 SpO2 batched sync with ACK confirmation.",
                   "forceUpdate":  false,
-                  "sha256":  "013973bd0fa319cc1d76b3cf789fd2e71c0c367381c545e7f9037f8fa20bfe7d"
+                  "sha256":  "782ab2c3ba204afdeb5a00690100dc6597731b3417a50ae03e0a2c597a46208e"
               },
     "watch":  {
                   "versionCode":  32,
@@ -13,6 +13,6 @@
                   "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.8.4/HealthSync-Watch.apk",
                   "changelog":  "v2.8.4: Precise battery percentage \u0026 hardware telemetry reporting, offline SQLite storage for HR \u0026 SpO2 with batched sync, two-way hydration logging \u0026 wellness goal synchronization.",
                   "forceUpdate":  false,
-                  "sha256":  "784e8a7c4caa5c3e1faa7c830f830446b315cb38ca9e9fd3dc21d411c34dd5dc"
+                  "sha256":  "031ef3e916c23b52cefb70f517731863aab321eefe402e0cd3ed6b773aace2e2"
               }
 }

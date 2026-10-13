@@ -609,7 +609,10 @@ class BluetoothSyncService : android.app.Service() {
                     val hrRecords = hrRows.mapNotNull { row ->
                         try {
                             val record = gson.fromJson(row.toString(), HeartRateRecordPayload::class.java)
-                            if (SyncValidation.validCapturedHeartRate(record.bpm, record.accuracy, record.timestamp, record.source, record.sourcePackage, record.sourceLabel)) record else null
+                            val normalized = if (record.source == "WATCH_SENSOR" && record.accuracy == 0 && record.bpm in 25..240) {
+                                record.copy(accuracy = 1)
+                            } else record
+                            if (SyncValidation.validCapturedHeartRate(normalized.bpm, normalized.accuracy, normalized.timestamp, normalized.source, normalized.sourcePackage, normalized.sourceLabel)) normalized else null
                         } catch (e: Exception) { null }
                     }
                     if (hrRecords.isNotEmpty()) {
@@ -654,16 +657,30 @@ class BluetoothSyncService : android.app.Service() {
                     // Raw validation above has already rejected explicit null/unknown provenance.
                     val reading = decoded.copy(source = decoded.source ?: "WATCH_SENSOR",
                         sourcePackage = decoded.sourcePackage.orEmpty(), sourceLabel = decoded.sourceLabel.orEmpty())
-                    repository.saveHeartRate(reading, msg.timestamp)
-                    if (SyncValidation.validCapturedHeartRate(reading.bpm, reading.accuracy, msg.timestamp,
-                            reading.source, reading.sourcePackage, reading.sourceLabel)) {
+                    val normalizedReading = if (reading.source == "WATCH_SENSOR" && reading.accuracy == 0 && reading.bpm in 25..240) {
+                        reading.copy(accuracy = 1)
+                    } else reading
+                    repository.saveHeartRate(normalizedReading, msg.timestamp)
+                    if (SyncValidation.validCapturedHeartRate(normalizedReading.bpm, normalizedReading.accuracy, msg.timestamp,
+                            normalizedReading.source, normalizedReading.sourcePackage, normalizedReading.sourceLabel)) {
                         _heartRateFeedback.value = HeartRateFeedback(
-                            if (reading.source == "WATCH_HEALTH_APP") "app_reading" else "reading", System.currentTimeMillis())
+                            if (normalizedReading.source == "WATCH_HEALTH_APP") "app_reading" else "reading", System.currentTimeMillis())
                     }
                 }
                 MessageType.HEART_RATE_STATUS -> {
                     // Status previews stay in memory; only HEART_RATE may enter the repository.
                     _heartRateFeedback.value = heartRateFeedbackFromJson(msg.payload, System.currentTimeMillis())
+                    try {
+                        val statusObj = gson.fromJson(msg.payload, HeartRateStatusPayload::class.java)
+                        if (statusObj != null && (statusObj.status == "reading" || statusObj.status == "app_reading") &&
+                            statusObj.bpm in 25..240 && statusObj.readingTime > 0L) {
+                            val source = if (statusObj.status == "app_reading") "WATCH_HEALTH_APP" else "WATCH_SENSOR"
+                            repository.saveHeartRate(
+                                HeartRatePayload(bpm = statusObj.bpm, accuracy = 1, source = source),
+                                statusObj.readingTime
+                            )
+                        }
+                    } catch (_: Exception) {}
                 }
                 MessageType.STEPS        -> repository.saveSteps(gson.fromJson(msg.payload, StepsPayload::class.java), msg.timestamp)
                 MessageType.SPO2 -> {

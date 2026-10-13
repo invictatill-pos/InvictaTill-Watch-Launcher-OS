@@ -345,9 +345,10 @@ class WatchDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE
         if (bpm !in 25..240 || timestamp <= 0) return false
         return try {
             val db = writableDatabase
+            val acc = if (accuracy in 1..3) accuracy else 1
             val cv = ContentValues().apply {
                 put("bpm", bpm)
-                put("accuracy", accuracy.coerceIn(0, 3))
+                put("accuracy", acc)
                 put("timestamp", timestamp)
                 put("source", source)
                 put("source_package", sourcePackage)
@@ -368,10 +369,11 @@ class WatchDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE
             val cursor = db.rawQuery("SELECT * FROM $TABLE_HEART_RATE WHERE is_synced = 0 ORDER BY timestamp ASC LIMIT ?", arrayOf(limit.coerceIn(1, 1000).toString()))
             cursor.use {
                 while (it.moveToNext()) {
+                    val rawAcc = it.getInt(it.getColumnIndexOrThrow("accuracy"))
                     list.add(
                         HeartRateRecordPayload(
                             bpm = it.getInt(it.getColumnIndexOrThrow("bpm")),
-                            accuracy = it.getInt(it.getColumnIndexOrThrow("accuracy")),
+                            accuracy = if (rawAcc in 1..3) rawAcc else 1,
                             timestamp = it.getLong(it.getColumnIndexOrThrow("timestamp")),
                             source = it.getString(it.getColumnIndexOrThrow("source")),
                             sourcePackage = it.getString(it.getColumnIndexOrThrow("source_package")) ?: "",

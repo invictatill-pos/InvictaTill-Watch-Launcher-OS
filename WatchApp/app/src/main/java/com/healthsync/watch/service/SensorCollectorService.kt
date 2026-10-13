@@ -324,7 +324,9 @@ class SensorCollectorService : Service() {
         private fun restoreHealthCaptureCache(context: Context) {
             val saved = context.getSharedPreferences("HealthSync_Steps", Context.MODE_PRIVATE)
             if (latestBpmTimeMs == 0L && saved.getInt("hr_capture_schema", 0) == 2) {
-                latestBpm = saved.getInt("last_hr_bpm", -1); latestAcc = saved.getInt("last_hr_accuracy", 0)
+                latestBpm = saved.getInt("last_hr_bpm", -1)
+                val rawAcc = saved.getInt("last_hr_accuracy", 0)
+                latestAcc = if (rawAcc in 1..3) rawAcc else 1
                 latestBpmTimeMs = saved.getLong("last_hr_time", 0L)
                 latestHrSource = saved.getString("last_hr_source", WatchHealthSourcePolicy.SENSOR).orEmpty()
                 latestHrSourcePackage = saved.getString("last_hr_source_package", "").orEmpty()
@@ -490,7 +492,8 @@ class SensorCollectorService : Service() {
         hardwareStepGuard = HardwareStepCounterGuard(lastHardwareSteps, savedCounterTime)
         val validatedCaptureSchema = prefs.getInt("hr_capture_schema", 0) == 2
         latestBpm = if (validatedCaptureSchema) prefs.getInt("last_hr_bpm", -1) else -1
-        latestAcc = if (validatedCaptureSchema) prefs.getInt("last_hr_accuracy", 0) else 0
+        val rawAcc = if (validatedCaptureSchema) prefs.getInt("last_hr_accuracy", 0) else 0
+        latestAcc = if (rawAcc in 1..3) rawAcc else if (latestHrSource == WatchHealthSourcePolicy.SENSOR && latestBpm in 25..240) 1 else rawAcc
         latestBpmTimeMs = if (validatedCaptureSchema) prefs.getLong("last_hr_time", 0L) else 0L
         latestHrSource = prefs.getString("last_hr_source", WatchHealthSourcePolicy.SENSOR).orEmpty()
         latestHrSourcePackage = prefs.getString("last_hr_source_package", "").orEmpty()
@@ -910,7 +913,7 @@ class SensorCollectorService : Service() {
 
     private fun acceptHealthAppReading(reading: HealthAppReading) = importHealthAppReading(this, reading)
 
-    private fun heartRatePayload() = HeartRatePayload(latestBpm, latestAcc, latestHrSource, latestHrSourcePackage, latestHrSourceLabel)
+    private fun heartRatePayload() = HeartRatePayload(latestBpm, if (latestAcc in 1..3) latestAcc else 1, latestHrSource, latestHrSourcePackage, latestHrSourceLabel)
     private fun oxygenPayload() = SpO2Payload(latestSpo2, latestOxygenSource, latestOxygenSourcePackage, latestOxygenSourceLabel)
 
     private fun finishMeasurement(kind: MeasurementKind, status: String? = null) {
@@ -1015,15 +1018,16 @@ class SensorCollectorService : Service() {
                 isHeartRateEvent -> {
                     if (!measurementWindows.isActive(MeasurementKind.HEART_RATE, SystemClock.elapsedRealtime())) return
                     val reading = event.values.firstOrNull() ?: return
+                    val normalizedAccuracy = if (event.accuracy in 1..3) event.accuracy else if (event.accuracy == 0 && reading in 25f..240f) 1 else event.accuracy
                     val timestampIssue = heartRatePreviewTracker.observe(reading, event.accuracy,
                         event.timestamp, nowNanos, nowWall, measurementStartedNanos[MeasurementKind.HEART_RATE] ?: 0L)
-                    val rejection = HeartRatePolicy.frameRejection(reading, event.accuracy,
+                    val rejection = HeartRatePolicy.frameRejection(reading, normalizedAccuracy,
                         event.timestamp, nowNanos, nowWall, measurementStartedNanos[MeasurementKind.HEART_RATE] ?: 0L,
                         lastHrEventNanos, timestampIssue)
-                    heartRateAttempt?.frame(rejection, event.accuracy, event.timestamp, nowNanos,
+                    heartRateAttempt?.frame(rejection, normalizedAccuracy, event.timestamp, nowNanos,
                         measurementStartedNanos[MeasurementKind.HEART_RATE] ?: 0L, reading,
                         timestampIssue, heartRatePreviewTracker.preview != null)
-                    val isUsableReading = rejection == null && HeartRatePolicy.validReading(reading, event.accuracy)
+                    val isUsableReading = rejection == null && HeartRatePolicy.validReading(reading, normalizedAccuracy)
                     if (!isUsableReading) {
                         latestSensorPreview = heartRatePreviewTracker.preview
                         if (event.accuracy == -1) updateHrStatus("no_contact")
@@ -1040,7 +1044,7 @@ class SensorCollectorService : Service() {
                     lastHrEventNanos = event.timestamp
                     val bpm = reading.toInt()
                     val changed = bpm != latestBpm
-                    latestBpm = bpm; latestAcc = event.accuracy; latestBpmTimeMs = capturedAt
+                    latestBpm = bpm; latestAcc = normalizedAccuracy; latestBpmTimeMs = capturedAt
                     latestHrSource = WatchHealthSourcePolicy.SENSOR; latestHrSourcePackage = ""; latestHrSourceLabel = ""
                     latestSensorPreview = null
                     completionStatuses.remove(MeasurementKind.HEART_RATE)

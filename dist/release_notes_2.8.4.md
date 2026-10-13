@@ -33,7 +33,14 @@ HealthSync 2.8.4 delivers comprehensive quality assurance hardening across both 
 
 ---
 
+### 💓 Heart Rate HAL Driver Accuracy Normalization & Companion Sync
+- **Hardware Accuracy Normalization**: Resolved Kolabee U8 Ultra optical sensor HAL driver behavior where genuine PPG pulse readings were emitted with `accuracy = 0` (`SENSOR_STATUS_UNRELIABLE`/uncalibrated). The watch driver now normalizes valid physical readings in `25..240 BPM` to `accuracy = 1` (`SENSOR_STATUS_ACCURACY_LOW`), enabling heart rate measurements to pass validation, save to local SQLite, and sync immediately via `MessageType.HEART_RATE`.
+- **Phone Companion Dashboard Live Display**: `DashboardScreen` VitalCard now displays live sensor feedback and unverified previews immediately if Room DB history has not yet populated, eliminating `-- bpm` displays.
+- **Batched Sync & History Safeguards**: Incoming offline and queued heart rate records in `BluetoothSyncService` normalize uncalibrated hardware accuracy to ensure older offline records captured prior to the update seamlessly enter Phone Room DB and 24-hour charts without being dropped.
+
+---
+
 ### 📦 Checksums & Artifacts
-- **Watch App (Debug / Android 6+ API 23+)**: `784e8a7c4caa5c3e1faa7c830f830446b315cb38ca9e9fd3dc21d411c34dd5dc` (`HealthSync-Watch-2.8.4-Android8.apk`)
-- **Phone App (Release / Android 8+ API 26+)**: `013973bd0fa319cc1d76b3cf789fd2e71c0c367381c545e7f9037f8fa20bfe7d` (`HealthSync-Phone-2.8.4.apk`)
+- **Watch App (Debug / Android 6+ API 23+)**: `031ef3e916c23b52cefb70f517731863aab321eefe402e0cd3ed6b773aace2e2` (`HealthSync-Watch-2.8.4-Android8.apk`)
+- **Phone App (Release / Android 8+ API 26+)**: `782ab2c3ba204afdeb5a00690100dc6597731b3417a50ae03e0a2c597a46208e` (`HealthSync-Phone-2.8.4.apk`)
 - **Combined Bundle**: `HealthSync-Android8-2.8.4-Both-APKs.zip`

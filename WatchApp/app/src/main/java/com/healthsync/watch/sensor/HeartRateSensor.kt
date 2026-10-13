@@ -61,15 +61,16 @@ class HeartRateSensor(
     override fun onSensorChanged(event: SensorEvent) {
         if (event.sensor in sensors && event.values.isNotEmpty()) {
             val bpm = event.values[0].toInt()
-            if (HeartRatePolicy.validReading(event.values[0], event.accuracy)) {
+            val normalizedAcc = if (event.accuracy in 1..3) event.accuracy else if (event.accuracy == 0 && event.values[0] in 25f..240f) 1 else event.accuracy
+            if (HeartRatePolicy.validReading(event.values[0], normalizedAcc)) {
                 val nowNanos = SystemClock.elapsedRealtimeNanos()
                 val nowWall = System.currentTimeMillis()
                 val capturedAt = HeartRatePolicy.capturedWallTime(event.timestamp, nowNanos,
                     nowWall, acquisitionStartedNanos, lastAcceptedNanos) ?: return
                 lastAcceptedNanos = event.timestamp
-                Log.d(TAG, "HR: $bpm bpm (accuracy=${event.accuracy})")
-                onReading(bpm, event.accuracy)
-                onTimedReading?.invoke(bpm, event.accuracy, capturedAt)
+                Log.d(TAG, "HR: $bpm bpm (accuracy=$normalizedAcc)")
+                onReading(bpm, normalizedAcc)
+                onTimedReading?.invoke(bpm, normalizedAcc, capturedAt)
             }
         }
     }

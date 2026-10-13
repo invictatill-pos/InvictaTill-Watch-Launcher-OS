@@ -86,6 +86,7 @@ import com.healthsync.phone.data.model.SleepEntity
 import com.healthsync.phone.data.model.WorkoutEntity
 import kotlin.math.roundToInt
 import com.healthsync.phone.service.BluetoothSyncService
+import com.healthsync.phone.data.activeHeartRateSensorPreview
 import com.healthsync.phone.data.heartRateFeedbackText
 import com.healthsync.phone.data.heartRateMeasurementDetailsText
 import com.healthsync.phone.data.healthReadingSourceLabel
@@ -267,14 +268,28 @@ fun DashboardScreen(
 
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                val latestHr = uiState.latestHeartRate
+                val activePreview = activeHeartRateSensorPreview(heartFeedback, connState.isConnected, currentTime)
+                val displayHrBpm = if ((latestHr?.bpm ?: 0) > 0) {
+                    latestHr?.bpm
+                } else {
+                    activePreview?.bpm
+                }
+                val hrTimestamp = latestHr?.timestamp ?: activePreview?.capturedAt
+                val hrSource = if (latestHr != null) {
+                    healthReadingSourceLabel(latestHr.source, latestHr.sourcePackage, latestHr.sourceLabel)
+                } else if (activePreview != null) {
+                    "Watch Sensor (Live)"
+                } else null
+
                 VitalCard(
                     modifier = Modifier.weight(1f),
                     title = "Heart",
-                    value = if ((uiState.latestHeartRate?.bpm ?: 0) > 0) "${uiState.latestHeartRate?.bpm}" else "--",
+                    value = if ((displayHrBpm ?: 0) > 0) "$displayHrBpm" else "--",
                     unit = "bpm",
-                    recordedAtText = "Last captured: ${readingAge(uiState.latestHeartRate?.timestamp, currentTime)}",
-                    sourceText = uiState.latestHeartRate?.let { healthReadingSourceLabel(it.source, it.sourcePackage, it.sourceLabel) },
-                    status = heartRateFeedbackText(heartFeedback, connState.isConnected, uiState.latestHeartRate?.timestamp, currentTime),
+                    recordedAtText = "Last captured: ${readingAge(hrTimestamp, currentTime)}",
+                    sourceText = hrSource,
+                    status = heartRateFeedbackText(heartFeedback, connState.isConnected, hrTimestamp, currentTime),
                     icon = Icons.Default.Favorite,
                     color = MetricHeart,
                     onTap = measureHeart
