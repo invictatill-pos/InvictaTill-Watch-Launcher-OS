@@ -1,2 +1,2 @@
-7d66bebc8cacee9743e0978f863dcb917197fc9bdb46c6e9a626bed78addf5ec  HealthSync-Watch-2.8.5-Android8.apk
-fba3897d7391ace5c6e89199ecced4495f9404cf3badadf2647af82dc37b3632  HealthSync-Phone-2.8.5.apk
+8eb75b286d98e8b2e2caf20efd2148e8a797971a623d51062ddb04aa1661c00d  HealthSync-Watch-2.9.0-Android8.apk
+63757166a3330fb24780a01bb66f057bc97d3e367aa2bc5afe1dfa1108c587ae  HealthSync-Phone-2.9.0.apk

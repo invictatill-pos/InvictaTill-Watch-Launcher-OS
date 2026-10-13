@@ -1,14 +1,13 @@
 package com.healthsync.phone.ui.watchface
 
-import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
-import android.provider.MediaStore
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,631 +22,346 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.healthsync.phone.data.watchface.*
 import com.healthsync.phone.service.BluetoothSyncService
 import com.healthsync.phone.ui.theme.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Calendar
+import java.io.File
+import java.util.UUID
 
 enum class CreatorTab(val label: String, val icon: ImageVector) {
-    TEMPLATES("Presets", Icons.Default.AutoAwesome),
-    BACKGROUND("Background", Icons.Default.Wallpaper),
-    DIAL("Dial", Icons.Default.Toll),
-    HANDS("Hands", Icons.Default.Schedule),
-    CLOCK_DATE("Time & Date", Icons.Default.AccessTime),
-    COMPLICATIONS("Complications", Icons.Default.Speed)
+    PROJECT("Project", Icons.Default.FolderOpen), LAYERS("Layers", Icons.Default.Layers),
+    BACKGROUND("Background", Icons.Default.Wallpaper), DIAL("Dial", Icons.Default.Toll),
+    HANDS("Hands", Icons.Default.Schedule), CLOCK_DATE("Time & Date", Icons.Default.AccessTime),
+    COMPLICATIONS("Widgets", Icons.Default.Speed), EFFECTS("Effects", Icons.Default.AutoAwesome),
+    AMBIENT("Always-on", Icons.Default.Brightness4), TEST("Test", Icons.Default.Science)
 }
 
-enum class WatchCaseStyle(val label: String, val outerColor: Color, val innerColor: Color, val accentColor: Color) {
-    TITANIUM_ULTRA("Titanium Ultra", Color(0xFF334155), Color(0xFF1E293B), Color(0xFFF97316)),
-    STEEL_MIRROR("Silver Steel", Color(0xFF94A3B8), Color(0xFF475569), Color(0xFF38BDF8)),
-    MATTE_BLACK("Midnight Black", Color(0xFF18181B), Color(0xFF09090B), Color(0xFF10B981)),
-    ROSE_GOLD("Rose Gold", Color(0xFFB45309), Color(0xFF78350F), Color(0xFFF43F5E))
-}
-
-/**
- * Supercharged Watch Face Creator Studio.
- * Allows users to design custom watch faces, import personal photos with dim filters,
- * customize dials, hands, and complications with real-time 1:1 Canvas preview,
- * interactive watch case frames, simulation test bench, save to local library,
- * and beam directly to Kolabee U8 Ultra over Bluetooth.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WatchFaceCreatorScreen(
-    initialPackage: HswfPackage? = null,
-    onBack: () -> Unit = {},
-    onFaceSaved: (HswfPackage) -> Unit = {}
-) {
+fun WatchFaceCreatorScreen(initialPackage: HswfPackage? = null, onBack: () -> Unit = {}, onFaceSaved: (HswfPackage) -> Unit = {}) {
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
     val scope = rememberCoroutineScope()
-    val connState by BluetoothSyncService.connectionState.collectAsState()
-
     val faceStore = remember { CustomFaceStore.getInstance(context) }
     val templates = remember { faceStore.getTemplates() }
-
-    // Active package state being edited
-    var editingPackage by remember {
-        mutableStateOf(
-            initialPackage ?: templates.first().copy(
-                id = "custom_${System.currentTimeMillis()}",
-                name = "My Custom Dial",
-                author = "You"
-            )
-        )
+    val history = remember {
+        val recovery = faceStore.loadDraft(initialPackage?.id)
+        val selected = initialPackage?.let {
+            if (it.id.startsWith("custom_")) it else FaceStudioDocument.duplicate(it, it.name + " Custom")
+        }
+        FaceStudioHistory(if (recovery != null && (initialPackage == null || recovery.id == initialPackage.id)) recovery
+            else selected ?: FaceStudioDocument.blank())
     }
-
-    var selectedTab by remember { mutableStateOf(CreatorTab.TEMPLATES) }
-    var isAmbientPreview by remember { mutableStateOf(false) }
-    var faceNameInput by remember { mutableStateOf(editingPackage.name) }
-    var selectedCaseStyle by remember { mutableStateOf(WatchCaseStyle.TITANIUM_ULTRA) }
-    var showTestBench by remember { mutableStateOf(false) }
-
-    // Transmission status
-    var isBeaming by remember { mutableStateOf(false) }
-    var showSuccessDialog by remember { mutableStateOf(false) }
+    var editingPackage by remember { mutableStateOf(history.current) }
+    var historyRevision by remember { mutableIntStateOf(0) }
+    var selectedTab by remember { mutableStateOf(CreatorTab.PROJECT) }
+    var selectedLayerId by remember { mutableStateOf<String?>(null) }
+    var ambient by remember { mutableStateOf(false) }
+    var showGrid by remember { mutableStateOf(true) }
+    var snap by remember { mutableStateOf(true) }
+    var previewShape by remember { mutableStateOf("round") }
+    var menuOpen by remember { mutableStateOf(false) }
+    var draftStatus by remember { mutableStateOf("Draft recovery ready") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var installedName by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var photoLoading by remember { mutableStateOf(false) }
+    var photoTargetId by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingExportKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var liveTime by remember { mutableStateOf(false) }
+    var hours by remember { mutableIntStateOf(10) }
+    var minutes by remember { mutableIntStateOf(10) }
+    var seconds by remember { mutableIntStateOf(30) }
+    var sampleValues by remember { mutableStateOf(false) }
+    var battery by remember { mutableIntStateOf(85) }
+    var steps by remember { mutableIntStateOf(5840) }
+    var heartRate by remember { mutableIntStateOf(72) }
+    val connection by BluetoothSyncService.connectionState.collectAsState()
+    val watchVersion by BluetoothSyncService.connectedWatchVersionCode.collectAsState()
+    val gesture = remember(history) { StudioGesture(history::beginGesture, history::endGesture) }
 
-    // Live ticking simulation
-    var tickSeconds by remember { mutableIntStateOf(30) }
-    var tickMinutes by remember { mutableIntStateOf(10) }
-    var tickHours by remember { mutableIntStateOf(10) }
-
-    // Interactive Test Bench Values
-    var testBattery by remember { mutableFloatStateOf(85f) }
-    var testSteps by remember { mutableFloatStateOf(5840f) }
-    var testHeartRate by remember { mutableFloatStateOf(72f) }
-    var liveTicking by remember { mutableStateOf(true) }
-
-    LaunchedEffect(liveTicking) {
-        while (liveTicking) {
-            val cal = Calendar.getInstance()
-            tickHours = cal.get(Calendar.HOUR_OF_DAY)
-            tickMinutes = cal.get(Calendar.MINUTE)
-            tickSeconds = cal.get(Calendar.SECOND)
-            delay(1000L)
+    fun edit(next: HswfPackage) {
+        history.commit(next); editingPackage = history.current; historyRevision++
+        draftStatus = "Saving draft…"
+    }
+    fun replaceLayer(layer: FaceLayer) {
+        edit(editingPackage.copy(layers = editingPackage.layers.map { if (it.id == layer.id) layer else it }))
+    }
+    fun leave() {
+        scope.launch {
+            val saved = withContext(Dispatchers.IO) { faceStore.saveDraft(editingPackage) }
+            if (saved) onBack() else errorMessage = "Draft could not be saved. Save or export the project before leaving."
         }
     }
-
-    // Photo picker launcher
-    val photoPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        if (uri != null) {
+    BackHandler { leave() }
+    LaunchedEffect(editingPackage) {
+        delay(700)
+        val snapshot = editingPackage
+        draftStatus = if (withContext(Dispatchers.IO) { faceStore.saveDraft(snapshot) }) "Draft saved on this phone" else "Draft save failed"
+    }
+    LaunchedEffect(liveTime) {
+        while (liveTime) {
+            val now = Calendar.getInstance()
+            hours = now.get(Calendar.HOUR_OF_DAY); minutes = now.get(Calendar.MINUTE); seconds = now.get(Calendar.SECOND)
+            delay(1000)
+        }
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) scope.launch {
             try {
-                val bitmap: Bitmap = if (Build.VERSION.SDK_INT >= 28) {
-                    val source = ImageDecoder.createSource(context.contentResolver, uri)
-                    ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
-                        decoder.isMutableRequired = true
-                        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-                    }
-                } else {
-                    @Suppress("DEPRECATION")
-                    MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+                val imported = withContext(Dispatchers.IO) {
+                    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytesBounded(512 * 1024) }
+                        ?: error("Cannot open the selected file.")
+                    FaceStudioDocument.importJson(bytes.toString(Charsets.UTF_8))
                 }
-
-                val encodedBase64 = CustomFaceStore.encodePhotoBitmap(bitmap, targetDimension = 320, quality = 85)
-                editingPackage = editingPackage.copy(
-                    background = editingPackage.background.copy(
-                        type = "image",
-                        imageBase64 = encodedBase64
-                    )
-                )
-                Toast.makeText(context, "Photo loaded & optimized for smartwatch", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Toast.makeText(context, "Failed to load photo: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
+                val pkg = imported.packageOrNull
+                if (pkg == null) errorMessage = imported.errors.joinToString("\n")
+                else {
+                    edit(FaceStudioDocument.duplicate(pkg, pkg.name)); selectedLayerId = null
+                    Toast.makeText(context, "Project imported as a new creation", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) { errorMessage = e.message ?: "Could not import this project." }
         }
     }
-
-    Scaffold(
-        containerColor = BgDeep,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Watch Face Creator", color = TextWhite, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                        Text("Personalized Dial Studio for Kolabee U8 Ultra", color = TextDim, fontSize = 12.sp)
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextWhite)
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { isAmbientPreview = !isAmbientPreview }) {
-                        Icon(
-                            if (isAmbientPreview) Icons.Default.Brightness7 else Icons.Default.Brightness4,
-                            contentDescription = if (isAmbientPreview) "Show active layout" else "Show ambient layout",
-                            tint = if (isAmbientPreview) AccentCyan else TextDim
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = BgDeep)
-            )
-        },
-        bottomBar = {
-            Surface(
-                color = BgCard,
-                border = BorderStroke(1.dp, BorderSubtle),
-                shadowElevation = 8.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Save Button
-                    OutlinedButton(
-                        onClick = {
-                            val toSave = editingPackage.copy(
-                                name = faceNameInput.ifBlank { "Custom Dial" }
-                            )
-                            val saved = faceStore.saveCustomFace(toSave)
-                            if (saved) {
-                                Toast.makeText(context, "Saved to My Creations!", Toast.LENGTH_SHORT).show()
-                                onFaceSaved(toSave)
-                            } else {
-                                Toast.makeText(context, "Failed to save dial", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        modifier = Modifier.weight(1f).height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, BorderSubtle)
-                    ) {
-                        Icon(Icons.Default.Save, contentDescription = null, tint = TextWhite, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Save", color = TextWhite, fontWeight = FontWeight.SemiBold)
-                    }
-
-                    // Beam to Watch Button
-                    Button(
-                        onClick = {
-                            if (!connState.isConnected) {
-                                errorMessage = "Please connect Kolabee U8 Ultra via Bluetooth before installing."
-                                return@Button
-                            }
-                            val finalFace = editingPackage.copy(
-                                name = faceNameInput.ifBlank { "Custom Dial" }
-                            )
-                            faceStore.saveCustomFace(finalFace)
-                            isBeaming = true
-                            scope.launch {
-                                val success = WatchFaceSender.sendFaceToWatch(pkg = finalFace, setActive = true)
-                                isBeaming = false
-                                if (success) {
-                                    showSuccessDialog = true
-                                    onFaceSaved(finalFace)
-                                } else {
-                                    errorMessage = "Installation was not confirmed by the watch. Check the connection and try again."
-                                }
-                            }
-                        },
-                        modifier = Modifier.weight(1.3f).height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentCyan),
-                        enabled = !isBeaming
-                    ) {
-                        if (isBeaming) {
-                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Sending…", color = Color.White, fontWeight = FontWeight.Bold)
-                        } else {
-                            Icon(Icons.Default.SendToMobile, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Send to watch", color = Color.White, fontWeight = FontWeight.Bold)
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri: Uri? ->
+        val key = pendingExportKey; pendingExportKey = null
+        if (key != null) scope.launch {
+            val snapshotFile = File(context.cacheDir, key)
+            try {
+                if (uri != null) withContext(Dispatchers.IO) {
+                    check(snapshotFile.isFile) { "The export snapshot is unavailable. Export the project again." }
+                    val json = snapshotFile.readText(Charsets.UTF_8)
+                    context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
+                        ?: error("Cannot write to the selected destination.")
+                }
+                if (uri != null) Toast.makeText(context, "Portable .hswf project exported", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) { errorMessage = e.message ?: "Export failed." }
+            finally { withContext(Dispatchers.IO) { snapshotFile.delete() } }
+        } else if (uri != null) errorMessage = "The export was interrupted. Export your project again."
+    }
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        val targetId = photoTargetId
+        photoTargetId = null
+        if (uri != null) scope.launch {
+            photoLoading = true
+            try {
+                val encoded = withContext(Dispatchers.IO) {
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+                    require(bounds.outWidth > 0 && bounds.outHeight > 0) { "Unsupported image." }
+                    var sample = 1
+                    while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 1024) sample *= 2
+                    val bitmap = if (Build.VERSION.SDK_INT >= 28) {
+                        ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri)) { decoder, info, _ ->
+                            val scale = minOf(1f, 1024f / maxOf(info.size.width, info.size.height))
+                            decoder.setTargetSize(maxOf(1, (info.size.width * scale).toInt()), maxOf(1, (info.size.height * scale).toInt()))
+                            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
                         }
+                    } else {
+                        val options = BitmapFactory.Options().apply { inSampleSize = sample }
+                        context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+                            ?: error("Could not decode the image.")
                     }
+                    try { CustomFaceStore.encodePhotoBitmap(bitmap) } finally { bitmap.recycle() }
+                }
+                if (targetId == editingPackage.id) edit(editingPackage.copy(background = editingPackage.background.copy(type = "image", imageBase64 = encoded)))
+                else errorMessage = "The photo's original project is no longer open. Select the photo again for this project."
+            } catch (e: Exception) { errorMessage = e.message ?: "Photo import failed." }
+            finally { photoLoading = false }
+        }
+    }
+    Scaffold(containerColor = BgDeep, topBar = {
+        TopAppBar(title = { Column {
+            Text("Face Studio", color = TextWhite, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+            Text("Create • refine • wear", color = TextDim, fontSize = 11.sp)
+        } }, navigationIcon = { IconButton(onClick = { leave() }) { Icon(Icons.Default.ArrowBack, "Back", tint = TextWhite) } },
+        actions = {
+            IconButton(enabled = historyRevision >= 0 && history.canUndo, onClick = { focusManager.clearFocus(); editingPackage = history.undo(); historyRevision++ }) { Icon(Icons.Default.Undo, "Undo", tint = if (history.canUndo) TextWhite else TextDim.copy(alpha = 0.4f)) }
+            IconButton(enabled = historyRevision >= 0 && history.canRedo, onClick = { focusManager.clearFocus(); editingPackage = history.redo(); historyRevision++ }) { Icon(Icons.Default.Redo, "Redo", tint = if (history.canRedo) TextWhite else TextDim.copy(alpha = 0.4f)) }
+            Box {
+                IconButton(onClick = { menuOpen = true }) { Icon(Icons.Default.MoreVert, "Project actions", tint = TextWhite) }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(text = { Text("Import .hswf project") }, onClick = {
+                        menuOpen = false; importLauncher.launch(arrayOf("application/json", "application/octet-stream", "*/*"))
+                    }, leadingIcon = { Icon(Icons.Default.FileOpen, null) })
+                    DropdownMenuItem(text = { Text("Export .hswf project") }, onClick = {
+                        menuOpen = false
+                        val errors = FaceStudioDocument.validationErrors(editingPackage)
+                        if (errors.isNotEmpty()) errorMessage = errors.joinToString("\n")
+                        else scope.launch {
+                            val snapshot = editingPackage
+                            try {
+                                val key = "studio-export-" + UUID.randomUUID() + ".json"
+                                withContext(Dispatchers.IO) {
+                                    File(context.cacheDir, key).writeText(FaceStudioDocument.exportJson(snapshot), Charsets.UTF_8)
+                                }
+                                pendingExportKey = key
+                                exportLauncher.launch(snapshot.name.replace(Regex("[^A-Za-z0-9 _-]"), "_").take(60) + ".hswf")
+                            } catch (e: Exception) { errorMessage = e.message ?: "Could not prepare export." }
+                        }
+                    }, leadingIcon = { Icon(Icons.Default.FileDownload, null) })
+                    DropdownMenuItem(text = { Text("Duplicate project") }, onClick = {
+                        menuOpen = false; edit(FaceStudioDocument.duplicate(editingPackage)); selectedLayerId = null
+                    }, leadingIcon = { Icon(Icons.Default.ContentCopy, null) })
+                }
+            }
+        }, colors = TopAppBarDefaults.topAppBarColors(containerColor = BgDeep))
+    }, bottomBar = {
+        Surface(color = BgCard, tonalElevation = 3.dp) {
+            Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(enabled = !busy, modifier = Modifier.weight(1f).height(48.dp), onClick = { scope.launch {
+                    val snapshot = editingPackage
+                    val errors = FaceStudioDocument.validationErrors(snapshot)
+                    if (errors.isNotEmpty()) { errorMessage = errors.joinToString("\n"); return@launch }
+                    val saved = withContext(Dispatchers.IO) { faceStore.saveCustomFace(snapshot) }
+                    if (saved) { onFaceSaved(snapshot); Toast.makeText(context, "Saved to My Creations", Toast.LENGTH_SHORT).show() }
+                    else errorMessage = "Could not save this project."
+                } }) { Icon(Icons.Default.Save, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Save") }
+                Button(enabled = !busy, modifier = Modifier.weight(1.4f).height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentCyan), onClick = { scope.launch {
+                    val snapshot = editingPackage
+                    val errors = FaceStudioDocument.validationErrors(snapshot)
+                    if (errors.isNotEmpty()) { errorMessage = errors.joinToString("\n"); return@launch }
+                    if (!connection.isConnected) { errorMessage = "Connect your watch from Device before sending this face."; return@launch }
+                    if (snapshot.layers.isNotEmpty() && (watchVersion == null || watchVersion!! < 34)) {
+                        errorMessage = "Update the watch to HealthSync 2.9.0 or newer to render custom text and shape layers."; return@launch
+                    }
+                    busy = true
+                    try {
+                        if (!withContext(Dispatchers.IO) { faceStore.saveCustomFace(snapshot) }) errorMessage = "Could not save the project before sending."
+                        else {
+                            onFaceSaved(snapshot)
+                            if (WatchFaceSender.sendFaceToWatch(snapshot, true)) installedName = snapshot.name
+                            else errorMessage = "The watch did not confirm installation. Check Bluetooth and retry."
+                        }
+                    } catch (e: Exception) { errorMessage = e.message ?: "Transfer failed." }
+                    finally { busy = false }
+                } }) {
+                    if (busy) CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp) else Icon(Icons.Default.SendToMobile, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp)); Text(if (busy) "Sending…" else "Send to watch")
                 }
             }
         }
-    ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues),
-            contentPadding = PaddingValues(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // ── Live Watch Preview Viewport with Simulated Case ────────────────────
-            item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(236.dp)
-                            .clip(CircleShape)
-                            .background(Color.Black)
-                            .border(6.dp, selectedCaseStyle.innerColor, CircleShape)
-                            .border(10.dp, selectedCaseStyle.outerColor, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        DynamicFacePreview(
-                            pkg = editingPackage,
-                            modifier = Modifier.fillMaxSize(),
-                            hours = tickHours,
-                            minutes = tickMinutes,
-                            seconds = tickSeconds,
-                            heartRate = if (showTestBench) testHeartRate.toInt() else -1,
-                            steps = if (showTestBench) testSteps.toInt() else -1,
-                            battery = if (showTestBench) testBattery.toInt() else -1,
-                            ambientLayout = isAmbientPreview
-                        )
-                    }
-
-                    Spacer(Modifier.height(8.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Text(
-                            text = when {
-                                isAmbientPreview -> "Ambient layout · design preview"
-                                showTestBench -> "Design preview · example values"
-                                else -> "Design preview · health fields unavailable"
-                            },
-                            color = TextDim,
-                            fontSize = 12.sp,
-                            modifier = Modifier.weight(1f),
-                            maxLines = 2
-                        )
-                        TextButton(
-                            onClick = { showTestBench = !showTestBench },
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Icon(Icons.Default.Tune, contentDescription = null, tint = AccentCyan, modifier = Modifier.size(14.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text(if (showTestBench) "Hide Test Bench" else "Test Bench", color = AccentCyan, fontSize = 12.sp)
-                        }
-                    }
-
-                    // Simulated Case Style Chips
-                    Row(
-                        modifier = Modifier.padding(top = 4.dp).horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        WatchCaseStyle.values().forEach { case ->
-                            val isSel = selectedCaseStyle == case
-                            FilterChip(
-                                selected = isSel,
-                                onClick = { selectedCaseStyle = case },
-                                label = { Text(case.label, fontSize = 11.sp) },
-                                leadingIcon = {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(case.accentColor)
-                                    )
-                                }
-                            )
-                        }
+    }) { padding ->
+        CompositionLocalProvider(LocalStudioGesture provides gesture) {
+            Column(Modifier.fillMaxSize().padding(padding)) {
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    CreatorTab.entries.forEach { tab ->
+                        FilterChip(selected = selectedTab == tab, onClick = { selectedTab = tab }, label = { Text(tab.label) },
+                            leadingIcon = { Icon(tab.icon, null, Modifier.size(16.dp)) })
                     }
                 }
-            }
-
-            // ── Interactive Simulation Test Bench (Collapsible) ───────────────────
-            if (showTestBench) {
-                item {
-                    PaddingWrapper {
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = BgCard,
-                            border = BorderStroke(1.dp, AccentCyan.copy(alpha = 0.3f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("Example values for design testing", color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text("Live Ticking", color = TextDim, fontSize = 11.sp)
-                                        Spacer(Modifier.width(6.dp))
-                                        Switch(
-                                            checked = liveTicking,
-                                            onCheckedChange = { liveTicking = it },
-                                            modifier = Modifier.height(24.dp)
-                                        )
-                                    }
-                                }
-
-                                // Battery Slider
-                                Column {
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        Text("Battery Level", color = TextDim, fontSize = 12.sp)
-                                        Text("${testBattery.toInt()}%", color = StatusSuccess, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                    Slider(
-                                        value = testBattery,
-                                        onValueChange = { testBattery = it },
-                                        valueRange = 0f..100f,
-                                        colors = SliderDefaults.colors(thumbColor = StatusSuccess, activeTrackColor = StatusSuccess)
-                                    )
-                                }
-
-                                // Steps Slider
-                                Column {
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        Text("Example step progress", color = TextDim, fontSize = 12.sp)
-                                        Text("${testSteps.toInt()} Steps", color = AccentCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                    Slider(
-                                        value = testSteps,
-                                        onValueChange = { testSteps = it },
-                                        valueRange = 0f..15000f,
-                                        colors = SliderDefaults.colors(thumbColor = AccentCyan, activeTrackColor = AccentCyan)
-                                    )
-                                }
-
-                                // Heart Rate Slider
-                                Column {
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        Text("Example heart rate (BPM)", color = TextDim, fontSize = 12.sp)
-                                        Text("${testHeartRate.toInt()} BPM", color = StatusError, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                    Slider(
-                                        value = testHeartRate,
-                                        onValueChange = { testHeartRate = it },
-                                        valueRange = 40f..180f,
-                                        colors = SliderDefaults.colors(thumbColor = StatusError, activeTrackColor = StatusError)
-                                    )
-                                }
+                val preview: @Composable () -> Unit = {
+                    Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(editingPackage.name.ifBlank { "Untitled face" }, color = TextWhite, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(draftStatus, color = TextDim, fontSize = 11.sp)
                             }
+                            AssistChip(onClick = { ambient = !ambient }, label = { Text(if (ambient) "Ambient" else "Active") },
+                                leadingIcon = { Icon(if (ambient) Icons.Default.Brightness4 else Icons.Default.Brightness7, null, Modifier.size(16.dp)) })
                         }
+                        StudioCanvas(pkg = editingPackage, selectedLayerId = selectedLayerId,
+                            onSelectLayer = { focusManager.clearFocus(); selectedLayerId = it; if (it != null) selectedTab = CreatorTab.LAYERS },
+                            onLayerChange = ::replaceLayer, onGestureStart = history::beginGesture, onGestureEnd = { history.endGesture(); historyRevision++ },
+                            showGrid = showGrid, snapToGrid = snap, isAmbient = ambient,
+                            hours = hours, minutes = minutes, seconds = seconds,
+                            batteryPct = if (sampleValues) battery else -1, steps = if (sampleValues) steps else -1, heartRate = if (sampleValues) heartRate else -1,
+                            previewShape = previewShape, modifier = Modifier.widthIn(max = 260.dp).fillMaxWidth().aspectRatio(1f))
+                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            FilterChip(showGrid, { showGrid = !showGrid }, label = { Text("Guides") })
+                            FilterChip(snap, { snap = !snap }, label = { Text("Snap") })
+                            FilterChip(previewShape == "round", { previewShape = if (previewShape == "round") "square" else "round" },
+                                label = { Text(if (previewShape == "round") "Round" else "Square") })
+                        }
+                        Text(if (sampleValues) "Example values • design simulation" else "Design preview • health data unavailable", color = TextDim, fontSize = 11.sp)
+                        if (selectedLayerId != null) Text("Drag the selected layer to position it", color = AccentCyan, fontSize = 12.sp)
                     }
                 }
-            }
-
-            // ── Dial Name Input ───────────────────────────────────────────────────
-            item {
-                PaddingWrapper {
-                    OutlinedTextField(
-                        value = faceNameInput,
-                        onValueChange = { faceNameInput = it },
-                        label = { Text("Watch Face Name", color = TextDim) },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = TextWhite,
-                            unfocusedTextColor = TextWhite,
-                            focusedBorderColor = AccentCyan,
-                            unfocusedBorderColor = BorderSubtle
-                        ),
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                }
-            }
-
-            // ── Section Tabs ──────────────────────────────────────────────────────
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    CreatorTab.values().forEach { tab ->
-                        val isSelected = selectedTab == tab
-                        Surface(
-                            onClick = { selectedTab = tab },
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isSelected) AccentCyan else BgCard,
-                            border = BorderStroke(1.dp, if (isSelected) AccentCyan else BorderSubtle)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Icon(
-                                    tab.icon,
-                                    contentDescription = null,
-                                    tint = if (isSelected) Color.White else TextWhite,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Text(
-                                    tab.label,
-                                    color = if (isSelected) Color.White else TextWhite,
-                                    fontSize = 13.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // ── Section Controls ──────────────────────────────────────────────────
-            item {
-                PaddingWrapper {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        color = BgCard,
-                        border = BorderStroke(1.dp, BorderSubtle)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            when (selectedTab) {
-                                CreatorTab.TEMPLATES -> {
-                                    TemplatesControl(
-                                        templates = templates,
-                                        onSelectTemplate = { t ->
-                                            editingPackage = t.copy(
-                                                id = "custom_${System.currentTimeMillis()}",
-                                                name = "${t.name} Custom",
-                                                author = "You"
-                                            )
-                                            faceNameInput = editingPackage.name
-                                        }
-                                    )
-                                }
+                val inspector: @Composable () -> Unit = {
+                    Surface(Modifier.fillMaxWidth().padding(12.dp), shape = RoundedCornerShape(20.dp), color = BgCard, border = BorderStroke(1.dp, BorderSubtle)) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            key(editingPackage.id, selectedTab, selectedLayerId) { when (selectedTab) {
+                                CreatorTab.PROJECT -> StudioProjectControl(editingPackage, templates, ::edit, { selectedLayerId = null; edit(FaceStudioDocument.blank(it)) })
+                                CreatorTab.LAYERS -> StudioLayersControl(editingPackage, selectedLayerId, { focusManager.clearFocus(); selectedLayerId = it }, ::edit)
                                 CreatorTab.BACKGROUND -> {
-                                    BackgroundControl(
-                                        bg = editingPackage.background,
-                                        onPickPhoto = { photoPickerLauncher.launch("image/*") },
-                                        onChange = { newBg ->
-                                            editingPackage = editingPackage.copy(background = newBg)
-                                        }
-                                    )
+                                    BackgroundControl(editingPackage.background, { if (!photoLoading) { photoTargetId = editingPackage.id; photoPicker.launch("image/*") } }) { edit(editingPackage.copy(background = it)) }
+                                    if (photoLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                                    StudioBackgroundPrecision(editingPackage.background) { edit(editingPackage.copy(background = it)) }
                                 }
                                 CreatorTab.DIAL -> {
-                                    DialControl(
-                                        dial = editingPackage.dial,
-                                        onChange = { newDial ->
-                                            editingPackage = editingPackage.copy(dial = newDial)
-                                        }
-                                    )
+                                    DialControl(editingPackage.dial) { edit(editingPackage.copy(dial = it)) }
+                                    StudioDialPrecision(editingPackage.dial) { edit(editingPackage.copy(dial = it)) }
                                 }
                                 CreatorTab.HANDS -> {
-                                    HandsControl(
-                                        hands = editingPackage.hands,
-                                        onChange = { newHands ->
-                                            editingPackage = editingPackage.copy(hands = newHands)
-                                        }
-                                    )
+                                    HandsControl(editingPackage.hands) { edit(editingPackage.copy(hands = it)) }
+                                    editingPackage.hands?.let { hands -> StudioHandsPrecision(hands) { edit(editingPackage.copy(hands = it)) } }
                                 }
                                 CreatorTab.CLOCK_DATE -> {
-                                    ClockDateControl(
-                                        clock = editingPackage.digitalClock,
-                                        date = editingPackage.date,
-                                        onClockChange = { editingPackage = editingPackage.copy(digitalClock = it) },
-                                        onDateChange = { editingPackage = editingPackage.copy(date = it) }
-                                    )
+                                    ClockDateControl(editingPackage.digitalClock, editingPackage.date, { edit(editingPackage.copy(digitalClock = it)) }, { edit(editingPackage.copy(date = it)) })
+                                    StudioClockPrecision(editingPackage, ::edit)
                                 }
                                 CreatorTab.COMPLICATIONS -> {
-                                    ComplicationsControl(
-                                        complications = editingPackage.complications,
-                                        onChange = { editingPackage = editingPackage.copy(complications = it) }
-                                    )
+                                    ComplicationsControl(editingPackage.complications) { edit(editingPackage.copy(complications = it)) }
+                                    StudioWidgetPrecision(editingPackage.complications) { edit(editingPackage.copy(complications = it)) }
                                 }
-                            }
+                                CreatorTab.EFFECTS -> StudioEffectsControl(editingPackage, ::edit)
+                                CreatorTab.AMBIENT -> StudioAmbientControl(editingPackage.aod) { edit(editingPackage.copy(aod = it)); ambient = true }
+                                CreatorTab.TEST -> StudioTestControl(editingPackage, liveTime, { liveTime = it },
+                                    hours, { hours = it }, minutes, { minutes = it }, seconds, { seconds = it },
+                                    sampleValues, { sampleValues = it }, battery, { battery = it }, steps, { steps = it }, heartRate, { heartRate = it })
+                            } }
                         }
                     }
                 }
-            }
-        }
-    }
-
-    // ── Success Dialog ────────────────────────────────────────────────────────────
-    if (showSuccessDialog) {
-        AlertDialog(
-            onDismissRequest = { showSuccessDialog = false },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = StatusSuccess)
-                    Text("Watch face installed", color = TextWhite)
-                }
-            },
-            text = {
-                Text(
-                    "Your custom watch face '${editingPackage.name}' was transferred to Kolabee U8 Ultra and activated on your wrist.",
-                    color = TextDim,
-                    fontSize = 14.sp
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = { showSuccessDialog = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentCyan)
-                ) {
-                    Text("Done", color = Color.White, fontWeight = FontWeight.Bold)
-                }
-            },
-            containerColor = BgCard
-        )
-    }
-
-    // ── Error Alert ───────────────────────────────────────────────────────────────
-    errorMessage?.let { err ->
-        AlertDialog(
-            onDismissRequest = { errorMessage = null },
-            title = { Text("Transfer Notice", color = StatusError) },
-            text = { Text(err, color = TextWhite) },
-            confirmButton = {
-                TextButton(onClick = { errorMessage = null }) {
-                    Text("OK", color = AccentCyan)
-                }
-            },
-            containerColor = BgCard
-        )
-    }
-}
-
-@Composable
-private fun PaddingWrapper(content: @Composable () -> Unit) {
-    Box(modifier = Modifier.padding(horizontal = 16.dp)) { content() }
-}
-
-// ── Control Sub-Panels ────────────────────────────────────────────────────────────
-
-@Composable
-private fun TemplatesControl(
-    templates: List<HswfPackage>,
-    onSelectTemplate: (HswfPackage) -> Unit
-) {
-    Text("Starting Presets", color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-    Text("Choose a foundation to kickstart your personalized design:", color = TextDim, fontSize = 13.sp)
-
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        templates.forEach { tmpl ->
-            Surface(
-                onClick = { onSelectTemplate(tmpl) },
-                shape = RoundedCornerShape(12.dp),
-                color = BgDeep,
-                border = BorderStroke(1.dp, BorderSubtle),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(54.dp)
-                            .clip(CircleShape)
-                            .border(1.dp, AccentCyan.copy(alpha = 0.5f), CircleShape)
-                    ) {
-                        DynamicFacePreview(pkg = tmpl, modifier = Modifier.fillMaxSize())
+                BoxWithConstraints(Modifier.weight(1f)) {
+                    if (maxWidth >= 720.dp) Row(Modifier.fillMaxSize()) {
+                        Box(Modifier.weight(1f)) { preview() }; LazyColumn(Modifier.weight(1f).fillMaxHeight()) { item { inspector() } }
+                    } else if (maxHeight >= 560.dp) Column(Modifier.fillMaxSize()) {
+                        preview()
+                        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 12.dp)) { item { inspector() } }
+                    } else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 12.dp)) {
+                        item { preview() }; item { inspector() }
                     }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(tmpl.name, color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        Text(tmpl.description, color = TextDim, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    }
-                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = AccentCyan)
                 }
             }
         }
     }
+    errorMessage?.let { message -> AlertDialog(onDismissRequest = { errorMessage = null }, title = { Text("Studio notice") }, text = { Text(message) },
+        confirmButton = { TextButton(onClick = { errorMessage = null }) { Text("OK") } }) }
+    installedName?.let { name -> AlertDialog(onDismissRequest = { installedName = null }, title = { Text("Watch face installed") },
+        text = { Text("'" + name + "' was confirmed by your watch and activated.") },
+        confirmButton = { TextButton(onClick = { installedName = null }) { Text("Done") } }) }
 }
 
+private fun java.io.InputStream.readBytesBounded(limit: Int): ByteArray {
+    val output = java.io.ByteArrayOutputStream()
+    val buffer = ByteArray(8192)
+    while (true) {
+        val count = read(buffer)
+        if (count < 0) break
+        require(output.size() + count <= limit) { "Project exceeds the 512 KB import limit." }
+        output.write(buffer, 0, count)
+    }
+    return output.toByteArray()
+}
 @Composable
 private fun BackgroundControl(
     bg: BackgroundConfig,
@@ -749,8 +463,8 @@ private fun DialControl(
 
     // Tick Count
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-        Text("Dial Ticks", color = TextWhite, fontSize = 14.sp)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Dial Ticks", color = TextWhite, fontSize = 14.sp, modifier = Modifier.weight(1f))
+        Row(modifier = Modifier.weight(2.5f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf(0 to "None", 12 to "12 Hours", 60 to "60 Mins").forEach { (count, label) ->
                 FilterChip(
                     selected = if (count == 0) !dial.showTicks else (dial.showTicks && dial.tickCount == count),
@@ -925,7 +639,7 @@ private fun ClockDateControl(
 
         // Font Family
         Text("Digital Typography Style:", color = TextDim, fontSize = 12.sp)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("monospace" to "Tech Monospace", "sans" to "Modern Sans", "serif" to "Luxury Serif").forEach { (font, label) ->
                 FilterChip(
                     selected = clock.fontFamily == font,
@@ -990,7 +704,7 @@ private fun ComplicationsControl(
             )
         }
         if (complications.heartRate.enabled) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf("arc_gauge" to "Arc Gauge", "subdial" to "Subdial", "text_only" to "Text Only").forEach { (st, label) ->
                     FilterChip(
                         selected = complications.heartRate.style == st,
@@ -1019,7 +733,7 @@ private fun ComplicationsControl(
             )
         }
         if (complications.steps.enabled) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf("arc_gauge" to "Arc Gauge", "subdial" to "Subdial", "text_only" to "Text Only").forEach { (st, label) ->
                     FilterChip(
                         selected = complications.steps.style == st,

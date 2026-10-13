@@ -88,6 +88,15 @@ class DynamicWatchFaceView @JvmOverloads constructor(
         style = Paint.Style.FILL
     }
     private val animPath = Path()
+    private val customLayerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textAlign = Paint.Align.CENTER
+        strokeCap = Paint.Cap.ROUND
+    }
+    private val customLayerBounds = RectF()
+    private val ambientBackgroundPaint = Paint()
+    private val ambientForegroundPaint = Paint()
+    private var cachedMonochromeColor: Int? = null
+    private var cachedMonochromeFilter: ColorMatrixColorFilter? = null
 
     // Animation & Interactive states
     private var animProgress = 0f
@@ -111,7 +120,8 @@ class DynamicWatchFaceView @JvmOverloads constructor(
 
     /** Loads and activates a dynamic watch face schema. */
     fun loadFace(pkg: HswfPackage) {
-        activePackage = pkg
+        val normalizedPackage = pkg.normalized()
+        activePackage = normalizedPackage
         cachedBgBitmap?.recycle()
         cachedBgBitmap = null
         animProgress = 0f
@@ -121,11 +131,18 @@ class DynamicWatchFaceView @JvmOverloads constructor(
         rippleAlpha = 0
 
         // Decode background image if supplied
-        val b64 = pkg.background.imageBase64
-        if (!b64.isNullOrBlank()) {
+        val b64 = normalizedPackage.background.imageBase64
+        if (!b64.isNullOrBlank() && b64.length <= 16 * 1024 * 1024) {
             try {
                 val bytes = Base64.decode(b64, Base64.DEFAULT)
-                cachedBgBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                if (bounds.outWidth > 0 && bounds.outHeight > 0) {
+                    var sample = 1
+                    while (max(bounds.outWidth, bounds.outHeight) / sample > 1024) sample *= 2
+                    val options = BitmapFactory.Options().apply { inSampleSize = sample }
+                    cachedBgBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+                }
             } catch (_: Exception) {}
         }
         invalidate()
@@ -177,6 +194,7 @@ class DynamicWatchFaceView @JvmOverloads constructor(
 
     fun setAmbientMode(ambient: Boolean) {
         isAmbient = ambient
+        if (ambient) rippleAlpha = 0
         invalidate()
     }
 
@@ -216,39 +234,75 @@ class DynamicWatchFaceView @JvmOverloads constructor(
         val cx = w / 2f
         val cy = h / 2f
         val radius = min(cx, cy)
-        val density = resources.displayMetrics.density
+        // Declarative dimensions use the same 320-unit design space as the studio preview.
+        val density = min(w, h) / 320f
 
-        // 1. Draw Background
+        // Compose ambient colors over black so reduced alpha also reduces screen brightness.
+        if (isAmbient) canvas.drawColor(Color.BLACK)
+        val backgroundCheckpoint = if (isAmbient && !pkg.aod.hideBackground) {
+            ambientBackgroundPaint.alpha = (ambientBrightness(pkg) * 255).roundToInt()
+            canvas.saveLayer(0f, 0f, w, h, ambientBackgroundPaint)
+        } else null
         drawBackground(canvas, pkg.background, w, h, cx, cy, radius)
+        backgroundCheckpoint?.let { canvas.restoreToCount(it) }
 
-        // 2. Draw Animation Layer (Dynamic effects)
+        val foregroundCheckpoint = if (isAmbient) {
+            ambientForegroundPaint.alpha = (ambientBrightness(pkg) * 255).roundToInt()
+            ambientForegroundPaint.colorFilter = if (pkg.aod.mode == "monochrome") {
+                monochromeFilter(parseHex(pkg.aod.monochromeHex, Color.WHITE))
+            } else null
+            canvas.saveLayer(0f, 0f, w, h, ambientForegroundPaint)
+        } else canvas.save()
+        try {
+            if (isAmbient && pkg.aod.mode == "digital_minimal") {
+                val clock = pkg.digitalClock?.takeIf { it.enabled } ?: DigitalClockConfig(
+                    xRatio = 0.5f, yRatio = 0.5f, fontSizeSp = 44f,
+                    fontFamily = "sans", isBold = false
+                )
+                drawDigitalClock(canvas, clock.copy(format = if (clock.format == "HH:mm:ss") "HH:mm" else clock.format), w, h, density)
+            } else {
+                drawStandardLayers(canvas, pkg, w, h, cx, cy, radius, density)
+            }
+        } finally {
+            canvas.restoreToCount(foregroundCheckpoint)
+        }
+
+        // User artwork remains above every standard element and honors its own AOD visibility.
+        drawCustomLayers(canvas, pkg.layers, w, h)
+
+        if (!isAmbient && rippleAlpha > 0) drawRipple(canvas, density)
+        if (hasAnimation || (!isAmbient && rippleAlpha > 0)) postInvalidateOnAnimation()
+    }
+
+    private fun ambientBrightness(pkg: HswfPackage): Float =
+        pkg.aod.maxBrightnessFactor.let { if (it.isFinite()) it.coerceIn(0f, 1f) else 0.6f }
+
+    private fun monochromeFilter(color: Int): ColorMatrixColorFilter {
+        if (cachedMonochromeColor != color || cachedMonochromeFilter == null) {
+            cachedMonochromeColor = color
+            cachedMonochromeFilter = ColorMatrixColorFilter(floatArrayOf(
+                0f, 0f, 0f, 0f, Color.red(color).toFloat(),
+                0f, 0f, 0f, 0f, Color.green(color).toFloat(),
+                0f, 0f, 0f, 0f, Color.blue(color).toFloat(),
+                0f, 0f, 0f, 1f, 0f
+            ))
+        }
+        return requireNotNull(cachedMonochromeFilter)
+    }
+
+    private fun drawStandardLayers(
+        canvas: Canvas, pkg: HswfPackage, w: Float, h: Float,
+        cx: Float, cy: Float, radius: Float, density: Float
+    ) {
         pkg.animation?.let { if (it.type != "none") drawAnimationLayer(canvas, it, w, h, cx, cy, radius, density) }
 
-        // 3. Draw Dial Ticks & Numbers
         drawDial(canvas, pkg.dial, cx, cy, radius, density)
-
-        // 4. Draw Digital Clock (if configured)
         pkg.digitalClock?.let { if (it.enabled) drawDigitalClock(canvas, it, w, h, density) }
-
-        // 5. Draw Date Window (if configured)
         pkg.date?.let { if (it.enabled) drawDate(canvas, it, w, h, density) }
-
-        // 6. Draw Complications (hidden in minimal glance mode)
-        if (!isMinimalMode) {
+        if (!isMinimalMode && !(isAmbient && pkg.aod.hideComplications)) {
             drawComplications(canvas, pkg.complications, w, h, radius, density)
         }
-
-        // 7. Draw Analog Hands (if configured)
         pkg.hands?.let { drawHands(canvas, it, cx, cy, radius, density) }
-
-        // 8. Draw Touch Ripple Layer
-        if (rippleAlpha > 0) {
-            drawRipple(canvas, density)
-        }
-
-        if (hasAnimation || rippleAlpha > 0) {
-            postInvalidateOnAnimation()
-        }
     }
 
     private fun drawBackground(
@@ -260,6 +314,9 @@ class DynamicWatchFaceView @JvmOverloads constructor(
         cy: Float,
         radius: Float
     ) {
+        // A gradient shader from a previous frame must never tint an image or its overlay.
+        bgPaint.shader = null
+        bgPaint.alpha = 255
         if (isAmbient && activePackage?.aod?.hideBackground == true) {
             canvas.drawColor(Color.BLACK)
             return
@@ -270,6 +327,10 @@ class DynamicWatchFaceView @JvmOverloads constructor(
                 val bmp = cachedBgBitmap
                 if (bmp != null) {
                     canvas.drawBitmap(bmp, null, RectF(0f, 0f, w, h), bgPaint)
+                    bgPaint.color = Color.BLACK
+                    bgPaint.alpha = (bg.imageDimAmount.coerceIn(0f, 1f) * 255).roundToInt()
+                    canvas.drawRect(0f, 0f, w, h, bgPaint)
+                    bgPaint.alpha = 255
                 } else {
                     bgPaint.shader = null
                     bgPaint.color = parseHex(bg.colorHex, 0xFF0A0D12.toInt())
@@ -299,6 +360,59 @@ class DynamicWatchFaceView @JvmOverloads constructor(
         }
     }
 
+    private fun drawCustomLayers(canvas: Canvas, layers: List<FaceLayer>, w: Float, h: Float) {
+        val designScale = min(w, h) / 320f
+        val ambientMode = activePackage?.aod?.mode ?: "match_dim"
+        val ambientDim = if (isAmbient) activePackage?.let { ambientBrightness(it) } ?: 0.6f else 1f
+        for (layer in layers) {
+            if (!layer.visible || layer.opacity <= 0f || (isAmbient && !layer.showInAmbient)) continue
+            val x = layer.xRatio * w
+            val y = layer.yRatio * h
+            val layerWidth = layer.widthRatio * w
+            val layerHeight = layer.heightRatio * h
+            val sourceColor = parseHex(layer.colorHex, Color.WHITE)
+            val displayColor = if (isAmbient && ambientMode == "monochrome") {
+                parseHex(activePackage?.aod?.monochromeHex, Color.WHITE)
+            } else sourceColor
+            customLayerPaint.color = displayColor
+            customLayerPaint.alpha = (Color.alpha(sourceColor) * layer.opacity * ambientDim).roundToInt().coerceIn(0, 255)
+            customLayerPaint.style = Paint.Style.FILL
+            customLayerPaint.shader = null
+            customLayerPaint.clearShadowLayer()
+            customLayerBounds.set(-layerWidth / 2f, -layerHeight / 2f, layerWidth / 2f, layerHeight / 2f)
+            val checkpoint = canvas.save()
+            try {
+                canvas.translate(x, y)
+                canvas.rotate(layer.rotationDegrees)
+                when (layer.type) {
+                    "rectangle" -> {
+                        val corner = min(layer.cornerRadiusDp * designScale, min(layerWidth, layerHeight) / 2f)
+                        canvas.drawRoundRect(customLayerBounds, corner, corner, customLayerPaint)
+                    }
+                    "circle" -> canvas.drawOval(customLayerBounds, customLayerPaint)
+                    "line" -> {
+                        customLayerPaint.strokeWidth = layerHeight
+                        customLayerPaint.strokeCap = Paint.Cap.ROUND
+                        canvas.drawLine(-layerWidth / 2f, 0f, layerWidth / 2f, 0f, customLayerPaint)
+                    }
+                    "text" -> {
+                        customLayerPaint.textSize = layer.fontSizeSp * designScale
+                        val family = when (layer.fontFamily) {
+                            "monospace" -> Typeface.MONOSPACE
+                            "serif" -> Typeface.SERIF
+                            else -> Typeface.SANS_SERIF
+                        }
+                        customLayerPaint.typeface = Typeface.create(family, if (layer.isBold) Typeface.BOLD else Typeface.NORMAL)
+                        val baseline = -(customLayerPaint.ascent() + customLayerPaint.descent()) / 2f
+                        canvas.drawText(layer.text, 0f, baseline, customLayerPaint)
+                    }
+                }
+            } finally {
+                canvas.restoreToCount(checkpoint)
+            }
+        }
+    }
+
     private fun drawDial(
         canvas: Canvas,
         dial: DialConfig,
@@ -311,12 +425,12 @@ class DynamicWatchFaceView @JvmOverloads constructor(
 
         // Ticks
         if (dial.showTicks) {
-            val count = if (isAmbient && activePackage?.aod?.hideMinorTicks == true) 12 else dial.tickCount
+            val count = if (isAmbient && activePackage?.aod?.hideMinorTicks == true) 12 else dial.tickCount.coerceIn(12, 360)
             val majorColor = parseHex(dial.majorTickColorHex, 0xFF00E5FF.toInt())
             val minorColor = if (isAmbient) 0xFF334155.toInt() else parseHex(dial.minorTickColorHex, 0xFF334155.toInt())
 
             for (i in 0 until count) {
-                val isMajor = (i % (count / 12)) == 0
+                val isMajor = (i % (count / 12).coerceAtLeast(1)) == 0
                 val angleDeg = (i * 360f / count) - 90f
                 val angleRad = Math.toRadians(angleDeg.toDouble())
 
@@ -381,11 +495,12 @@ class DynamicWatchFaceView @JvmOverloads constructor(
         val x = w * cfg.xRatio
         val y = h * cfg.yRatio
 
-        val timeStr = when (cfg.format) {
-            "hh:mm a" -> SimpleDateFormat("h:mm a", Locale.getDefault()).format(timeCal.time)
-            "HH:mm:ss" -> String.format(Locale.getDefault(), "%02d:%02d:%02d", (hours % 12).let { if (it == 0) 12 else it }, minutes, seconds)
-            else -> String.format(Locale.getDefault(), "%02d:%02d", (hours % 12).let { if (it == 0) 12 else it }, minutes)
+        val format = when (cfg.format) {
+            "hh:mm a" -> "hh:mm a"
+            "HH:mm:ss" -> "HH:mm:ss"
+            else -> "HH:mm"
         }
+        val timeStr = SimpleDateFormat(format, Locale.getDefault()).format(timeCal.time)
 
         digitalClockPaint.textSize = cfg.fontSizeSp * density
         digitalClockPaint.color = parseHex(cfg.colorHex, Color.WHITE)
@@ -708,16 +823,17 @@ class DynamicWatchFaceView @JvmOverloads constructor(
         val animColor = parseHex(activeHex ?: anim.colorHex, Color.CYAN)
         val animX = w * anim.xRatio
         val animY = h * anim.yRatio
-        val scale = anim.scaleRatio.coerceIn(0.2f, 2.5f)
+        val scale = anim.scaleRatio.coerceIn(0.1f, 3f)
 
         when (anim.type) {
             "pulse_ecg" -> drawEcgWave(canvas, animX, animY, radius * 0.95f * scale, animColor, density)
-            "radar_sweep" -> drawRadarSweep(canvas, cx, cy, radius * 0.88f * scale, animColor, density)
+            "radar_sweep" -> drawRadarSweep(canvas, animX, animY, radius * 0.88f * scale, animColor, density)
             "equalizer_bars" -> drawEqualizerBars(canvas, animX, animY, radius * 0.75f * scale, animColor, density)
-            "liquid_wave" -> drawLiquidWave(canvas, cx, cy, radius * 0.85f * scale, animColor, density)
+            "liquid_wave" -> drawLiquidWave(canvas, animX, animY, radius * 0.85f * scale, animColor, density)
             "tourbillon_spin" -> drawTourbillon(canvas, animX, animY, radius * 0.35f * scale, animColor, density)
-            "orbital_space" -> drawOrbitalSpace(canvas, cx, cy, radius * 0.8f * scale, animColor, density)
-            "aurora_shimmer" -> drawAuroraShimmer(canvas, cx, cy, radius * 0.9f * scale, animColor, density)
+            "orbital_space" -> drawOrbitalSpace(canvas, animX, animY, radius * 0.8f * scale, animColor, density)
+            "aurora_shimmer" -> drawAuroraShimmer(canvas, animX, animY, radius * 0.9f * scale, animColor, density)
+            "zen_ripple" -> drawZenRipple(canvas, animX, animY, radius * 0.85f * scale, animColor, density)
         }
     }
 
@@ -907,6 +1023,22 @@ class DynamicWatchFaceView @JvmOverloads constructor(
         canvas.drawCircle(rippleX, rippleY, rippleRadius, animStrokePaint)
         rippleRadius += 4.5f * density
         rippleAlpha = (rippleAlpha - 14).coerceAtLeast(0)
+    }
+
+    /** Three staggered waves repeat every 2.4 seconds at the configured animation speed. */
+    private fun drawZenRipple(canvas: Canvas, x: Float, y: Float, maxRadius: Float, color: Int, density: Float) {
+        val rgb = color and 0x00FFFFFF
+        val sourceAlpha = Color.alpha(color)
+        animStrokePaint.strokeWidth = 1.8f * density
+        for (ring in 0 until 3) {
+            val phase = (animProgress / 2.4f + ring / 3f) % 1f
+            val fade = 1f - phase
+            val alpha = (sourceAlpha * 0.65f * fade * fade).roundToInt().coerceIn(0, 255)
+            animStrokePaint.color = rgb or (alpha shl 24)
+            canvas.drawCircle(x, y, maxRadius * (0.08f + phase * 0.92f), animStrokePaint)
+        }
+        animFillPaint.color = rgb or ((sourceAlpha * 0.55f).roundToInt().coerceIn(0, 255) shl 24)
+        canvas.drawCircle(x, y, 2f * density, animFillPaint)
     }
 
     private fun parseHex(hex: String?, fallback: Int): Int {

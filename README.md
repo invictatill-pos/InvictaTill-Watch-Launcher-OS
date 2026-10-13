@@ -1,13 +1,13 @@
-# HealthSync 2.7.1
+# HealthSync 2.9.0
 
-HealthSync is an Android watch launcher and Android phone companion with real sensor capture, local workout history, Bluetooth sync, notifications, calls, watch faces, and watch utilities. The 12 October 2026 sensor update retries compatible HR/oxygen sensors, imports timestamped readings shared by installed watch health apps, displays unverified sensor feedback separately, and improves workout GPS fallback/recovery.
+HealthSync is an Android watch launcher and Android phone companion with sensor capture, local workout history, Bluetooth sync, notifications, calls, watch faces, and watch utilities. The 13 October 2026 Face Studio update adds blank projects, custom text and shape layers, direct canvas editing, precise styling, undo/redo, draft recovery, portable project import/export, ambient controls, and design testing. See the [Face Studio guide](docs/FACE-STUDIO.md).
 
 ## Install or update
 
 | Device | APK | Android version | Build code |
 | --- | --- | --- | --- |
-| Watch | [HealthSync-Watch.apk](dist/HealthSync-Watch.apk) | Android 6 / API 23 or newer | 27 |
-| Phone | [HealthSync-Phone.apk](dist/HealthSync-Phone.apk) | Android 8 / API 26 or newer | 21 |
+| Watch | [HealthSync-Watch.apk](dist/HealthSync-Watch.apk) | Android 6 / API 23 or newer | 34 |
+| Phone | [HealthSync-Phone.apk](dist/HealthSync-Phone.apk) | Android 8 / API 26 or newer | 28 |
 
 Install both apps over the existing packages. The apps retain the existing development signing certificate. The phone APK is an optimized release build; the watch APK retains the compatible v1/v2-signed debug format used by earlier watch deliveries. The [installation guide](dist/ANDROID8-INSTALL.md) explains Bluetooth pairing, permissions, updates, and Home recovery. Published APKs are available in [GitHub Releases](https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases).
 
@@ -58,7 +58,7 @@ Use JDK 17 or newer and Android SDK platform/build-tools 34. Set `sdk.dir` in lo
 ```powershell
 .\gradlew.bat :PhoneApp:app:testDebugUnitTest :WatchApp:app:testDebugUnitTest :PhoneApp:app:lintDebug :WatchApp:app:lintDebug
 .\gradlew.bat :PhoneApp:app:assembleRelease :WatchApp:app:assembleDebug
-.\tools\update_dist.ps1 -WatchVersion 2.7.1 -PhoneVersion 2.7.1
+.\tools\update_dist.ps1 -WatchVersion 2.9.0 -PhoneVersion 2.9.0
 ```
 
-The [2.7.1 build report](dist/BUILD-REPORT-Android8-2.7.1.md) records actual validation. No physical watch or phone was connected during this update. Automated tests and static checks do not establish physical sensor accuracy, stock-app export compatibility, GPS reception, overnight battery use, circular-display fit, call audio, or OEM permission behavior; these require the device checks in the health and communication guides.
+The [2.9.0 build report](dist/BUILD-REPORT-Android8-2.9.0.md) records validation. No physical watch or phone was connected during this update. Automated tests and static checks do not establish physical sensor accuracy, GPS reception, overnight battery use, circular-display fit, call audio, or OEM permission behavior; these require device checks.

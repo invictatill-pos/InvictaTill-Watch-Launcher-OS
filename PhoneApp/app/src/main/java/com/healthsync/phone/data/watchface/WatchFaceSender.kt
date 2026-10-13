@@ -14,6 +14,9 @@ internal fun faceAcknowledgementMatches(faceId: String, requestId: String, watch
     acknowledgement != null && acknowledgement.id == faceId &&
         (acknowledgement.requestId == requestId || watchCode != null && watchCode in 1..25 && acknowledgement.requestId.isNullOrBlank())
 
+internal fun watchSupportsStudioLayers(pkg: HswfPackage, watchCode: Int?): Boolean =
+    pkg.layers.isEmpty() || watchCode != null && watchCode >= 34
+
 /**
  * Handles serializing and transmitting .hswf dynamic watch faces
  * to the connected smartwatch over Bluetooth RFCOMM.
@@ -25,6 +28,7 @@ object WatchFaceSender {
     suspend fun sendFaceToWatch(pkg: HswfPackage, setActive: Boolean = true): Boolean = transferMutex.withLock {
         val requestId = UUID.randomUUID().toString()
         val watchCode = BluetoothSyncService.connectedWatchVersionCode.value
+        if (FaceStudioDocument.validationErrors(pkg).isNotEmpty() || !watchSupportsStudioLayers(pkg, watchCode)) return@withLock false
         val json = gson.toJson(pkg)
         val payload = WatchFaceInstallPayload(
             id = pkg.id,

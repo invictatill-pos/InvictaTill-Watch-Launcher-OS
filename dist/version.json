@@ -1,18 +1,18 @@
 {
-    "phone":  {
-                  "versionCode":  27,
-                  "versionName":  "2.8.5",
-                  "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.8.5/HealthSync-Phone.apk",
-                  "changelog":  "v2.8.5: Fixed Heart Rate sync from watch, normalized uncalibrated sensor HAL accuracy, live HR dashboard card display, and offline batch sync safeguards.",
-                  "forceUpdate":  false,
-                  "sha256":  "fba3897d7391ace5c6e89199ecced4495f9404cf3badadf2647af82dc37b3632"
-              },
-    "watch":  {
-                  "versionCode":  33,
-                  "versionName":  "2.8.5",
-                  "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.8.5/HealthSync-Watch.apk",
-                  "changelog":  "v2.8.5: Normalized optical sensor HAL accuracy for Kolabee U8 Ultra, fixed live Heart Rate transmission to phone, and verified SQLite offline storage.",
-                  "forceUpdate":  false,
-                  "sha256":  "7d66bebc8cacee9743e0978f863dcb917197fc9bdb46c6e9a626bed78addf5ec"
-              }
+  "phone": {
+    "versionCode": 28,
+    "versionName": "2.9.0",
+    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.9.0/HealthSync-Phone.apk",
+    "changelog": "v2.9.0: Professional Face Studio with blank projects, editable text and shape layers, canvas selection and dragging, precision controls, undo/redo, project draft recovery, portable .hswf import/export, eight animations, ambient styling, simulation testing, and improved creation library.",
+    "forceUpdate": false,
+    "sha256": "63757166a3330fb24780a01bb66f057bc97d3e367aa2bc5afe1dfa1108c587ae"
+  },
+  "watch": {
+    "versionCode": 34,
+    "versionName": "2.9.0",
+    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.9.0/HealthSync-Watch.apk",
+    "changelog": "v2.9.0: Custom text and shape layer rendering in the shared 320-unit design space, photo dimming, complete ambient modes, eight configurable animations, bounded image decoding, and corrected 24-hour digital time.",
+    "forceUpdate": false,
+    "sha256": "8eb75b286d98e8b2e2caf20efd2148e8a797971a623d51062ddb04aa1661c00d"
+  }
 }

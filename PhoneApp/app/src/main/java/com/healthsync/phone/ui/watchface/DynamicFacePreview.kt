@@ -10,22 +10,26 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.healthsync.phone.data.watchface.*
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.math.*
@@ -44,34 +48,53 @@ fun DynamicFacePreview(
     steps: Int = -1,
     stepGoal: Int = 10000,
     battery: Int = -1,
-    ambientLayout: Boolean = false
+    ambientLayout: Boolean = false,
+    roundPreview: Boolean = true
 ) {
     val cachedImage = remember(pkg.background.imageBase64) {
         val b64 = pkg.background.imageBase64
-        if (!b64.isNullOrBlank()) {
+        if (!b64.isNullOrBlank() && b64.length <= 16 * 1024 * 1024) {
             try {
                 val bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
-                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                if (bounds.outWidth > 0 && bounds.outHeight > 0) {
+                    var sample = 1
+                    while (max(bounds.outWidth, bounds.outHeight) / sample > 1024) sample *= 2
+                    val options = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
+                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.asImageBitmap()
+                } else null
             } catch (_: Exception) { null }
         } else null
     }
 
-    val infiniteTransition = rememberInfiniteTransition(label = "face_anim")
-    val animProgress by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2400, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "progress"
-    )
+    val animProgress = if (!ambientLayout && pkg.animation?.type?.let { it != "none" } == true) {
+        val infiniteTransition = rememberInfiniteTransition(label = "face_anim")
+        val speed = pkg.animation?.speedRatio?.takeIf { it.isFinite() && it > 0f } ?: 1f
+        val progress by infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween((2400f / speed.coerceIn(.1f, 5f)).toInt(), easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "progress"
+        )
+        progress
+    } else 0f
 
+    val previewShape = if (roundPreview) CircleShape else RectangleShape
+    val sampleDate = remember(hours, minutes, seconds) {
+        Calendar.getInstance().apply {
+            clear()
+            set(2026, Calendar.OCTOBER, 13, hours.coerceIn(0, 23), minutes.coerceIn(0, 59), seconds.coerceIn(0, 59))
+        }.time
+    }
     Box(
         modifier = modifier
             .aspectRatio(1f)
-            .clip(CircleShape)
-            .border(2.dp, Color(0xFF1E293B), CircleShape)
+            .clip(previewShape)
+            .border(2.dp, Color(0xFF1E293B), previewShape)
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val w = size.width
@@ -81,38 +104,77 @@ fun DynamicFacePreview(
             val cx = w / 2f
             val cy = h / 2f
             val radius = min(cx, cy)
-            val density = radius / 150f // normalize to watch scale
+            val density = min(w, h) / 320f // shared 320-unit design space, independent of phone density
 
-            // 1. Draw Background
-            if (ambientLayout && pkg.aod.hideBackground) drawRect(Color.Black)
-            else drawBackgroundLayer(pkg.background, cachedImage, cx, cy, radius, w, h)
-
-            // 2. Draw Animation Layer (Dynamic effects)
-            pkg.animation?.let {
-                if (!ambientLayout && it.type != "none") {
-                    drawAnimationLayer(it, w, h, cx, cy, radius, animProgress, density)
+            // Background brightness follows AOD, while keeping photo/gradient contrast.
+            if (ambientLayout) drawRect(Color.Black)
+            if (!ambientLayout || !pkg.aod.hideBackground) {
+                withAmbientStyle(ambientLayout, pkg.aod, monochrome = false) {
+                    drawBackgroundLayer(pkg.background, cachedImage, cx, cy, radius, w, h)
                 }
             }
 
-            // 3. Draw Dial Ticks & Numbers
-            val previewDial = if (ambientLayout && pkg.aod.hideMinorTicks) pkg.dial.copy(tickCount = 12) else pkg.dial
-            drawDialLayer(previewDial, cx, cy, radius, density)
-
-            // 3. Draw Digital Clock (if enabled)
-            pkg.digitalClock?.let { if (it.enabled) drawDigitalClock(it, w, h, hours, minutes, seconds, density) }
-
-            // 4. Draw Date Window (if enabled)
-            pkg.date?.let { if (it.enabled) drawDateWindow(if (ambientLayout) it.copy(hasFrame = false) else it, w, h, density) }
-
-            // 5. Draw Complications
-            drawComplicationsLayer(pkg.complications, w, h, radius, heartRate, steps, stepGoal, battery, density)
-
-            // 6. Draw Analog Hands (if configured)
-            pkg.hands?.let {
-                val previewHands = if (ambientLayout && pkg.aod.hideSecondsHand) it.copy(secondHand = null) else it
-                drawHandsLayer(previewHands, cx, cy, radius, hours, minutes, seconds, density)
+            withAmbientStyle(ambientLayout, pkg.aod) {
+                if (ambientLayout && pkg.aod.mode == "digital_minimal") {
+                    val configuredClock = pkg.digitalClock?.takeIf { it.enabled }
+                    val minimalClock = configuredClock?.copy(
+                        format = if (configuredClock.format == "HH:mm:ss") "HH:mm" else configuredClock.format
+                    ) ?: DigitalClockConfig(
+                        xRatio = .5f,
+                        yRatio = .5f,
+                        fontSizeSp = 44f,
+                        fontFamily = "sans",
+                        isBold = false
+                    )
+                    drawDigitalClock(minimalClock, w, h, sampleDate, density)
+                } else {
+                    pkg.animation?.let {
+                        if (!ambientLayout && it.type != "none") {
+                            drawAnimationLayer(it, w, h, radius, animProgress, density)
+                        }
+                    }
+                    val previewDial = if (ambientLayout && pkg.aod.hideMinorTicks) pkg.dial.copy(tickCount = 12) else pkg.dial
+                    drawDialLayer(previewDial, cx, cy, radius, density)
+                    pkg.digitalClock?.let { if (it.enabled) drawDigitalClock(it, w, h, sampleDate, density) }
+                    pkg.date?.let { if (it.enabled) drawDateWindow(if (ambientLayout) it.copy(hasFrame = false) else it, w, h, sampleDate, density) }
+                    if (!ambientLayout || !pkg.aod.hideComplications) {
+                        drawComplicationsLayer(pkg.complications, w, h, radius, heartRate, steps, stepGoal, battery, density)
+                    }
+                    pkg.hands?.let {
+                        val previewHands = if (ambientLayout && pkg.aod.hideSecondsHand) it.copy(secondHand = null) else it
+                        drawHandsLayer(previewHands, cx, cy, radius, hours, minutes, seconds, density)
+                    }
+                }
             }
+
+            // Custom design layers use a fixed 320-unit design space on every display.
+            drawCustomFaceLayers(pkg.layers, w, h, ambientLayout, pkg.aod)
         }
+    }
+}
+
+/** Apply ambient brightness/tint once to the completed standard-element layer. */
+private fun DrawScope.withAmbientStyle(
+    ambient: Boolean,
+    aod: AodConfig,
+    monochrome: Boolean = true,
+    drawContent: DrawScope.() -> Unit
+) {
+    if (!ambient) {
+        drawContent()
+        return
+    }
+    val layerPaint = androidx.compose.ui.graphics.Paint().apply {
+        alpha = aod.maxBrightnessFactor.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: .6f
+        if (monochrome && aod.mode == "monochrome") {
+            colorFilter = ColorFilter.tint(parseColor(aod.monochromeHex, Color.White).copy(alpha = 1f), BlendMode.SrcIn)
+        }
+    }
+    drawContext.canvas.saveLayer(Rect(Offset.Zero, size), layerPaint)
+    try {
+        drawContent()
+    } finally {
+        drawContext.canvas.restore()
     }
 }
 
@@ -132,6 +194,7 @@ private fun DrawScope.drawBackgroundLayer(
                     image = cachedImage,
                     dstSize = IntSize(w.toInt(), h.toInt())
                 )
+                drawRect(Color.Black.copy(alpha = bg.imageDimAmount.coerceIn(0f, 1f)))
             } else {
                 val color = parseColor(bg.colorHex, Color(0xFF0A0D12))
                 drawRect(color = color, size = size)
@@ -140,11 +203,7 @@ private fun DrawScope.drawBackgroundLayer(
         "gradient_radial" -> {
             val start = parseColor(bg.gradientStartHex ?: bg.colorHex, Color(0xFF101622))
             val end = parseColor(bg.gradientEndHex ?: "#000000", Color.Black)
-            drawCircle(
-                brush = Brush.radialGradient(listOf(start, end), center = Offset(cx, cy), radius = radius),
-                radius = radius,
-                center = Offset(cx, cy)
-            )
+            drawRect(brush = Brush.radialGradient(listOf(start, end), center = Offset(cx, cy), radius = radius))
         }
         "gradient_linear" -> {
             val start = parseColor(bg.gradientStartHex ?: bg.colorHex, Color(0xFF101622))
@@ -194,7 +253,7 @@ private fun DrawScope.drawDialLayer(
     }
 
     if (dial.showNumbers) {
-        val numRadius = dialR - (dial.majorTickLength + 12f) * density
+        val numRadius = dialR - (dial.majorTickLength + 14f) * density
         val numColor = parseColor(dial.numberColorHex, Color.White).toArgb()
 
         drawIntoCanvas { canvas ->
@@ -234,18 +293,12 @@ private fun DrawScope.drawDigitalClock(
     cfg: DigitalClockConfig,
     w: Float,
     h: Float,
-    hours: Int,
-    minutes: Int,
-    seconds: Int,
+    sampleDate: Date,
     density: Float
 ) {
     val x = w * cfg.xRatio
     val y = h * cfg.yRatio
-    val timeStr = when (cfg.format) {
-        "HH:mm:ss" -> String.format(Locale.getDefault(), "%02d:%02d:%02d", hours, minutes, seconds)
-        "hh:mm a" -> String.format(Locale.getDefault(), "%02d:%02d %s", (hours % 12).let { if (it == 0) 12 else it }, minutes, if (hours < 12) "AM" else "PM")
-        else -> String.format(Locale.getDefault(), "%02d:%02d", hours, minutes)
-    }
+    val timeStr = formatPreviewDate(cfg.format, sampleDate, "HH:mm")
 
     drawIntoCanvas { canvas ->
         val paint = AndroidPaint().apply {
@@ -253,7 +306,7 @@ private fun DrawScope.drawDigitalClock(
             textAlign = AndroidPaint.Align.CENTER
             textSize = cfg.fontSizeSp * density
             color = parseColor(cfg.colorHex, Color.White).toArgb()
-            val family = when (cfg.fontFamily) { "serif" -> Typeface.SERIF; "sans" -> Typeface.SANS_SERIF; else -> Typeface.MONOSPACE }
+            val family = when (cfg.fontFamily) { "serif" -> Typeface.SERIF; "monospace" -> Typeface.MONOSPACE; else -> Typeface.SANS_SERIF }
             typeface = Typeface.create(family, if (cfg.isBold) Typeface.BOLD else Typeface.NORMAL)
         }
         canvas.nativeCanvas.drawText(timeStr, x, y, paint)
@@ -264,12 +317,12 @@ private fun DrawScope.drawDateWindow(
     cfg: DateConfig,
     w: Float,
     h: Float,
+    sampleDate: Date,
     density: Float
 ) {
     val x = w * cfg.xRatio
     val y = h * cfg.yRatio
-    val dateFormat = cfg.format.takeIf { it in listOf("d", "dd/MM", "EEE, MMM d", "EEE d") } ?: "EEE d"
-    val dateStr = SimpleDateFormat(dateFormat, Locale.getDefault()).format(Date()).uppercase(Locale.getDefault())
+    val dateStr = formatPreviewDate(cfg.format, sampleDate, "EEE d").uppercase(Locale.getDefault())
 
     drawIntoCanvas { canvas ->
         val paint = AndroidPaint().apply {
@@ -282,15 +335,15 @@ private fun DrawScope.drawDateWindow(
 
         if (cfg.hasFrame) {
             val textWidth = paint.measureText(dateStr)
-            val padX = 6f * density
-            val padY = 3f * density
+            val padX = 8f * density
+            val padY = 4f * density
             val bgPaint = AndroidPaint().apply {
                 isAntiAlias = true
                 color = parseColor(cfg.frameColorHex, Color(0xFF1E293B)).toArgb()
             }
             canvas.nativeCanvas.drawRoundRect(
                 x - textWidth / 2f - padX,
-                y - paint.textSize - padY + (3f * density),
+                y - paint.textSize - padY + (4f * density),
                 x + textWidth / 2f + padX,
                 y + padY,
                 4f * density,
@@ -371,7 +424,7 @@ private fun DrawScope.drawGauge(
     density: Float,
     widgetStyle: String
 ) {
-    val stroke = Stroke(width = 3f * density, cap = StrokeCap.Round)
+    val stroke = Stroke(width = 3.5f * density, cap = StrokeCap.Round)
     val startAngle = 135f
     val sweepAngle = 270f
 
@@ -402,7 +455,7 @@ private fun DrawScope.drawGauge(
         val textPaint = AndroidPaint().apply {
             isAntiAlias = true
             textAlign = AndroidPaint.Align.CENTER
-            textSize = if (widgetStyle == "text_only" || widgetStyle == "icon_text") 12f * density else r * 0.6f
+            textSize = if (widgetStyle == "text_only" || widgetStyle == "icon_text") 12f * density else r * 0.58f
             setColor(valueColor)
             typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
         }
@@ -490,12 +543,77 @@ private fun parseColor(hex: String?, fallback: Color): Color {
     }
 }
 
+private fun formatPreviewDate(pattern: String, sampleDate: Date, fallback: String): String = try {
+    SimpleDateFormat(pattern, Locale.getDefault()).format(sampleDate)
+} catch (_: IllegalArgumentException) {
+    SimpleDateFormat(fallback, Locale.getDefault()).format(sampleDate)
+}
+
+private fun DrawScope.drawCustomFaceLayers(
+    layers: List<FaceLayer>,
+    w: Float,
+    h: Float,
+    ambient: Boolean,
+    aod: AodConfig
+) {
+    val designScale = min(w, h) / 320f
+    layers.forEach { source ->
+        val layer = source.normalized()
+        if (!layer.visible || (ambient && !layer.showInAmbient)) return@forEach
+        val center = Offset(w * layer.xRatio, h * layer.yRatio)
+        val width = w * layer.widthRatio
+        val height = h * layer.heightRatio
+        val sourceColor = parseColor(layer.colorHex, Color.White)
+        val layerColor = if (ambient && aod.mode == "monochrome") parseColor(aod.monochromeHex, Color.White)
+            else sourceColor
+        val brightness = if (ambient) aod.maxBrightnessFactor.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: .6f else 1f
+        val color = layerColor.copy(alpha = sourceColor.alpha * layer.opacity * brightness)
+        withTransform({ rotate(layer.rotationDegrees, center) }) {
+            when (layer.type) {
+                "rectangle" -> drawRoundRect(
+                    color = color,
+                    topLeft = Offset(center.x - width / 2f, center.y - height / 2f),
+                    size = Size(width, height),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(layer.cornerRadiusDp * designScale)
+                )
+                "circle" -> drawOval(
+                    color = color,
+                    topLeft = Offset(center.x - width / 2f, center.y - height / 2f),
+                    size = Size(width, height)
+                )
+                "line" -> drawLine(
+                    color = color,
+                    start = Offset(center.x - width / 2f, center.y),
+                    end = Offset(center.x + width / 2f, center.y),
+                    strokeWidth = height,
+                    cap = StrokeCap.Round
+                )
+                else -> drawIntoCanvas { canvas ->
+                    val paint = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
+                        textAlign = AndroidPaint.Align.CENTER
+                        textSize = layer.fontSizeSp * designScale
+                        this.color = color.toArgb()
+                        typeface = Typeface.create(
+                            when (layer.fontFamily) {
+                                "serif" -> Typeface.SERIF
+                                "monospace" -> Typeface.MONOSPACE
+                                else -> Typeface.SANS_SERIF
+                            },
+                            if (layer.isBold) Typeface.BOLD else Typeface.NORMAL
+                        )
+                    }
+                    val baseline = center.y - (paint.fontMetrics.ascent + paint.fontMetrics.descent) / 2f
+                    canvas.nativeCanvas.drawText(layer.text, center.x, baseline, paint)
+                }
+            }
+        }
+    }
+}
+
 private fun DrawScope.drawAnimationLayer(
     anim: AnimationConfig,
     w: Float,
     h: Float,
-    cx: Float,
-    cy: Float,
     radius: Float,
     progress: Float,
     density: Float
@@ -503,9 +621,24 @@ private fun DrawScope.drawAnimationLayer(
     val color = parseColor(anim.colorHex, Color(0xFF00E5FF))
     val ax = w * anim.xRatio
     val ay = h * anim.yRatio
-    val scale = anim.scaleRatio.coerceIn(0.2f, 2.5f)
+    val scale = anim.scaleRatio.coerceIn(0.1f, 3f)
 
     when (anim.type) {
+        "zen_ripple" -> {
+            val rippleCenter = Offset(ax, ay)
+            val maxRadius = radius * .85f * scale
+            repeat(3) { index ->
+                val phase = (progress + index / 3f) % 1f
+                val fade = (1f - phase).pow(2)
+                drawCircle(
+                    color = color.copy(alpha = color.alpha * .65f * fade),
+                    radius = maxRadius * (.08f + .92f * phase),
+                    center = rippleCenter,
+                    style = Stroke(width = 1.8f * density)
+                )
+            }
+            drawCircle(color.copy(alpha = color.alpha * .55f), 2f * density, rippleCenter)
+        }
         "pulse_ecg" -> {
             val waveWidth = radius * 0.95f * scale
             val halfW = waveWidth / 2f
@@ -542,19 +675,19 @@ private fun DrawScope.drawAnimationLayer(
         }
         "radar_sweep" -> {
             val r = radius * 0.88f * scale
-            drawCircle(color.copy(alpha = 0.12f), r * 0.33f, Offset(cx, cy), style = Stroke(width = 1.2f * density))
-            drawCircle(color.copy(alpha = 0.12f), r * 0.66f, Offset(cx, cy), style = Stroke(width = 1.2f * density))
-            drawCircle(color.copy(alpha = 0.15f), r, Offset(cx, cy), style = Stroke(width = 1.2f * density))
+            drawCircle(color.copy(alpha = 0.12f), r * 0.33f, Offset(ax, ay), style = Stroke(width = 1.2f * density))
+            drawCircle(color.copy(alpha = 0.12f), r * 0.66f, Offset(ax, ay), style = Stroke(width = 1.2f * density))
+            drawCircle(color.copy(alpha = 0.15f), r, Offset(ax, ay), style = Stroke(width = 1.2f * density))
 
             val sweepAngle = (progress * 360f) % 360f
             val rad = Math.toRadians(sweepAngle.toDouble())
-            val bx = cx + (cos(rad) * r).toFloat()
-            val by = cy + (sin(rad) * r).toFloat()
-            drawLine(color, Offset(cx, cy), Offset(bx, by), strokeWidth = 2.5f * density, cap = StrokeCap.Round)
+            val bx = ax + (cos(rad) * r).toFloat()
+            val by = ay + (sin(rad) * r).toFloat()
+            drawLine(color, Offset(ax, ay), Offset(bx, by), strokeWidth = 2.5f * density, cap = StrokeCap.Round)
 
             val blipAlpha = ((sin(progress * 20.0) + 1.0) * 0.5 * 0.8 + 0.2).toFloat()
-            drawCircle(color.copy(alpha = blipAlpha), 3.5f * density, Offset(cx + r * 0.5f, cy - r * 0.35f))
-            drawCircle(color.copy(alpha = blipAlpha), 2.8f * density, Offset(cx - r * 0.4f, cy + r * 0.45f))
+            drawCircle(color.copy(alpha = blipAlpha), 3.5f * density, Offset(ax + r * 0.5f, ay - r * 0.35f))
+            drawCircle(color.copy(alpha = blipAlpha), 2.8f * density, Offset(ax - r * 0.4f, ay + r * 0.45f))
         }
         "equalizer_bars" -> {
             val barCount = 10
@@ -593,10 +726,10 @@ private fun DrawScope.drawAnimationLayer(
         }
         "orbital_space" -> {
             val r = radius * 0.8f * scale
-            drawCircle(color.copy(alpha = 0.15f), r * 0.75f, Offset(cx, cy), style = Stroke(width = 1.2f * density))
+            drawCircle(color.copy(alpha = 0.15f), r * 0.75f, Offset(ax, ay), style = Stroke(width = 1.2f * density))
             val earthAng = Math.toRadians((progress * 360.0))
-            val ex = cx + (cos(earthAng) * r * 0.75f).toFloat()
-            val ey = cy + (sin(earthAng) * r * 0.75f).toFloat()
+            val ex = ax + (cos(earthAng) * r * 0.75f).toFloat()
+            val ey = ay + (sin(earthAng) * r * 0.75f).toFloat()
             drawCircle(Color(0xFF38BDF8), 6f * density, Offset(ex, ey))
 
             val moonAng = Math.toRadians((progress * 360.0 * 4.0))
@@ -605,35 +738,40 @@ private fun DrawScope.drawAnimationLayer(
             drawCircle(Color(0xFFE2E8F0), 2.2f * density, Offset(mx, my))
         }
         "liquid_wave" -> {
-            val fluidLevel = cy + radius * 0.25f
+            val r = radius * .85f * scale
+            val fluidLevel = ay + r * 0.25f
             val wavePath = Path().apply {
-                moveTo(cx - radius, cy + radius)
-                lineTo(cx - radius, fluidLevel)
+                moveTo(ax - r, ay + r)
+                lineTo(ax - r, fluidLevel)
                 val steps = 24
-                val stepW = (radius * 2f) / steps
+                val stepW = (r * 2f) / steps
                 for (i in 0..steps) {
-                    val px = cx - radius + i * stepW
+                    val px = ax - r + i * stepW
                     val py = fluidLevel + (sin((i.toFloat() / steps * 2.5 * Math.PI) + progress * 2.0 * Math.PI) * 5f * density).toFloat()
                     lineTo(px, py)
                 }
-                lineTo(cx + radius, cy + radius)
+                lineTo(ax + r, ay + r)
                 close()
             }
-            drawPath(wavePath, color.copy(alpha = 0.35f))
+            val waveClip = Path().apply {
+                addOval(Rect(Offset(ax - r * .95f, ay - r * .95f), Size(r * 1.9f, r * 1.9f)))
+            }
+            clipPath(waveClip) { drawPath(wavePath, color.copy(alpha = 0x45 / 255f)) }
         }
         "aurora_shimmer" -> {
-            val auroraTop = cy - radius * 0.65f
+            val r = radius * .9f * scale
+            val auroraTop = ay - r * 0.75f
             val auroraPath = Path().apply {
-                moveTo(cx - radius * 0.85f, cy)
+                moveTo(ax - r * 0.8f, ay)
                 for (i in 0..10) {
-                    val px = cx - radius * 0.85f + i * (radius * 1.7f / 10f)
-                    val py = auroraTop + (sin((i * 0.5) + progress * 2.0 * Math.PI) * 16f * density).toFloat()
+                    val px = ax - r * 0.8f + i * (r * 1.6f / 10f)
+                    val py = auroraTop + (sin((i * 0.5) + progress * 2.0 * Math.PI) * 18f * density).toFloat()
                     lineTo(px, py)
                 }
-                lineTo(cx + radius * 0.85f, cy)
+                lineTo(ax + r * 0.8f, ay)
                 close()
             }
-            drawPath(auroraPath, color.copy(alpha = 0.25f))
+            drawPath(auroraPath, color.copy(alpha = 0x30 / 255f))
         }
     }
 }

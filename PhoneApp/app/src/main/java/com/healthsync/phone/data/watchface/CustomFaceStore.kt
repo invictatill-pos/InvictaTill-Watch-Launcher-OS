@@ -2,13 +2,10 @@ package com.healthsync.phone.data.watchface
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.util.Base64
 import android.util.Log
-import com.google.gson.Gson
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.util.UUID
 
 /**
  * Manages user-created custom watch faces on the phone.
@@ -17,12 +14,12 @@ import java.util.UUID
  */
 class CustomFaceStore private constructor(private val context: Context) {
 
-    private val gson = Gson()
     private val customDir: File by lazy {
         File(context.filesDir, "custom_watchfaces").apply {
             if (!exists()) mkdirs()
         }
     }
+    private val documents: FaceStudioFileStore by lazy { FaceStudioFileStore(customDir) }
 
     companion object {
         private const val TAG = "CustomFaceStore"
@@ -39,74 +36,62 @@ class CustomFaceStore private constructor(private val context: Context) {
          * Keeps transfer payload small (~20-40KB) for instantaneous Bluetooth beaming to Kolabee U8 Ultra.
          */
         fun encodePhotoBitmap(bitmap: Bitmap, targetDimension: Int = 320, quality: Int = 85): String {
+            require(targetDimension in 32..1024) { "Photo dimensions must be between 32 and 1024 pixels." }
+            require(quality in 1..100) { "JPEG quality must be between 1 and 100." }
+            require(!bitmap.isRecycled && bitmap.width > 0 && bitmap.height > 0) { "The photo bitmap is not available." }
             val minSide = minOf(bitmap.width, bitmap.height)
             val cropX = (bitmap.width - minSide) / 2
             val cropY = (bitmap.height - minSide) / 2
             val cropped = Bitmap.createBitmap(bitmap, cropX, cropY, minSide, minSide)
-            val scaled = if (minSide != targetDimension) {
-                Bitmap.createScaledBitmap(cropped, targetDimension, targetDimension, true)
-            } else cropped
-
-            val stream = ByteArrayOutputStream()
-            scaled.compress(Bitmap.CompressFormat.JPEG, quality, stream)
-            val bytes = stream.toByteArray()
-            return Base64.encodeToString(bytes, Base64.NO_WRAP)
+            var scaled: Bitmap? = null
+            try {
+                val outputBitmap = if (minSide != targetDimension) {
+                    Bitmap.createScaledBitmap(cropped, targetDimension, targetDimension, true)
+                } else cropped
+                scaled = outputBitmap
+                return ByteArrayOutputStream().use { stream ->
+                    check(outputBitmap.compress(Bitmap.CompressFormat.JPEG, quality, stream)) { "The photo could not be encoded." }
+                    Base64.encodeToString(stream.toByteArray(), Base64.NO_WRAP)
+                }
+            } finally {
+                if (scaled !== bitmap && scaled !== cropped) scaled?.recycle()
+                if (cropped !== bitmap) cropped.recycle()
+            }
         }
     }
 
     /** Lists all custom watch faces saved by the user. */
-    fun listCustomFaces(): List<HswfPackage> {
-        val files = customDir.listFiles { _, name -> name.endsWith(".hswf") } ?: return emptyList()
-        val list = mutableListOf<HswfPackage>()
-        for (file in files) {
-            try {
-                val json = file.readText(Charsets.UTF_8)
-                val pkg = gson.fromJson(json, HswfPackage::class.java)
-                if (pkg != null && pkg.id.isNotBlank()) {
-                    list.add(pkg)
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Error reading custom face ${file.name}", e)
-            }
-        }
-        return list.sortedByDescending { it.id }
-    }
+    fun listCustomFaces(): List<HswfPackage> = documents.list()
 
     /** Finds a custom face by ID. */
-    fun getCustomFace(id: String): HswfPackage? {
-        val file = File(customDir, "$id.hswf")
-        if (!file.exists()) return null
-        return try {
-            val json = file.readText(Charsets.UTF_8)
-            gson.fromJson(json, HswfPackage::class.java)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error loading $id.hswf", e)
-            null
-        }
-    }
+    fun getCustomFace(id: String): HswfPackage? = documents.load(id)
 
     /** Saves or updates a custom watch face. */
     fun saveCustomFace(pkg: HswfPackage): Boolean {
-        return try {
-            val file = File(customDir, "${pkg.id}.hswf")
-            val json = gson.toJson(pkg)
-            file.writeText(json, Charsets.UTF_8)
-            Log.d(TAG, "Successfully saved custom face: ${pkg.name} (${pkg.id})")
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to save custom face ${pkg.id}", e)
-            false
+        return documents.save(pkg).also { saved ->
+            if (saved) {
+                Log.d(TAG, "Successfully saved custom face: ${pkg.name} (${pkg.id})")
+            } else {
+                Log.e(TAG, "Failed to save custom face ${pkg.id}: invalid document or storage error")
+            }
         }
     }
 
     /** Deletes a custom watch face. */
-    fun deleteCustomFace(id: String): Boolean {
-        val file = File(customDir, "$id.hswf")
-        return file.exists() && file.delete()
-    }
+    fun deleteCustomFace(id: String): Boolean = documents.delete(id)
 
+    /** An independent recovery document, written atomically and excluded from the saved library. */
+    fun saveDraft(pkg: HswfPackage): Boolean = documents.saveDraft(pkg)
+    fun loadDraft(id: String? = null): HswfPackage? = documents.loadDraft(id)
+    fun clearDraft(): Boolean = documents.clearDraft()
+
+    fun getTemplates(): List<HswfPackage> = FaceStudioTemplates.all()
+}
+
+/** The exact studio starter designs, available without an Android Context for validation. */
+object FaceStudioTemplates {
     /** Provides curated starter design templates that users can customize. */
-    fun getTemplates(): List<HswfPackage> {
+    fun all(): List<HswfPackage> {
         return listOf(
             createPhotoDialTemplate(),
             createExecutiveChronoTemplate(),

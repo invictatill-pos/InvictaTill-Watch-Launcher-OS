@@ -1,6 +1,6 @@
-# HealthSync 2.7.1 installation
+# HealthSync 2.9.0 installation
 
-Prepared 12 October 2026. Install **HealthSync-Watch-2.7.1-Android8.apk** (watch code 27) and **HealthSync-Phone-2.7.1.apk** (phone code 21). Watch requires Android 6/API 23 or newer; phone requires Android 8/API 26 or newer. Bluetooth Classic RFCOMM must be exposed by both devices.
+Prepared 13 October 2026. Install **HealthSync-Watch-2.9.0-Android8.apk** (watch code 34) and **HealthSync-Phone-2.9.0.apk** (phone code 28). Watch requires Android 6/API 23 or newer; phone requires Android 8/API 26 or newer. Bluetooth Classic RFCOMM must be exposed by both devices. Update both apps to use custom text and shape layers in the new [Face Studio](FACE-STUDIO.md).
 
 1. Transfer each APK to its device. Open it in a file manager and allow that source to install apps when Android asks.
 2. Install over the existing app with its matching certificate. Both packages retain this project's development signing certificate. Avoid uninstalling if you need saved history.

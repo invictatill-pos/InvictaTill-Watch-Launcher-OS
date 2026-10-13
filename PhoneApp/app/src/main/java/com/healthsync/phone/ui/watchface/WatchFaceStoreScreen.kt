@@ -28,6 +28,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.healthsync.phone.data.watchface.CustomFaceStore
+import com.healthsync.phone.data.watchface.FaceStudioDocument
 import com.healthsync.phone.data.watchface.HswfPackage
 import com.healthsync.phone.data.watchface.OnlineWatchFaceCatalog
 import com.healthsync.phone.data.watchface.OnlineWatchFaceCatalog.StoreItem
@@ -35,8 +36,12 @@ import com.healthsync.phone.data.watchface.WatchFaceSender
 import com.healthsync.phone.service.BluetoothSyncService
 import com.healthsync.phone.ui.theme.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Calendar
+import java.util.Locale
 
 enum class StudioSection(val title: String, val subtitle: String) {
     STORE("Watch Face Store", "Design previews · health fields show placeholders"),
@@ -74,10 +79,9 @@ fun WatchFaceStoreScreen(
     if (currentSection == StudioSection.CREATOR) {
         WatchFaceCreatorScreen(
             initialPackage = editingPackageForCreator,
-            onBack = { currentSection = StudioSection.STORE },
+            onBack = { currentSection = StudioSection.MY_CREATIONS },
             onFaceSaved = {
                 myCreationsRefreshTrigger++
-                currentSection = StudioSection.MY_CREATIONS
             }
         )
         return
@@ -460,161 +464,239 @@ private fun MyCreationsView(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val faceStore = remember { CustomFaceStore.getInstance(context) }
-    val myFaces = remember(refreshTrigger) { faceStore.listCustomFaces() }
+    val watchVersion by BluetoothSyncService.connectedWatchVersionCode.collectAsState()
+    var myFaces by remember { mutableStateOf<List<HswfPackage>>(emptyList()) }
+    var hasLoaded by remember { mutableStateOf(false) }
+    var libraryError by remember { mutableStateOf<String?>(null) }
+    var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    var sortByName by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var sortMenuOpen by remember { mutableStateOf(false) }
+    var sendingFaceId by remember { mutableStateOf<String?>(null) }
+    var mutationFaceId by remember { mutableStateOf<String?>(null) }
+    var deleteTarget by remember { mutableStateOf<HswfPackage?>(null) }
+    var deleteError by remember { mutableStateOf<String?>(null) }
 
-    if (myFaces.isEmpty()) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(32.dp),
-            contentAlignment = Alignment.Center
+    LaunchedEffect(refreshTrigger) {
+        libraryError = null
+        try {
+            myFaces = withContext(Dispatchers.IO) { faceStore.listCustomFaces() }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            libraryError = "Could not load saved projects. Open My Creations again to retry."
+        } finally { hasLoaded = true }
+    }
+    val filteredFaces = remember(myFaces, query, sortByName) {
+        val search = query.trim()
+        val matches = myFaces.filter { face ->
+            search.isEmpty() || face.name.contains(search, ignoreCase = true) ||
+                face.type.contains(search, ignoreCase = true) ||
+                (face.background.type == "image" && "photo".contains(search, ignoreCase = true))
+        }
+        if (sortByName) matches.sortedBy { it.name.lowercase(Locale.ROOT) } else matches
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+            Column(Modifier.weight(1f)) {
+                Text("Saved projects", color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text("${myFaces.size} ${if (myFaces.size == 1) "project" else "projects"}", color = TextDim, fontSize = 12.sp)
+            }
+            Button(
+                onClick = { onOpenCreator(FaceStudioDocument.blank()) },
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = AccentCyan)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(72.dp)
-                        .clip(CircleShape)
-                        .background(AccentCyan.copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.Palette, contentDescription = null, tint = AccentCyan, modifier = Modifier.size(36.dp))
+                Icon(Icons.Default.Add, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("New project", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        if (myFaces.isNotEmpty()) {
+            Surface(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                shape = RoundedCornerShape(14.dp), color = BgCard, border = BorderStroke(1.dp, BorderSubtle)
+            ) {
+                Row(Modifier.padding(start = 14.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Search, null, tint = TextDim, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    BasicTextFieldWithPlaceholder(query, { query = it }, "Search name or type…", Modifier.weight(1f).padding(vertical = 14.dp))
+                    if (query.isNotEmpty()) IconButton(onClick = { query = "" }) {
+                        Icon(Icons.Default.Close, "Clear project search", tint = TextDim, modifier = Modifier.size(18.dp))
+                    }
                 }
-                Text("No Custom Dials Yet", color = TextWhite, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text(
-                    "Design your own watch face from scratch or create a photo dial with personal memories.",
-                    color = TextDim,
-                    fontSize = 13.sp,
-                    textAlign = TextAlign.Center
-                )
-                Button(
-                    onClick = { onOpenCreator(null) },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentCyan)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null, tint = Color.White)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Create Your First Dial", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("${filteredFaces.size} shown", color = TextDim, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                Box {
+                    TextButton(onClick = { sortMenuOpen = true }) {
+                        Icon(Icons.Default.Sort, null, tint = AccentCyan, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(if (sortByName) "Name A–Z" else "Newest first", color = AccentCyan, fontSize = 12.sp)
+                    }
+                    DropdownMenu(expanded = sortMenuOpen, onDismissRequest = { sortMenuOpen = false }) {
+                        DropdownMenuItem(text = { Text("Newest first") }, onClick = { sortByName = false; sortMenuOpen = false })
+                        DropdownMenuItem(text = { Text("Name A–Z") }, onClick = { sortByName = true; sortMenuOpen = false })
+                    }
                 }
             }
         }
-    } else {
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 40.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            items(myFaces, key = { it.id }) { face ->
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = BgCard,
-                    border = BorderStroke(1.dp, BorderSubtle),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+        if (libraryError != null) Text(libraryError!!, color = StatusError, fontSize = 12.sp, modifier = Modifier.padding(16.dp))
+        when {
+            !hasLoaded -> Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = AccentCyan, modifier = Modifier.size(28.dp))
+            }
+            myFaces.isEmpty() -> LibraryEmptyState(
+                title = "Your first design starts here",
+                message = "Create a watch face from a blank canvas, a template, or your favorite photo.",
+                modifier = Modifier.fillMaxWidth().weight(1f)
+            )
+            filteredFaces.isEmpty() -> LibraryEmptyState(
+                title = "No matching projects",
+                message = "Try another name, analog, digital, hybrid, or photo.",
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                onClearSearch = { query = "" }
+            )
+            else -> LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 40.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth().weight(1f)
+            ) {
+                items(filteredFaces, key = { it.id }) { face ->
+                    var actionsOpen by remember(face.id) { mutableStateOf(false) }
+                    Surface(
+                        shape = RoundedCornerShape(20.dp), color = BgCard,
+                        border = BorderStroke(1.dp, BorderSubtle), modifier = Modifier.fillMaxWidth()
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(136.dp)
-                                .padding(4.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            DynamicFacePreview(
-                                pkg = face,
-                                modifier = Modifier.fillMaxSize(),
-                                hours = 10,
-                                minutes = 10,
-                                seconds = 32,
-                                heartRate = -1,
-                                steps = -1,
-                                battery = -1
+                        Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Box(Modifier.size(136.dp).padding(4.dp), contentAlignment = Alignment.Center) {
+                                DynamicFacePreview(pkg = face, modifier = Modifier.fillMaxSize(), hours = 10, minutes = 10,
+                                    seconds = 32, heartRate = -1, steps = -1, battery = -1)
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Text(face.name, color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                if (face.background.type == "image") "Photo dial" else "${face.type.replaceFirstChar { it.uppercase() }} · ${face.layers.size} layers",
+                                color = AccentCyan, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
                             )
-                        }
-
-                        Spacer(Modifier.height(10.dp))
-                        Text(
-                            face.name,
-                            color = TextWhite,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            if (face.background.type == "image") "Photo Dial" else "Custom ${face.type.replaceFirstChar { it.uppercase() }}",
-                            color = AccentCyan,
-                            fontSize = 11.sp
-                        )
-
-                        Spacer(Modifier.height(10.dp))
-
-                        // Action Buttons: Beam & Edit
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            // Beam to Watch
-                            Button(
-                                onClick = {
-                                    if (!isWatchConnected) {
-                                        Toast.makeText(context, "Connect watch via Bluetooth first", Toast.LENGTH_SHORT).show()
-                                        return@Button
-                                    }
-                                    scope.launch {
-                                        Toast.makeText(context, "Sending '${face.name}' to your watch…", Toast.LENGTH_SHORT).show()
-                                        val ok = WatchFaceSender.sendFaceToWatch(face, setActive = true)
-                                        if (ok) {
-                                            Toast.makeText(context, "✓ '${face.name}' active on Watch!", Toast.LENGTH_LONG).show()
-                                        } else {
-                                            Toast.makeText(context, "Could not confirm installation. Check your watch and connection.", Toast.LENGTH_LONG).show()
+                            Spacer(Modifier.height(10.dp))
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Button(
+                                    enabled = sendingFaceId == null && mutationFaceId == null,
+                                    onClick = {
+                                        if (!isWatchConnected) {
+                                            Toast.makeText(context, "Connect your watch from Device before sending this face.", Toast.LENGTH_LONG).show()
+                                        } else if (face.layers.isNotEmpty() && (watchVersion == null || watchVersion!! < 34)) {
+                                            Toast.makeText(context, "Update the watch to HealthSync 2.9.0 or newer to render custom text and shape layers.", Toast.LENGTH_LONG).show()
+                                        } else scope.launch {
+                                            sendingFaceId = face.id
+                                            try {
+                                                val ok = WatchFaceSender.sendFaceToWatch(face, setActive = true)
+                                                Toast.makeText(context, if (ok) "'${face.name}' is active on your watch." else
+                                                    "Could not confirm installation. Check your watch and connection.", Toast.LENGTH_LONG).show()
+                                            } catch (e: Exception) {
+                                                if (e is CancellationException) throw e
+                                                Toast.makeText(context, "Could not send this face. Check Bluetooth and retry.", Toast.LENGTH_LONG).show()
+                                            } finally { sendingFaceId = null }
                                         }
+                                    },
+                                    modifier = Modifier.weight(1f).height(40.dp), shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = AccentCyan), contentPadding = PaddingValues(horizontal = 2.dp)
+                                ) {
+                                    if (sendingFaceId == face.id) CircularProgressIndicator(Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                                    else Text("Send", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                                OutlinedButton(onClick = { onOpenCreator(face) }, modifier = Modifier.size(40.dp),
+                                    shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, BorderSubtle), contentPadding = PaddingValues(0.dp)) {
+                                    Icon(Icons.Default.Edit, "Edit ${face.name}", tint = TextWhite, modifier = Modifier.size(16.dp))
+                                }
+                                Box {
+                                    OutlinedButton(enabled = mutationFaceId == null, onClick = { actionsOpen = true }, modifier = Modifier.size(40.dp),
+                                        shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, BorderSubtle), contentPadding = PaddingValues(0.dp)) {
+                                        if (mutationFaceId == face.id) CircularProgressIndicator(Modifier.size(16.dp), color = AccentCyan, strokeWidth = 2.dp)
+                                        else Icon(Icons.Default.MoreVert, "Actions for ${face.name}", tint = TextWhite, modifier = Modifier.size(18.dp))
                                     }
-                                },
-                                modifier = Modifier.weight(1f).height(36.dp),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = AccentCyan),
-                                contentPadding = PaddingValues(horizontal = 4.dp)
-                            ) {
-                                Icon(Icons.Default.SendToMobile, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("Send", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
-
-                            // Edit in Studio
-                            OutlinedButton(
-                                onClick = { onOpenCreator(face) },
-                                modifier = Modifier.size(36.dp),
-                                shape = RoundedCornerShape(10.dp),
-                                border = BorderStroke(1.dp, BorderSubtle),
-                                contentPadding = PaddingValues(0.dp)
-                            ) {
-                                Icon(Icons.Default.Edit, contentDescription = "Edit", tint = TextWhite, modifier = Modifier.size(16.dp))
-                            }
-
-                            // Delete
-                            OutlinedButton(
-                                onClick = {
-                                    faceStore.deleteCustomFace(face.id)
-                                    onRefreshNeeded()
-                                    Toast.makeText(context, "Deleted '${face.name}'", Toast.LENGTH_SHORT).show()
-                                },
-                                modifier = Modifier.size(36.dp),
-                                shape = RoundedCornerShape(10.dp),
-                                border = BorderStroke(1.dp, BorderSubtle),
-                                contentPadding = PaddingValues(0.dp)
-                            ) {
-                                Icon(Icons.Default.DeleteOutline, contentDescription = "Delete", tint = StatusError, modifier = Modifier.size(16.dp))
+                                    DropdownMenu(expanded = actionsOpen, onDismissRequest = { actionsOpen = false }) {
+                                        DropdownMenuItem(text = { Text("Duplicate project") }, leadingIcon = { Icon(Icons.Default.ContentCopy, null) }, onClick = {
+                                            actionsOpen = false
+                                            scope.launch {
+                                                mutationFaceId = face.id
+                                                try {
+                                                    val saved = withContext(Dispatchers.IO) {
+                                                        faceStore.saveCustomFace(FaceStudioDocument.duplicate(face))
+                                                    }
+                                                    if (saved) onRefreshNeeded()
+                                                    Toast.makeText(context, if (saved) "Saved a new copy of '${face.name}'." else
+                                                        "Could not save the duplicate. Your original project is unchanged.", Toast.LENGTH_LONG).show()
+                                                } catch (e: Exception) {
+                                                    if (e is CancellationException) throw e
+                                                    Toast.makeText(context, "Could not duplicate this project.", Toast.LENGTH_LONG).show()
+                                                } finally { mutationFaceId = null }
+                                            }
+                                        })
+                                        DropdownMenuItem(text = { Text("Delete project", color = StatusError) }, leadingIcon = {
+                                            Icon(Icons.Default.DeleteOutline, null, tint = StatusError)
+                                        }, onClick = { actionsOpen = false; deleteError = null; deleteTarget = face })
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
+        }
+    }
+    deleteTarget?.let { target ->
+        val deleting = mutationFaceId == target.id
+        AlertDialog(
+            onDismissRequest = { if (!deleting) deleteTarget = null },
+            title = { Text("Delete project?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Delete '${target.name}' from My Creations? The installed face on your watch stays available.")
+                    deleteError?.let { Text(it, color = StatusError, fontSize = 12.sp) }
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = !deleting, onClick = {
+                    scope.launch {
+                        mutationFaceId = target.id
+                        deleteError = null
+                        try {
+                            val deleted = withContext(Dispatchers.IO) { faceStore.deleteCustomFace(target.id) }
+                            if (deleted) {
+                                deleteTarget = null
+                                onRefreshNeeded()
+                                Toast.makeText(context, "Deleted '${target.name}'.", Toast.LENGTH_SHORT).show()
+                            } else deleteError = "Could not delete this project. Please retry."
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
+                            deleteError = "Could not delete this project. Please retry."
+                        } finally { mutationFaceId = null }
+                    }
+                }) { Text(if (deleting) "Deleting…" else "Delete", color = StatusError) }
+            },
+            dismissButton = { TextButton(enabled = !deleting, onClick = { deleteTarget = null }) { Text("Cancel") } }
+        )
+    }
+}
+
+@Composable
+private fun LibraryEmptyState(title: String, message: String, modifier: Modifier, onClearSearch: (() -> Unit)? = null) {
+    Box(modifier.padding(24.dp), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Icon(Icons.Default.Palette, null, tint = AccentCyan, modifier = Modifier.size(40.dp))
+            Text(title, color = TextWhite, fontSize = 17.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+            Text(message, color = TextDim, fontSize = 13.sp, textAlign = TextAlign.Center)
+            if (onClearSearch != null) TextButton(onClick = onClearSearch) { Text("Clear search", color = AccentCyan) }
         }
     }
 }
