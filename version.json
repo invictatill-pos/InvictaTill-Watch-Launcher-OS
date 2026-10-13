@@ -5,7 +5,7 @@
                   "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.8.5/HealthSync-Phone.apk",
                   "changelog":  "v2.8.5: Fixed Heart Rate sync from watch, normalized uncalibrated sensor HAL accuracy, live HR dashboard card display, and offline batch sync safeguards.",
                   "forceUpdate":  false,
-                  "sha256":  "5d94a80ac77666f3f54e2e3a88194aa9bdfc1f3e080e510d9042e1031ca5d9ff"
+                  "sha256":  "fba3897d7391ace5c6e89199ecced4495f9404cf3badadf2647af82dc37b3632"
               },
     "watch":  {
                   "versionCode":  33,

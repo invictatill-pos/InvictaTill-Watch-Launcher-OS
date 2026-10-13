@@ -113,32 +113,68 @@ object AppUpdateManager {
         val partial = File(directory, target.name + ".part")
         try {
             require(UpdatePolicy.validInfo(info)) { "Update metadata is incomplete or unverified" }
-            connection = openConnection(info.apkUrl)
-            val totalLength = connection.contentLength.toLong()
-            require(totalLength <= UpdatePolicy.MAX_APK_BYTES) { "Update package exceeds size limit" }
-            var downloaded = 0L
-            connection.inputStream.use { input ->
-                FileOutputStream(partial).use { output ->
-                    val buffer = ByteArray(8192)
-                    while (true) {
-                        currentCoroutineContext().ensureActive()
-                        val count = input.read(buffer)
-                        if (count < 0) break
-                        downloaded += count
-                        require(downloaded <= UpdatePolicy.MAX_APK_BYTES) { "Update package exceeds size limit" }
-                        output.write(buffer, 0, count)
-                        onProgress(if (totalLength > 0) ((downloaded * 100 / totalLength).toInt()).coerceIn(0, 99) else -1, downloaded, totalLength)
+            val candidateUrls = listOfNotNull(
+                info.apkUrl,
+                if (info.apkUrl.contains("/releases/download/"))
+                    "https://raw.githubusercontent.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/main/dist/${if (isWatch) "HealthSync-Watch.apk" else "HealthSync-Phone.apk"}"
+                else null,
+                if (info.apkUrl.contains("/releases/download/"))
+                    "https://raw.githubusercontent.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/main/dist/${if (isWatch) "HealthSync-Watch-${info.versionName}-Android8.apk" else "HealthSync-Phone-${info.versionName}.apk"}"
+                else null,
+                if (info.apkUrl.contains("/releases/download/"))
+                    "https://cdn.jsdelivr.net/gh/invictatill-pos/InvictaTill-Watch-Launcher-OS@main/dist/${if (isWatch) "HealthSync-Watch.apk" else "HealthSync-Phone.apk"}"
+                else null
+            ).distinct()
+
+            var downloadedSuccessfully = false
+            for (url in candidateUrls) {
+                currentCoroutineContext().ensureActive()
+                connection = null
+                try {
+                    connection = openConnection(url)
+                    val totalLength = connection.contentLength.toLong()
+                    require(totalLength <= UpdatePolicy.MAX_APK_BYTES) { "Update package exceeds size limit" }
+                    var downloaded = 0L
+                    connection.inputStream.use { input ->
+                        FileOutputStream(partial).use { output ->
+                            val buffer = ByteArray(8192)
+                            while (true) {
+                                currentCoroutineContext().ensureActive()
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                downloaded += count
+                                require(downloaded <= UpdatePolicy.MAX_APK_BYTES) { "Update package exceeds size limit" }
+                                output.write(buffer, 0, count)
+                                onProgress(if (totalLength > 0) ((downloaded * 100 / totalLength).toInt()).coerceIn(0, 99) else -1, downloaded, totalLength)
+                            }
+                            output.fd.sync()
+                        }
                     }
-                    output.fd.sync()
+                    require(downloaded > 0 && (totalLength <= 0 || downloaded == totalLength)) { "Update download was incomplete" }
+                    require(calculateSha256(partial).equals(info.sha256, true)) { "Update checksum did not match; retry the download" }
+                    verifyPackage(context, partial, info, if (isWatch) "com.healthsync.watch" else context.packageName)
+                    target.delete()
+                    require(partial.renameTo(target)) { "Could not save verified update" }
+                    onProgress(100, downloaded, downloaded)
+                    downloadedSuccessfully = true
+                    break
+                } catch (cancelled: CancellationException) {
+                    partial.delete()
+                    throw cancelled
+                } catch (candidateError: Exception) {
+                    partial.delete()
+                    Log.w(TAG, "Download attempt failed for $url: ${candidateError.message}")
+                    lastError = candidateError.message ?: "Unable to download verified update"
+                } finally {
+                    connection?.disconnect()
                 }
             }
-            require(downloaded > 0 && (totalLength <= 0 || downloaded == totalLength)) { "Update download was incomplete" }
-            require(calculateSha256(partial).equals(info.sha256, true)) { "Update checksum did not match; retry the download" }
-            verifyPackage(context, partial, info, if (isWatch) "com.healthsync.watch" else context.packageName)
-            target.delete()
-            require(partial.renameTo(target)) { "Could not save verified update" }
-            onProgress(100, downloaded, downloaded)
-            target
+            if (downloadedSuccessfully) {
+                lastError = null
+                target
+            } else {
+                null
+            }
         } catch (cancelled: CancellationException) {
             partial.delete()
             throw cancelled
@@ -147,7 +183,7 @@ object AppUpdateManager {
             lastError = error.message ?: "Unable to download verified update"
             Log.w(TAG, "Update download failed: ${error.message}")
             null
-        } finally { connection?.disconnect() }
+        }
     }
 
     @Suppress("DEPRECATION")

@@ -21,5 +21,5 @@ HealthSync 2.8.5 delivers targeted reliability fixes for heart rate acquisition 
 
 ### 📦 Checksums & Artifacts
 - **Watch App (Debug / Android 6+ API 23+)**: `7d66bebc8cacee9743e0978f863dcb917197fc9bdb46c6e9a626bed78addf5ec` (`HealthSync-Watch-2.8.5-Android8.apk`)
-- **Phone App (Release / Android 8+ API 26+)**: `5d94a80ac77666f3f54e2e3a88194aa9bdfc1f3e080e510d9042e1031ca5d9ff` (`HealthSync-Phone-2.8.5.apk`)
+- **Phone App (Release / Android 8+ API 26+)**: `fba3897d7391ace5c6e89199ecced4495f9404cf3badadf2647af82dc37b3632` (`HealthSync-Phone-2.8.5.apk`)
 - **Combined Bundle**: `HealthSync-Android8-2.8.5-Both-APKs.zip`
