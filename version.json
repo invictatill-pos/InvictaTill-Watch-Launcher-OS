@@ -5,7 +5,7 @@
                   "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.8.2/HealthSync-Phone.apk",
                   "changelog":  "Adds companion support and diagnostics for Watch multi-tier battery saving system, including Extreme Saver and Super Extreme Emergency modes.",
                   "forceUpdate":  false,
-                  "sha256":  "a09007926a447323bba4d250002b559dea7d397b9803f5ad24d3283f80ee5c58"
+                  "sha256":  "9cb568c870d44a4c4f7cb114c27ccee26df0f0103facaf172605f3c5ec638738"
               },
     "watch":  {
                   "versionCode":  30,

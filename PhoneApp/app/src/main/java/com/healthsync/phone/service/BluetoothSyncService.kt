@@ -599,7 +599,10 @@ class BluetoothSyncService : android.app.Service() {
                         _connectedWatchVersionName.value = info.versionName
                         preferences.lastKnownWatchVersion = info.versionName
                         preferences.lastKnownWatchVersionCode = info.versionCode
-                        Log.i(TAG, "Connected Watch Info: ${info.model} v${info.versionName} (build ${info.versionCode})")
+                        if (info.batteryPercent in 0..100) {
+                            updateState(_connectionState.value.copy(batteryPercent = info.batteryPercent))
+                        }
+                        Log.i(TAG, "Connected Watch Info: ${info.model} v${info.versionName} (build ${info.versionCode}, battery ${info.batteryPercent}%)")
                     } catch (e: Exception) { Log.w(TAG, "Error parsing DEVICE_INFO: ${e.message}") }
                 }
                 MessageType.OTA_PROGRESS -> {

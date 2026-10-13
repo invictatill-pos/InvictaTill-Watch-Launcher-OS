@@ -416,8 +416,9 @@ class BluetoothClientService : Service() {
                     com.healthsync.watch.update.WatchUpdateManager.onOtaComplete(applicationContext, payload)
                 }
                 MessageType.WATCH_FACE_INSTALL -> {
+                    var attemptedPayload: WatchFaceInstallPayload? = null
                     try {
-                        val payload = msg.parsePayload<WatchFaceInstallPayload>(gson)
+                        val payload = msg.parsePayload<WatchFaceInstallPayload>(gson).also { attemptedPayload = it }
                         val pkg = gson.fromJson(payload.jsonContent, com.healthsync.watch.data.watchface.HswfPackage::class.java)
                         require(pkg.id == payload.id) { "Watch face identity did not match the request" }
                         val saved = com.healthsync.watch.data.watchface.DynamicFaceStore.getInstance(applicationContext).saveFace(pkg)
@@ -432,6 +433,12 @@ class BluetoothClientService : Service() {
                         Log.d(TAG, "Dynamic watch face received and saved: ${payload.name} (${payload.id})")
                     } catch (e: Exception) {
                         Log.e(TAG, "Error installing watch face: ${e.message}", e)
+                        attemptedPayload?.let { p ->
+                            sendRawMsg(SyncMessage(
+                                type = MessageType.WATCH_FACE_ACK,
+                                payload = gson.toJson(WatchFaceAckPayload(id = p.id, success = false, message = e.message ?: "Install failed", requestId = p.requestId.orEmpty()))
+                            ), gson)
+                        }
                     }
                 }
                 MessageType.ACK  -> Log.d(TAG, "ACK received")

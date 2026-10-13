@@ -46,6 +46,16 @@ object PowerSaveManager {
         // Apply service-level power policies
         when (mode) {
             PowerSaveMode.SUPER_EXTREME -> {
+                // Terminate active workout tracking if ongoing
+                if (com.healthsync.watch.service.WorkoutTrackingService.isActive) {
+                    try {
+                        appContext.startService(Intent(appContext, com.healthsync.watch.service.WorkoutTrackingService::class.java).apply {
+                            action = com.healthsync.watch.service.WorkoutTrackingService.ACTION_STOP
+                        })
+                    } catch (e: Exception) {
+                        android.util.Log.w("PowerSaveManager", "Could not stop workout: ${e.message}")
+                    }
+                }
                 // Terminate phone RF communication completely to conserve mA draw
                 BluetoothClientService.onSuperPowerSaveModeChanged(appContext, isSuperExtreme = true)
                 SensorCollectorService.notifyPowerSaveChanged(appContext)

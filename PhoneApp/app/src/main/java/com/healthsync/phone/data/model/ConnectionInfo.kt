@@ -5,5 +5,6 @@ data class ConnectionInfo(
     val isConnected: Boolean = false,
     val deviceName: String? = null,
     val deviceAddress: String? = null,
-    val isListening: Boolean = false   // true when RFCOMM server socket is open
+    val isListening: Boolean = false,  // true when RFCOMM server socket is open
+    val batteryPercent: Int = -1
 )

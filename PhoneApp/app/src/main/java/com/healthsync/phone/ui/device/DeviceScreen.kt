@@ -29,6 +29,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.BluetoothSearching
@@ -322,6 +323,22 @@ private fun ConnectionStatusCard(state: ConnectionInfo, phoneName: String) {
                 else -> "Connect to receive your watch’s data"
             }
             Text(detail ?: "", color = TextSecondary, fontSize = 13.sp, textAlign = TextAlign.Center, lineHeight = 18.sp)
+            if (isConnected && state.batteryPercent >= 0) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = AccentCyan.copy(alpha = 0.12f),
+                    border = BorderStroke(1.dp, AccentCyan.copy(alpha = 0.3f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(Icons.Default.BatteryChargingFull, contentDescription = null, tint = AccentCyan, modifier = Modifier.size(14.dp))
+                        Text("Watch battery: ${state.batteryPercent}%", color = AccentCyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
             state.deviceAddress?.let {
                 Text(it, color = TextDim, fontSize = 11.sp)
             }

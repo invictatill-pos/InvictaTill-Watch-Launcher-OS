@@ -510,10 +510,6 @@ class SensorCollectorService : Service() {
         refreshHeartSensors()
         spo2Available = oxygenSensors.isNotEmpty()
 
-        hardwareStepsRegistered = tryRegister(Sensor.TYPE_STEP_COUNTER, SensorManager.SENSOR_DELAY_NORMAL)
-        stepDetectorRegistered = !hardwareStepsRegistered && tryRegister(Sensor.TYPE_STEP_DETECTOR, SensorManager.SENSOR_DELAY_NORMAL)
-        motionSensorRegistered = tryRegister(Sensor.TYPE_ACCELEROMETER, 20_000)
-        refreshStepCaptureStatus()
         scheduleBootCount = WatchTimerStore.bootCount(this)
         val sameBoot = scheduleBootCount >= 0 && prefs.getInt("schedule_boot_count", -1) == scheduleBootCount
         for (kind in MeasurementKind.values()) {
@@ -522,8 +518,15 @@ class SensorCollectorService : Service() {
             if (sameBoot) measurementSchedule.restoreDue(kind, prefs.getLong("schedule_${kind.name}_interval", -1L),
                 prefs.getLong("schedule_${kind.name}_due", 0L))
         }
-        restartIntervalJobs()
-        if (measurementJobs[MeasurementKind.HEART_RATE]?.isActive != true) updateHrStatus(initialHrStatus())
+        if (watchPrefs.isPowerSaveActive) {
+            applyPowerSaveState()
+        } else {
+            hardwareStepsRegistered = tryRegister(Sensor.TYPE_STEP_COUNTER, SensorManager.SENSOR_DELAY_NORMAL)
+            stepDetectorRegistered = !hardwareStepsRegistered && tryRegister(Sensor.TYPE_STEP_DETECTOR, SensorManager.SENSOR_DELAY_NORMAL)
+            motionSensorRegistered = tryRegister(Sensor.TYPE_ACCELEROMETER, 20_000)
+            restartIntervalJobs()
+            if (measurementJobs[MeasurementKind.HEART_RATE]?.isActive != true) updateHrStatus(initialHrStatus())
+        }
         scope.launch {
             while (isActive) { delay(30_000L); resetDayIfNeeded(); refreshStepCaptureStatus() }
         }
@@ -534,13 +537,17 @@ class SensorCollectorService : Service() {
         if (!foregroundStarted) { stopSelf(); return START_NOT_STICKY }
         // Permissions may have been granted since creation. Repeated Home starts leave
         // registered sensors and live measurement windows alone.
-        if (!hardwareStepsRegistered) hardwareStepsRegistered = tryRegister(Sensor.TYPE_STEP_COUNTER, SensorManager.SENSOR_DELAY_NORMAL)
-        if (hardwareStepsRegistered && stepDetectorRegistered) {
-            sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR)?.let { sensorManager.unregisterListener(listener, it) }
-            stepDetectorRegistered = false
+        if (!watchPrefs.isPowerSaveActive) {
+            if (!hardwareStepsRegistered) hardwareStepsRegistered = tryRegister(Sensor.TYPE_STEP_COUNTER, SensorManager.SENSOR_DELAY_NORMAL)
+            if (hardwareStepsRegistered && stepDetectorRegistered) {
+                sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR)?.let { sensorManager.unregisterListener(listener, it) }
+                stepDetectorRegistered = false
+            }
+            if (!hardwareStepsRegistered && !stepDetectorRegistered) stepDetectorRegistered = tryRegister(Sensor.TYPE_STEP_DETECTOR, SensorManager.SENSOR_DELAY_NORMAL)
+            if (!motionSensorRegistered) motionSensorRegistered = tryRegister(Sensor.TYPE_ACCELEROMETER, 20_000)
+        } else if (watchPrefs.isExtremePowerSave && !hardwareStepsRegistered) {
+            hardwareStepsRegistered = tryRegister(Sensor.TYPE_STEP_COUNTER, SensorManager.SENSOR_DELAY_NORMAL)
         }
-        if (!hardwareStepsRegistered && !stepDetectorRegistered) stepDetectorRegistered = tryRegister(Sensor.TYPE_STEP_DETECTOR, SensorManager.SENSOR_DELAY_NORMAL)
-        if (!motionSensorRegistered) motionSensorRegistered = tryRegister(Sensor.TYPE_ACCELEROMETER, 20_000)
         refreshStepCaptureStatus()
         val previousAvailability = heartRateAvailable
         refreshHeartSensors()
@@ -671,6 +678,7 @@ class SensorCollectorService : Service() {
                 unregisterMeasurementSensors(MeasurementKind.OXYGEN)
                 updateHrStatus("power_saver")
                 spo2Status = "power_saver"
+                updateMeasurementAlarms()
             }
             PowerSaveMode.EXTREME -> {
                 if (motionSensorRegistered) {
@@ -681,6 +689,7 @@ class SensorCollectorService : Service() {
                 spo2Job?.cancel(); spo2Job = null
                 if (!hardwareStepsRegistered) hardwareStepsRegistered = tryRegister(Sensor.TYPE_STEP_COUNTER, SensorManager.SENSOR_DELAY_NORMAL)
                 if (measurementJobs[MeasurementKind.HEART_RATE]?.isActive != true) updateHrStatus("power_saver")
+                updateMeasurementAlarms()
             }
             PowerSaveMode.NORMAL -> {
                 if (!hardwareStepsRegistered) hardwareStepsRegistered = tryRegister(Sensor.TYPE_STEP_COUNTER, SensorManager.SENSOR_DELAY_NORMAL)
@@ -693,6 +702,12 @@ class SensorCollectorService : Service() {
     }
 
     private fun ensureIntervalJobs() {
+        if (watchPrefs.isPowerSaveActive) {
+            hrJob?.cancel(); hrJob = null
+            spo2Job?.cancel(); spo2Job = null
+            updateMeasurementAlarms()
+            return
+        }
         if (measurementSchedule.isEnabled(MeasurementKind.HEART_RATE) && hrJob?.isActive != true) {
             hrJob = intervalJob(MeasurementKind.HEART_RATE)
         }
@@ -712,6 +727,8 @@ class SensorCollectorService : Service() {
     }
 
     private fun requestMeasurement(kind: MeasurementKind, manualRequest: Boolean = true) {
+        if (watchPrefs.isSuperExtremePowerSave) return
+        if (watchPrefs.isExtremePowerSave && !manualRequest) return
         val existing = measurementJobs[kind]
         if (existing != null && !existing.isCompleted) {
             if (!manualRequest) {
@@ -906,6 +923,7 @@ class SensorCollectorService : Service() {
     }
 
     private fun handleScheduledAlarm(kind: MeasurementKind, intent: Intent) {
+        if (watchPrefs.isPowerSaveActive) return
         val intervals = watchPrefs.sensorIntervals()
         if (ScheduledMeasurementPolicy.matches(intent.getLongExtra("interval", -1L), intent.getLongExtra("revision", -1L),
                 intent.getLongExtra("due", 0L), measurementSchedule.intervalMs(kind) ?: -1L, intervals.revision,
@@ -929,6 +947,17 @@ class SensorCollectorService : Service() {
         val editor = prefs.edit()
         var changed = prefs.getInt("schedule_boot_count", -1) != scheduleBootCount
         if (changed) editor.putInt("schedule_boot_count", scheduleBootCount)
+        if (watchPrefs.isPowerSaveActive) {
+            for (kind in MeasurementKind.values()) {
+                val interval = measurementSchedule.intervalMs(kind) ?: -1L
+                val due = measurementSchedule.dueAtMs(kind) ?: 0L
+                val slot = AlarmSlot(interval, revision, due)
+                alarmSlots.remove(kind)
+                runCatching { manager.cancel(measurementAlarm(kind, slot)) }
+            }
+            if (changed) editor.apply()
+            return
+        }
         for (kind in MeasurementKind.values()) {
             val interval = measurementSchedule.intervalMs(kind) ?: -1L
             val due = measurementSchedule.dueAtMs(kind) ?: 0L

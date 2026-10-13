@@ -43,4 +43,17 @@ class SyncProtocolTest {
         assertFalse(response.playing)
         assertFalse(response.available)
     }
+
+    @Test fun deviceInfoPayloadTransportsWatchBatteryAndFirmware() {
+        val info = DeviceInfoPayload("2.8.2", 282, "Kolabee U8 Ultra", batteryPercent = 78)
+        val wire = gson.toJson(info)
+        val decoded = gson.fromJson(wire, DeviceInfoPayload::class.java)
+        assertEquals("2.8.2", decoded.versionName)
+        assertEquals(282, decoded.versionCode)
+        assertEquals(78, decoded.batteryPercent)
+
+        val connInfo = ConnectionInfo(isConnected = true, deviceName = "Kolabee U8 Ultra", batteryPercent = decoded.batteryPercent)
+        assertEquals(78, connInfo.batteryPercent)
+        assertTrue(connInfo.isConnected)
+    }
 }
