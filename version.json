@@ -1,18 +1,18 @@
 {
     "phone":  {
-                  "versionCode":  23,
-                  "versionName":  "2.8.1",
-                  "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.8.1/HealthSync-Phone.apk",
-                  "changelog":  "Introduces 60 FPS animated watch faces \u0026 live touch interactivity. Adds 9 innovative dials to Store (Quantum Sonar Radar HUD, Cyberpunk Pulse ECG, Kinetic Tourbillon Haute, Neon Audio Spectrum VU, Cosmos Orbital Gravity, Liquid Mercury Flow, Bioluminescent Aurora, Zen Water Ripple, F1 Telemetry Velocity) with Animated \u0026 Interactive filter chips and live preview badges.",
+                  "versionCode":  24,
+                  "versionName":  "2.8.2",
+                  "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.8.2/HealthSync-Phone.apk",
+                  "changelog":  "Adds companion support and diagnostics for Watch multi-tier battery saving system, including Extreme Saver and Super Extreme Emergency modes.",
                   "forceUpdate":  false,
-                  "sha256":  "5085f1a28a55f26cf13266c037c96a2df10bd0ee61ca6af539afea0306deea0f"
+                  "sha256":  "a09007926a447323bba4d250002b559dea7d397b9803f5ad24d3283f80ee5c58"
               },
     "watch":  {
-                  "versionCode":  29,
-                  "versionName":  "2.8.1",
-                  "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.8.1/HealthSync-Watch.apk",
-                  "changelog":  "Adds real-time 60 FPS animation canvas engine and interactive touch controller (tap-to-cycle neon palettes, mode toggles, water ripples) for animated dials installed from the Phone App Store, with zero idle battery drain in ambient/AOD mode.",
+                  "versionCode":  30,
+                  "versionName":  "2.8.2",
+                  "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.8.2/HealthSync-Watch.apk",
+                  "changelog":  "Adds multi-tier Battery Saver system: Extreme Saver (3x stamina, 1 Hz ticks, relaxed optical sensors, PHONE CONNECTION KEPT ALIVE) and Super Extreme Saver (8+ days emergency standby, stops Bluetooth RF, minimal OLED emergency clock with 1-tap exit). Added Battery \u0026 Power settings screen with live stamina estimation.",
                   "forceUpdate":  false,
-                  "sha256":  "432f03548e52b31772fbd5b79d70428030d5e18192c98502b671eb08cf1eb71a"
+                  "sha256":  "6159c0edab2ac8f3185e8e88d4c6e5024a2311a20f9ea5c566b57cbf102b1603"
               }
 }

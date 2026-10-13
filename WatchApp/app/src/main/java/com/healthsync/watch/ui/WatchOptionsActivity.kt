@@ -42,6 +42,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.healthsync.watch.R
+import com.healthsync.watch.data.PowerSaveManager
+import com.healthsync.watch.data.PowerSaveMode
 import com.healthsync.watch.data.WatchPreferences
 import com.healthsync.watch.service.BluetoothClientService
 import com.healthsync.watch.service.SensorCollectorService
@@ -64,6 +66,7 @@ class WatchOptionsActivity : AppCompatActivity() {
         const val SCREEN_PROFILE = "profile"
         const val SCREEN_BEZEL = "bezel"
         const val SCREEN_NOTIFICATIONS = "notifications"
+        const val SCREEN_BATTERY = "battery"
         private const val SCREEN_HR_INTERVAL = "hr_interval"
         private const val SCREEN_OXYGEN_INTERVAL = "oxygen_interval"
         private const val ACCENT = 0xFF8CE7C8.toInt()
@@ -229,6 +232,7 @@ class WatchOptionsActivity : AppCompatActivity() {
             SCREEN_PROFILE -> profileScreen()
             SCREEN_BEZEL -> bezelScreen()
             SCREEN_NOTIFICATIONS -> notificationScreen()
+            SCREEN_BATTERY -> batteryScreen()
             SCREEN_HR_INTERVAL -> intervalScreen(false)
             SCREEN_OXYGEN_INTERVAL -> intervalScreen(true)
             else -> { screen = SCREEN_MENU; menuScreen() }
@@ -256,6 +260,7 @@ class WatchOptionsActivity : AppCompatActivity() {
         action("Workout history") { startActivity(Intent(this, WatchHistoryActivity::class.java)) }
         action("Health readings") { showScreen(SCREEN_HEALTH) }
         action("Display & AOD") { showScreen(SCREEN_DISPLAY) }
+        action("Battery & Power Saver") { showScreen(SCREEN_BATTERY) }
         action("Software bezel") { showScreen(SCREEN_BEZEL) }
         action("Watch notifications") { showScreen(SCREEN_NOTIFICATIONS) }
         action("Sensor settings") { showScreen(SCREEN_SENSORS) }
@@ -1013,6 +1018,137 @@ class WatchOptionsActivity : AppCompatActivity() {
         background = panel(0xFF15221D.toInt())
         setSelectAllOnFocus(true)
         content.addView(this, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { bottomMargin = dp(10) })
+    }
+
+    private fun batteryScreen() {
+        heading("Battery & Power", "Manage stamina & power modes")
+
+        val bm = getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
+        val batteryPct = bm?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)?.coerceIn(0, 100) ?: -1
+        val currentMode = preferences.powerSaveMode
+
+        val batHeader = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            background = panel(0xFF14241E.toInt())
+        }
+        val batLevelText = if (batteryPct >= 0) "$batteryPct%" else "Battery"
+        batHeader.addView(TextView(this).apply {
+            text = "🔋 $batLevelText"
+            textSize = 26f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            gravity = Gravity.CENTER
+        })
+        batHeader.addView(TextView(this).apply {
+            text = PowerSaveManager.getModeBadge(currentMode)
+            textSize = 10.5f
+            setTextColor(ACCENT)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(2), 0, 0)
+        })
+        content.addView(batHeader, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = dp(12)
+        })
+
+        // Mode 1: Normal Mode
+        val isNormal = currentMode == PowerSaveMode.NORMAL
+        val normalHours = if (batteryPct > 0) "~${PowerSaveManager.getEstimatedHours(batteryPct, PowerSaveMode.NORMAL)} hrs" else "Standard"
+        action("1. Normal Mode" + if (isNormal) "  ✓" else "", isNormal) {
+            if (!isNormal) {
+                PowerSaveManager.applyMode(this, PowerSaveMode.NORMAL)
+                Toast.makeText(this, "Normal Mode Active", Toast.LENGTH_SHORT).show()
+                showScreen(SCREEN_BATTERY)
+            }
+        }
+        label("Full 60 FPS animations, regular optical sensors & companion sync · Est: $normalHours")
+
+        // Mode 2: Extreme Battery Saver (Stamina) - Keeps communication alive
+        val isExtreme = currentMode == PowerSaveMode.EXTREME
+        val extremeHours = if (batteryPct > 0) "~${PowerSaveManager.getEstimatedHours(batteryPct, PowerSaveMode.EXTREME)} hrs (3x)" else "3x Longevity"
+        action("2. Extreme Saver" + if (isExtreme) "  ✓" else "", isExtreme) {
+            if (!isExtreme) {
+                PowerSaveManager.applyMode(this, PowerSaveMode.EXTREME)
+                Toast.makeText(this, "Extreme Saver Active · Phone Connected", Toast.LENGTH_SHORT).show()
+                showScreen(SCREEN_BATTERY)
+            }
+        }
+        label("Extreme battery saving. Pauses animations & optical sensors. Phone communication KEPT ALIVE (Calls & Notifications active) · Est: $extremeHours", bold = isExtreme)
+
+        // Mode 3: Super Extreme Saver (Emergency) - Stops communication
+        val isSuper = currentMode == PowerSaveMode.SUPER_EXTREME
+        val superHours = if (batteryPct > 0) "~${PowerSaveManager.getEstimatedHours(batteryPct, PowerSaveMode.SUPER_EXTREME)} hrs (8+ Days)" else "Max Standby"
+        action("3. Super Extreme" + if (isSuper) "  ✓" else "", isSuper) {
+            if (!isSuper) {
+                confirmSuperExtremeMode()
+            }
+        }
+        label("Emergency stamina. Communication with phone app is STOPPED (Bluetooth radio off). Emergency clock only. Tap to exit anytime · Est: $superHours", bold = isSuper)
+
+        backToMenu()
+    }
+
+    private fun confirmSuperExtremeMode() {
+        val dialog = Dialog(this).apply {
+            requestWindowFeature(Window.FEATURE_NO_TITLE)
+            window?.setBackgroundDrawable(ColorDrawable(Color.BLACK))
+        }
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            val side = dp(16)
+            setPadding(side, side, side, side)
+            background = panel(0xFF1F1610.toInt())
+        }
+        layout.addView(TextView(this).apply {
+            text = "⚡ Enter Super Extreme Saver?"
+            textSize = 15f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            gravity = Gravity.CENTER
+        })
+        layout.addView(TextView(this).apply {
+            text = "Phone communication and background sensors will stop to save maximum battery. You can exit anytime from the emergency clock."
+            textSize = 11.5f
+            setTextColor(MUTED)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(6), 0, dp(12))
+        })
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        btnRow.addView(Button(this).apply {
+            text = "Cancel"
+            textSize = 12f
+            setTextColor(Color.WHITE)
+            isAllCaps = false
+            background = panel(0xFF2B2B2B.toInt())
+            setOnClickListener { dialog.dismiss() }
+        }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(4) })
+        btnRow.addView(Button(this).apply {
+            text = "Enable"
+            textSize = 12f
+            setTextColor(Color.WHITE)
+            isAllCaps = false
+            background = GradientDrawable().apply {
+                setColor(0xFFB45309.toInt())
+                cornerRadius = dp(12).toFloat()
+            }
+            setOnClickListener {
+                dialog.dismiss()
+                PowerSaveManager.applyMode(this@WatchOptionsActivity, PowerSaveMode.SUPER_EXTREME)
+                Toast.makeText(this@WatchOptionsActivity, "Super Extreme Saver Enabled", Toast.LENGTH_SHORT).show()
+                startActivity(Intent(this@WatchOptionsActivity, WatchFaceActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                finish()
+            }
+        }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginStart = dp(4) })
+        layout.addView(btnRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+        dialog.setContentView(layout, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        dialog.show()
     }
 
     private fun panel(color: Int) = WatchVisualStyle.surface(this,color)

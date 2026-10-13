@@ -37,6 +37,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.healthsync.watch.R
+import com.healthsync.watch.data.PowerSaveManager
+import com.healthsync.watch.data.PowerSaveMode
 import com.healthsync.watch.data.WatchPreferences
 import com.healthsync.watch.notification.NotificationsInboxActivity
 import com.healthsync.watch.notification.NotificationInboxStore
@@ -77,6 +79,7 @@ class WatchFaceActivity : AppCompatActivity() {
     private lateinit var shellDock: LinearLayout
     private lateinit var panelHost: FrameLayout
     private lateinit var notificationDock: WatchDockButton
+    private lateinit var superPowerSaveClockView: SuperPowerSaveClockView
     private val navigation = ShellNavigation()
     private data class Surface(val view: View, val resume: () -> Unit, val pause: () -> Unit,
         val destroy: () -> Unit, val back: () -> Boolean = { false }, val keepAwake: () -> Boolean = { false })
@@ -180,7 +183,8 @@ class WatchFaceActivity : AppCompatActivity() {
             }
             if (intent.action == "com.healthsync.watch.WORKOUT_SAVED") refreshDailyTotals()
             if (intent.action == NotificationInboxStore.ACTION_CHANGED) refreshUnread()
-            if (intent.action == "com.healthsync.watch.ACTION_FACE_CHANGED") updateWatchFaceVisibility()
+            if (intent.action == "com.healthsync.watch.ACTION_FACE_CHANGED" ||
+                intent.action == PowerSaveManager.ACTION_POWER_SAVE_CHANGED) updateWatchFaceVisibility()
             // Sensor events must not turn the minute-only dim clock into a continuous redraw loop.
             if (!isAmbient && surface == null) updateLiveData()
         }
@@ -222,6 +226,16 @@ class WatchFaceActivity : AppCompatActivity() {
         notificationDock = dock("bell", "Notifications", "notifications")
         dock("settings", "Watch settings", "settings")
         val faceRoot = findViewById<View>(R.id.watchFaceRoot)
+        superPowerSaveClockView = SuperPowerSaveClockView(this).apply {
+            onExitRequested = {
+                PowerSaveManager.applyMode(this@WatchFaceActivity, PowerSaveMode.NORMAL)
+                Toast.makeText(this@WatchFaceActivity, "Super Saver Exited · Restoring Connection", Toast.LENGTH_SHORT).show()
+                updateWatchFaceVisibility()
+                updateLiveData()
+            }
+            visibility = View.GONE
+        }
+        (faceRoot as? ViewGroup)?.addView(superPowerSaveClockView, FrameLayout.LayoutParams(-1, -1))
         faceRoot.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             val diameter = min(faceRoot.width, faceRoot.height)
             if (diameter > 0) {
@@ -503,6 +517,7 @@ class WatchFaceActivity : AppCompatActivity() {
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (preferences.isSuperExtremePowerSave) return super.dispatchTouchEvent(event)
         if (animatingPanel) return true
         if (event.actionMasked == MotionEvent.ACTION_DOWN && isAmbient) {
             touchInProgress = true
@@ -631,6 +646,29 @@ class WatchFaceActivity : AppCompatActivity() {
     }
 
     private fun updateWatchFaceVisibility() {
+        val mode = preferences.powerSaveMode
+        if (mode == PowerSaveMode.SUPER_EXTREME) {
+            superPowerSaveClockView.visibility = View.VISIBLE
+            circularWatchFaceView.visibility = View.GONE
+            dynamicWatchFaceView.visibility = View.GONE
+            orbitFace.visibility = View.GONE
+            chronoWatchFaceView.visibility = View.GONE
+            casioWatchFaceView.visibility = View.GONE
+            neonHudWatchFaceView.visibility = View.GONE
+            bauhausWatchFaceView.visibility = View.GONE
+            shellDock.visibility = View.GONE
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            window.setBackgroundDrawable(ColorDrawable(Color.BLACK))
+            findViewById<View>(R.id.watchFaceRoot).setBackgroundColor(Color.BLACK)
+            return
+        }
+        superPowerSaveClockView.visibility = View.GONE
+
+        val isExtreme = mode == PowerSaveMode.EXTREME
+        chronoWatchFaceView.setPowerSaverMode(isExtreme)
+        dynamicWatchFaceView.setPowerSaverMode(isExtreme)
+
         val style = preferences.watchFaceStyle
         val clockShortcuts = WatchFaceCatalog.showsClockShortcuts(style, preferences.clockShortcutsEnabled)
         orbitFace.setAodStyle(preferences.aodStyle)
@@ -662,7 +700,7 @@ class WatchFaceActivity : AppCompatActivity() {
         neonHudWatchFaceView.visibility = if (style == "neon") View.VISIBLE else View.GONE
         bauhausWatchFaceView.visibility = if (style == "bauhaus") View.VISIBLE else View.GONE
         shellDock.visibility = if (clockShortcuts && !isAmbient && surface == null) View.VISIBLE else View.GONE
-        val wallpaper = preferences.wallpaperBackdropEnabled && !isAmbient && surface == null && style != "classic" && style != "chrono" && !isDynamic
+        val wallpaper = !isExtreme && preferences.wallpaperBackdropEnabled && !isAmbient && surface == null && style != "classic" && style != "chrono" && !isDynamic
         if (wallpaper) window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
         else window.clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
         window.setBackgroundDrawable(ColorDrawable(if (wallpaper) Color.TRANSPARENT else Color.BLACK))
@@ -681,6 +719,12 @@ class WatchFaceActivity : AppCompatActivity() {
 
     private fun updateLiveData() {
         val nowCal = Calendar.getInstance()
+        val battery = getBatteryPercentage()
+
+        if (superPowerSaveClockView.visibility == View.VISIBLE) {
+            superPowerSaveClockView.update(nowCal, battery)
+            return
+        }
 
         circularWatchFaceView.updateTime(nowCal)
         orbitFace.updateTime(nowCal)
@@ -711,7 +755,6 @@ class WatchFaceActivity : AppCompatActivity() {
         val steps = if(SensorCollectorService.hasCapturedStepsToday()) SensorCollectorService.latestSteps.coerceAtLeast(0) else -1
         val stepGoal = preferences.stepGoal.coerceAtLeast(1)
         val connected = BluetoothClientService.isConnected
-        val battery = getBatteryPercentage()
         orbitFace.setData(steps, stepGoal, bpm, battery, connected, unread, WorkoutTrackingService.isActive)
         val timer = WatchTimerStore.read(this)
         orbitFace.setTimer(when (timer.phase) {
@@ -859,6 +902,7 @@ class WatchFaceActivity : AppCompatActivity() {
             addAction(Intent.ACTION_TIMEZONE_CHANGED)
             addAction(NotificationInboxStore.ACTION_CHANGED)
             addAction("com.healthsync.watch.ACTION_FACE_CHANGED")
+            addAction(PowerSaveManager.ACTION_POWER_SAVE_CHANGED)
         }, ContextCompat.RECEIVER_NOT_EXPORTED)
 
         setAmbientDisplay(false)

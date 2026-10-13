@@ -73,6 +73,7 @@ class BluetoothClientService : Service() {
         /** True means queued on the active connection; only SYNC_ACK confirms persistence. */
         fun sendRawMsg(msg: SyncMessage, gson: Gson = Gson()): Boolean {
             val svc = instance ?: return false
+            if (svc.preferences.isSuperExtremePowerSave) return false
             val writer = sharedWriter ?: return false
             val connection = svc.socket ?: return false
             if (!isConnected) return false
@@ -83,6 +84,26 @@ class BluetoothClientService : Service() {
         fun syncSensorIntervals(context: Context): Boolean {
             val snapshot = WatchPreferences(context.applicationContext).sensorIntervals()
             return sendRawMsg(SyncMessage(MessageType.SENSOR_INTERVALS, payload = Gson().toJson(snapshot)))
+        }
+
+        fun onSuperPowerSaveModeChanged(context: Context, isSuperExtreme: Boolean) {
+            val svc = instance
+            if (svc != null) {
+                if (isSuperExtreme) {
+                    svc.disconnectForSuperPowerSave()
+                } else {
+                    svc.resumeFromSuperPowerSave()
+                }
+            } else if (!isSuperExtreme) {
+                try {
+                    ContextCompat.startForegroundService(
+                        context,
+                        Intent(context, BluetoothClientService::class.java)
+                    )
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not start BluetoothClientService: ${e.message}")
+                }
+            }
         }
 
         fun syncBatchedPayloads(context: Context) {
@@ -115,6 +136,23 @@ class BluetoothClientService : Service() {
     private val lastReceivedAt = AtomicLong()
     private var foregroundStarted = false
     private var connectionJob: Job? = null
+
+    internal fun disconnectForSuperPowerSave() {
+        serviceScope.launch {
+            if (isConnected) {
+                isConnected = false
+                sharedWriter = null
+                try { socket?.close() } catch (_: Exception) {}
+                socket = null
+                broadcastStatus(this@BluetoothClientService, false)
+            }
+            updateNotif("Super Power Saver · Phone connection paused")
+        }
+    }
+
+    internal fun resumeFromSuperPowerSave() {
+        ensureConnectionJob()
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -159,6 +197,19 @@ class BluetoothClientService : Service() {
         var retryCount = 0
         var candidateIndex = 0
         while (currentCoroutineContext().isActive) {
+            if (preferences.isSuperExtremePowerSave) {
+                if (isConnected) {
+                    isConnected = false
+                    sharedWriter = null
+                    try { socket?.close() } catch (_: Exception) {}
+                    socket = null
+                    broadcastStatus(this@BluetoothClientService, false)
+                }
+                updateNotif("Super Power Saver · Phone connection paused")
+                delay(3_000L)
+                continue
+            }
+
             val adapter = getBluetoothAdapter()
             val bluetoothReady = try { hasBtPermission() && adapter?.isEnabled == true } catch (_: SecurityException) { false }
             if (!bluetoothReady || adapter == null) {

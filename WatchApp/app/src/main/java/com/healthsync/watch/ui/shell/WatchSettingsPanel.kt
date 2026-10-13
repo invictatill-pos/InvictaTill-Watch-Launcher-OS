@@ -47,6 +47,7 @@ class WatchSettingsPanel(
         row("Phone connection", "Pairing & reconnect") { options(WatchOptionsActivity.SCREEN_PHONE) }
         row("Profile", "Goals · weight · height") { options(WatchOptionsActivity.SCREEN_PROFILE) }
         section("DISPLAY & DEVICE")
+        row("Battery & Power Saver", "Normal · Extreme · Super Extreme") { options(WatchOptionsActivity.SCREEN_BATTERY) }
         row("Display & AOD", "Faces · dim styles · brightness") { options(WatchOptionsActivity.SCREEN_DISPLAY) }
         row("Software bezel", "Round mask over other apps") { options(WatchOptionsActivity.SCREEN_BEZEL) }
         row("Home app", "Select or restore launcher") { launch(Intent(activity,QuickSettingsActivity::class.java).putExtra(QuickSettingsActivity.EXTRA_SCREEN,QuickSettingsActivity.SCREEN_HOME)) }

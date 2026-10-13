@@ -165,12 +165,24 @@ class ChronoWatchFaceView @JvmOverloads constructor(
         val months = arrayOf("JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC")
         monthStr = months[cal.get(Calendar.MONTH).coerceIn(0, 11)]
 
-        if (!isAmbient) {
+        if (!isAmbient && !isPowerSaver) {
             startSecondSweep(oldSec, second)
         } else {
             secondFraction = 0f
             invalidate()
         }
+    }
+
+    private var isPowerSaver = false
+
+    fun setPowerSaverMode(enabled: Boolean) {
+        if (isPowerSaver == enabled) return
+        isPowerSaver = enabled
+        if (enabled) {
+            sweepAnimator?.cancel()
+            sweepAnimator = null
+        }
+        invalidate()
     }
 
     private fun startSecondSweep(fromSec: Int, toSec: Int) {

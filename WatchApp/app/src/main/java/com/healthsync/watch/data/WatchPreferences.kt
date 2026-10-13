@@ -144,5 +144,23 @@ class WatchPreferences(context: Context) {
         }
     }
 
+    var powerSaveMode: PowerSaveMode
+        get() = PowerSaveMode.fromCode(prefs.getInt("power_save_mode", PowerSaveMode.NORMAL.code))
+        set(v) { prefs.edit().putInt("power_save_mode", v.code).apply() }
+
+    val isPowerSaveActive: Boolean get() = powerSaveMode != PowerSaveMode.NORMAL
+    val isExtremePowerSave: Boolean get() = powerSaveMode == PowerSaveMode.EXTREME
+    val isSuperExtremePowerSave: Boolean get() = powerSaveMode == PowerSaveMode.SUPER_EXTREME
+
     private fun validInterval(value: Long) = if (value == -1L) value else value.coerceIn(30_000L, 3_600_000L)
+}
+
+enum class PowerSaveMode(val code: Int) {
+    NORMAL(0),
+    EXTREME(1),
+    SUPER_EXTREME(2);
+
+    companion object {
+        fun fromCode(code: Int): PowerSaveMode = values().firstOrNull { it.code == code } ?: NORMAL
+    }
 }

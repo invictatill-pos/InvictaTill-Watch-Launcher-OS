@@ -72,6 +72,7 @@ class SensorCollectorService : Service() {
         private const val ACTION_CHECK_APP_HR = "com.healthsync.watch.CHECK_APP_HR"
         private const val ACTION_CHECK_APP_OXYGEN = "com.healthsync.watch.CHECK_APP_OXYGEN"
         const val ACTION_SYNC_HEART_RATE = "com.healthsync.watch.SYNC_HEART_RATE"
+        const val ACTION_POWER_SAVE_UPDATED = "com.healthsync.watch.POWER_SAVE_UPDATED"
         private const val ACTION_AUTO_HR = "com.healthsync.watch.AUTO_HR"
         private const val ACTION_AUTO_OXYGEN = "com.healthsync.watch.AUTO_OXYGEN"
         private const val DIAGNOSTIC_LIMIT = 8_192
@@ -104,6 +105,7 @@ class SensorCollectorService : Service() {
             }
         }
         fun notifySettingsUpdated(context: Context) = command(context, ACTION_SETTINGS_UPDATED)
+        fun notifyPowerSaveChanged(context: Context) = command(context, ACTION_POWER_SAVE_UPDATED)
         fun forceMeasureHr(context: Context) = command(context, ACTION_FORCE_MEASURE_HR)
         fun forceMeasureSpO2(context: Context) = command(context, ACTION_FORCE_MEASURE_SPO2)
         fun checkHealthAppHeartRate(context: Context) = command(context, ACTION_CHECK_APP_HR)
@@ -269,6 +271,11 @@ class SensorCollectorService : Service() {
             if (hrStatus == "checking_health_apps") return "Checking readings shared by installed health apps…"
             if (hrStatus == "app_reading" && displayBpm() > 0)
                 return "From $latestHrSourceLabel · ${heartRateAgeLabel()}"
+            if (hrStatus == "power_saver") {
+                val displayed = watchFaceHeartRate()
+                val ageLabel = HeartRatePolicy.ageLabel(displayed.capturedAt, System.currentTimeMillis())
+                return if (displayed.bpm > 0) "Power Saver mode · $ageLabel" else "Power Saver mode · Optical sensor off"
+            }
             if (hrAppFallbackMessage.isNotBlank() && hrStatus !in setOf("measuring", "reading"))
                 return hrAppFallbackMessage
             if (ContextCompat.checkSelfPermission(context, Manifest.permission.BODY_SENSORS) != PackageManager.PERMISSION_GRANTED)
@@ -547,6 +554,9 @@ class SensorCollectorService : Service() {
                 BluetoothClientService.syncSensorIntervals(this)
                 if (measurementJobs[MeasurementKind.HEART_RATE]?.isActive != true) updateHrStatus(initialHrStatus())
             }
+            ACTION_POWER_SAVE_UPDATED -> {
+                applyPowerSaveState()
+            }
             ACTION_FORCE_MEASURE_HR -> requestMeasurement(MeasurementKind.HEART_RATE)
             ACTION_CHECK_APP_HR -> requestAppExport(MeasurementKind.HEART_RATE)
             ACTION_CHECK_APP_OXYGEN -> requestAppExport(MeasurementKind.OXYGEN)
@@ -624,8 +634,9 @@ class SensorCollectorService : Service() {
 
     private fun restartIntervalJobs() {
         val now = SystemClock.elapsedRealtime()
+        val isPowerSave = watchPrefs.isPowerSaveActive
         for (kind in MeasurementKind.values()) {
-            val configured = if (kind == MeasurementKind.HEART_RATE) watchPrefs.hrIntervalMs else watchPrefs.spo2IntervalMs
+            val configured = if (isPowerSave) -1L else (if (kind == MeasurementKind.HEART_RATE) watchPrefs.hrIntervalMs else watchPrefs.spo2IntervalMs)
             val previous = measurementSchedule.intervalMs(kind)
             measurementSchedule.configure(kind, configured, now)
             if (previous != measurementSchedule.intervalMs(kind)) {
@@ -636,6 +647,49 @@ class SensorCollectorService : Service() {
             }
         }
         ensureIntervalJobs()
+    }
+
+    private fun applyPowerSaveState() {
+        val mode = watchPrefs.powerSaveMode
+        when (mode) {
+            PowerSaveMode.SUPER_EXTREME -> {
+                hrJob?.cancel(); hrJob = null
+                spo2Job?.cancel(); spo2Job = null
+                if (hardwareStepsRegistered) {
+                    sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)?.let { sensorManager.unregisterListener(listener, it) }
+                    hardwareStepsRegistered = false
+                }
+                if (stepDetectorRegistered) {
+                    sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR)?.let { sensorManager.unregisterListener(listener, it) }
+                    stepDetectorRegistered = false
+                }
+                if (motionSensorRegistered) {
+                    sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let { sensorManager.unregisterListener(listener, it) }
+                    motionSensorRegistered = false
+                }
+                unregisterMeasurementSensors(MeasurementKind.HEART_RATE)
+                unregisterMeasurementSensors(MeasurementKind.OXYGEN)
+                updateHrStatus("power_saver")
+                spo2Status = "power_saver"
+            }
+            PowerSaveMode.EXTREME -> {
+                if (motionSensorRegistered) {
+                    sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let { sensorManager.unregisterListener(listener, it) }
+                    motionSensorRegistered = false
+                }
+                hrJob?.cancel(); hrJob = null
+                spo2Job?.cancel(); spo2Job = null
+                if (!hardwareStepsRegistered) hardwareStepsRegistered = tryRegister(Sensor.TYPE_STEP_COUNTER, SensorManager.SENSOR_DELAY_NORMAL)
+                if (measurementJobs[MeasurementKind.HEART_RATE]?.isActive != true) updateHrStatus("power_saver")
+            }
+            PowerSaveMode.NORMAL -> {
+                if (!hardwareStepsRegistered) hardwareStepsRegistered = tryRegister(Sensor.TYPE_STEP_COUNTER, SensorManager.SENSOR_DELAY_NORMAL)
+                if (!hardwareStepsRegistered && !stepDetectorRegistered) stepDetectorRegistered = tryRegister(Sensor.TYPE_STEP_DETECTOR, SensorManager.SENSOR_DELAY_NORMAL)
+                if (!motionSensorRegistered) motionSensorRegistered = tryRegister(Sensor.TYPE_ACCELEROMETER, 20_000)
+                restartIntervalJobs()
+                if (measurementJobs[MeasurementKind.HEART_RATE]?.isActive != true) updateHrStatus(initialHrStatus())
+            }
+        }
     }
 
     private fun ensureIntervalJobs() {
@@ -1193,6 +1247,7 @@ class SensorCollectorService : Service() {
         BluetoothClientService.sendRawMsg(SyncMessage(type = type, timestamp = timestamp, payload = gson.toJson(payload)), gson)
     }
     private fun initialHrStatus() = when {
+        watchPrefs.isPowerSaveActive -> "power_saver"
         latestHrSource == WatchHealthSourcePolicy.HEALTH_APP && displayBpm() > 0 -> "app_reading"
         ContextCompat.checkSelfPermission(this, Manifest.permission.BODY_SENSORS) != PackageManager.PERMISSION_GRANTED -> "permission_required"
         !heartRateAvailable -> "missing_sensor"

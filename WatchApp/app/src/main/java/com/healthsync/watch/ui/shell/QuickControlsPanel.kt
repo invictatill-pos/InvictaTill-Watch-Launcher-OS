@@ -178,7 +178,10 @@ class QuickControlsPanel(
                 onDisplayChanged()
                 refresh()
             }),
-            Triple(Glyph.BATTERY, "Saver", { controls.openSaverSettings() }),
+            Triple(Glyph.BATTERY, "Saver", {
+                activity.startActivity(Intent(activity, com.healthsync.watch.ui.WatchOptionsActivity::class.java)
+                    .putExtra(com.healthsync.watch.ui.WatchOptionsActivity.EXTRA_SCREEN, com.healthsync.watch.ui.WatchOptionsActivity.SCREEN_BATTERY))
+            }),
             Triple(Glyph.AIRPLANE, "Airplane", { controls.openAirplaneSettings() }),
             Triple(Glyph.GEAR, "Settings", { onSettings() })
         )
@@ -283,7 +286,12 @@ class QuickControlsPanel(
         update(Glyph.WATCH, "Foreground always-on display",
             WatchSystemControls.State(preferences.alwaysOnDisplayEnabled, if (preferences.alwaysOnDisplayEnabled) "On" else "Off"),
             "Tap to toggle the foreground dim clock. Uses more battery")
-        update(Glyph.BATTERY, "Battery saver", controls.saverState(), "Open Android battery controls")
+        val saverState = when (preferences.powerSaveMode) {
+            com.healthsync.watch.data.PowerSaveMode.SUPER_EXTREME -> WatchSystemControls.State(true, "Super")
+            com.healthsync.watch.data.PowerSaveMode.EXTREME -> WatchSystemControls.State(true, "Extreme")
+            com.healthsync.watch.data.PowerSaveMode.NORMAL -> WatchSystemControls.State(false, "Normal")
+        }
+        update(Glyph.BATTERY, "Battery saver", saverState, "Tap for power saver modes")
         update(Glyph.AIRPLANE, "Airplane mode", controls.airplaneState(), "Open Android airplane mode controls")
         update(Glyph.GEAR, "Watch settings", WatchSystemControls.State(null, ""), "Tap for watch settings. Hold for Android settings")
         if (::brightness.isInitialized && !adjustingBrightness) {

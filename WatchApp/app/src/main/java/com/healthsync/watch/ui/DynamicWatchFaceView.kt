@@ -188,6 +188,14 @@ class DynamicWatchFaceView @JvmOverloads constructor(
     fun stopIlluminator() {}
     fun triggerIlluminator() {}
 
+    private var isPowerSaver = false
+
+    fun setPowerSaverMode(enabled: Boolean) {
+        if (isPowerSaver == enabled) return
+        isPowerSaver = enabled
+        invalidate()
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val pkg = activePackage ?: return
@@ -196,7 +204,7 @@ class DynamicWatchFaceView @JvmOverloads constructor(
         if (w <= 0 || h <= 0) return
 
         val now = SystemClock.uptimeMillis()
-        val hasAnimation = !isAmbient && pkg.animation != null && pkg.animation.type != "none"
+        val hasAnimation = !isAmbient && !isPowerSaver && pkg.animation != null && pkg.animation.type != "none"
         if (hasAnimation) {
             val dt = if (lastAnimTime > 0L) (now - lastAnimTime).coerceIn(0L, 100L) else 16L
             lastAnimTime = now
