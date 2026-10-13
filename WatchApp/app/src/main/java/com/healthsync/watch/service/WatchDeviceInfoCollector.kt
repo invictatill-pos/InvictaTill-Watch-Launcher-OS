@@ -22,9 +22,9 @@ object WatchDeviceInfoCollector {
         val (vName, vCode) = try {
             val pInfo = appContext.packageManager.getPackageInfo(appContext.packageName, 0)
             val code = if (Build.VERSION.SDK_INT >= 28) pInfo.longVersionCode.toInt() else @Suppress("DEPRECATION") pInfo.versionCode
-            (pInfo.versionName ?: "2.8.3") to code
+            (pInfo.versionName ?: "2.8.4") to code
         } catch (_: Exception) {
-            "2.8.3" to 31
+            "2.8.4" to 32
         }
 
         // 2. Battery & Charging via Sticky Intent
