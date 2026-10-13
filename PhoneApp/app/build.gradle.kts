@@ -14,8 +14,8 @@ android {
         applicationId = "com.healthsync.phone"
         minSdk = 26
         targetSdk = 34
-        versionCode = 24
-        versionName = "2.8.2"
+        versionCode = 25
+        versionName = "2.8.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

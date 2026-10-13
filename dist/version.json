@@ -1,18 +1,18 @@
 {
     "phone":  {
-                  "versionCode":  24,
-                  "versionName":  "2.8.2",
-                  "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.8.2/HealthSync-Phone.apk",
-                  "changelog":  "Adds companion support and diagnostics for Watch multi-tier battery saving system, including Extreme Saver and Super Extreme Emergency modes.",
+                  "versionCode":  25,
+                  "versionName":  "2.8.3",
+                  "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.8.3/HealthSync-Phone.apk",
+                  "changelog":  "v2.8.3: Companion watch battery diagnostics, hardened watch face install ACKs, and full multi-tier battery saver synchronization.",
                   "forceUpdate":  false,
-                  "sha256":  "9cb568c870d44a4c4f7cb114c27ccee26df0f0103facaf172605f3c5ec638738"
+                  "sha256":  "03009d9668968d22b8a8eaeef3af452cf9a30902438cb4db502f86ed336b9b1a"
               },
     "watch":  {
-                  "versionCode":  30,
-                  "versionName":  "2.8.2",
-                  "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.8.2/HealthSync-Watch.apk",
-                  "changelog":  "Adds multi-tier Battery Saver system: Extreme Saver (3x stamina, 1 Hz ticks, relaxed optical sensors, PHONE CONNECTION KEPT ALIVE) and Super Extreme Saver (8+ days emergency standby, stops Bluetooth RF, minimal OLED emergency clock with 1-tap exit). Added Battery \u0026 Power settings screen with live stamina estimation.",
+                  "versionCode":  31,
+                  "versionName":  "2.8.3",
+                  "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.8.3/HealthSync-Watch.apk",
+                  "changelog":  "v2.8.3: Hardened Multi-Tier Battery Saver system (Extreme Saver 3x stamina with phone link, Super Extreme 8+ days emergency standby with 0mA radio draw), hardened sensor/alarm lifecycle, and instant dynamic dial ACK feedback.",
                   "forceUpdate":  false,
-                  "sha256":  "6159c0edab2ac8f3185e8e88d4c6e5024a2311a20f9ea5c566b57cbf102b1603"
+                  "sha256":  "9f07af0b9dcc56b68ea52c882511de30bed808ad069bf76f7de7beca11e56ecf"
               }
 }

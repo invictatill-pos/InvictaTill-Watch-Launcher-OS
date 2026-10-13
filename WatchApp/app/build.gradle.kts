@@ -11,8 +11,8 @@ android {
         applicationId = "com.healthsync.watch"
         minSdk = 23
         targetSdk = 34
-        versionCode = 30
-        versionName = "2.8.2"
+        versionCode = 31
+        versionName = "2.8.3"
 
         // Target ARM architectures used by most smartwatches
         ndk {
