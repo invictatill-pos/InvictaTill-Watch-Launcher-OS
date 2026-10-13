@@ -12,7 +12,7 @@ class OnlineWatchFaceCatalogTest {
     @Test
     fun catalogContainsAllCuratedWatchFaces() {
         val items = OnlineWatchFaceCatalog.items
-        assertTrue("Catalog should contain at least 50 dials", items.size >= 50)
+        assertTrue("Catalog should contain at least 60 dials", items.size >= 60)
 
         val categories = items.map { it.category }.distinct()
         assertTrue("Contains Luxury category", categories.contains("Luxury"))
@@ -21,6 +21,28 @@ class OnlineWatchFaceCatalogTest {
         assertTrue("Contains Cyberpunk category", categories.contains("Cyberpunk"))
         assertTrue("Contains Retro category", categories.contains("Retro"))
         assertTrue("Contains Art category", categories.contains("Art"))
+
+        // Verify animated and interactive dials
+        val animatedDials = items.filter { it.pkg.animation != null && it.pkg.animation?.type != "none" }
+        assertTrue("Catalog contains animated dials", animatedDials.size >= 8)
+
+        val interactiveDials = items.filter { it.pkg.interactive != null }
+        assertTrue("Catalog contains interactive dials", interactiveDials.size >= 8)
+
+        // Verify specific flagship innovative faces
+        val sonar = items.firstOrNull { it.pkg.id == "quantum_sonar_hud" }
+        assertNotNull("Quantum Sonar HUD present", sonar)
+        assertEquals("radar_sweep", sonar?.pkg?.animation?.type)
+        assertEquals("palette_cycle", sonar?.pkg?.interactive?.tapEffect)
+
+        val ecg = items.firstOrNull { it.pkg.id == "cyberpunk_pulse_ecg" }
+        assertNotNull("Cyberpunk Pulse ECG present", ecg)
+        assertEquals("pulse_ecg", ecg?.pkg?.animation?.type)
+
+        val tourbillon = items.firstOrNull { it.pkg.id == "kinetic_tourbillon_haute" }
+        assertNotNull("Kinetic Tourbillon present", tourbillon)
+        assertEquals("tourbillon_spin", tourbillon?.pkg?.animation?.type)
+        assertEquals("mode_toggle", tourbillon?.pkg?.interactive?.tapEffect)
     }
 
     @Test

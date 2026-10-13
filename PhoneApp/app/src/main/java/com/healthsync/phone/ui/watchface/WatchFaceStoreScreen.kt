@@ -66,7 +66,7 @@ fun WatchFaceStoreScreen(
     var searchQuery by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
     var selectedItemForDetail by remember { mutableStateOf<StoreItem?>(null) }
 
-    val categories = listOf("All", "Luxury", "Sports", "Cyberpunk", "Retro", "Minimal", "Art")
+    val categories = listOf("All", "Animated", "Interactive", "Luxury", "Sports", "Cyberpunk", "Retro", "Minimal", "Art")
 
     androidx.activity.compose.BackHandler(enabled = currentSection != StudioSection.STORE) { currentSection = StudioSection.STORE }
 
@@ -85,7 +85,12 @@ fun WatchFaceStoreScreen(
 
     val filteredItems = remember(selectedCategory, searchQuery) {
         OnlineWatchFaceCatalog.items.filter { item ->
-            val matchesCategory = selectedCategory == "All" || item.category.equals(selectedCategory, ignoreCase = true)
+            val matchesCategory = when (selectedCategory) {
+                "All" -> true
+                "Animated" -> item.pkg.animation != null && item.pkg.animation.type != "none"
+                "Interactive" -> item.pkg.interactive != null
+                else -> item.category.equals(selectedCategory, ignoreCase = true)
+            }
             val matchesSearch = searchQuery.isBlank() ||
                     item.pkg.name.contains(searchQuery, ignoreCase = true) ||
                     item.pkg.author.contains(searchQuery, ignoreCase = true) ||
@@ -649,6 +654,43 @@ private fun StoreFaceCard(
                     stepGoal = 10000,
                     battery = -1
                 )
+
+                // Animated & Interactive Badges
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    if (item.pkg.animation != null && item.pkg.animation.type != "none") {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFF06B6D4).copy(alpha = 0.9f)
+                        ) {
+                            Text(
+                                "LIVE",
+                                color = Color.White,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    if (item.pkg.interactive != null) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFFA855F7).copy(alpha = 0.9f)
+                        ) {
+                            Text(
+                                "TAP",
+                                color = Color.White,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
             }
 
             Spacer(Modifier.height(10.dp))
@@ -799,6 +841,12 @@ private fun WatchFaceDetailSheet(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         SpecRow("Type", item.pkg.type.replaceFirstChar { it.uppercase() })
+                        item.pkg.animation?.takeIf { it.type != "none" }?.let { anim ->
+                            SpecRow("Animation", "${anim.type.replace('_', ' ').replaceFirstChar { it.uppercase() }} (60 FPS)")
+                        }
+                        item.pkg.interactive?.let { inter ->
+                            SpecRow("Touch Control", "${inter.tapEffect.replace('_', ' ').replaceFirstChar { it.uppercase() }} + Haptic")
+                        }
                         SpecRow("Dial", if (item.pkg.dial.showTicks) "${item.pkg.dial.tickCount} Ticks (${item.pkg.dial.numberType})" else "Minimal")
                         SpecRow("Target Display", "Kolabee U8 Ultra (320x320)")
                         SpecRow("Health fields", "Captured values on watch")

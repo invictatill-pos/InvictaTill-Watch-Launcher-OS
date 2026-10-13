@@ -40,7 +40,9 @@ object OnlineWatchFaceCatalog {
         heartColor: String = "#EF4444",
         stepColor: String = "#38BDF8",
         batteryColor: String = "#10B981",
-        dateColor: String = "#CBD5E1"
+        dateColor: String = "#CBD5E1",
+        animation: AnimationConfig? = null,
+        interactive: InteractiveConfig? = null
     ): StoreItem {
         return StoreItem(
             pkg = HswfPackage(
@@ -136,7 +138,9 @@ object OnlineWatchFaceCatalog {
                     hideSecondsHand = true,
                     hideBackground = true,
                     monochromeHex = "#E2E8F0"
-                )
+                ),
+                animation = animation,
+                interactive = interactive
             ),
             category = category,
             tags = tags,
@@ -161,7 +165,9 @@ object OnlineWatchFaceCatalog {
         heartColor: String = "#FF3366",
         stepColor: String = "#00E5FF",
         batteryColor: String = "#10B981",
-        dateColor: String = "#94A3B8"
+        dateColor: String = "#94A3B8",
+        animation: AnimationConfig? = null,
+        interactive: InteractiveConfig? = null
     ): StoreItem {
         return StoreItem(
             pkg = HswfPackage(
@@ -233,7 +239,9 @@ object OnlineWatchFaceCatalog {
                     hideSecondsHand = true,
                     hideBackground = true,
                     monochromeHex = "#64748B"
-                )
+                ),
+                animation = animation,
+                interactive = interactive
             ),
             category = category,
             tags = tags,
@@ -254,7 +262,9 @@ object OnlineWatchFaceCatalog {
         minColor: String = "#94A3B8",
         secColor: String = "#38BDF8",
         stepColor: String = "#38BDF8",
-        heartColor: String = "#F43F5E"
+        heartColor: String = "#F43F5E",
+        animation: AnimationConfig? = null,
+        interactive: InteractiveConfig? = null
     ): StoreItem {
         return StoreItem(
             pkg = HswfPackage(
@@ -332,7 +342,9 @@ object OnlineWatchFaceCatalog {
                     mode = "match_dim",
                     hideSecondsHand = true,
                     monochromeHex = "#94A3B8"
-                )
+                ),
+                animation = animation,
+                interactive = interactive
             ),
             category = category,
             tags = tags,
@@ -348,7 +360,9 @@ object OnlineWatchFaceCatalog {
         downloads: String = "4.5k",
         accentColor: String = "#10B981",
         secondaryAccent: String = "#06B6D4",
-        heartColor: String = "#EF4444"
+        heartColor: String = "#EF4444",
+        animation: AnimationConfig? = null,
+        interactive: InteractiveConfig? = null
     ): StoreItem {
         return StoreItem(
             pkg = HswfPackage(
@@ -442,7 +456,9 @@ object OnlineWatchFaceCatalog {
                 aod = AodConfig(
                     mode = "digital_minimal",
                     monochromeHex = accentColor
-                )
+                ),
+                animation = animation,
+                interactive = interactive
             ),
             category = "Sports",
             tags = tags,
@@ -450,10 +466,272 @@ object OnlineWatchFaceCatalog {
         )
     }
 
-    // ── 52 Curated Watch Faces ────────────────────────────────────────────────────────
+    // ── 61 Curated Watch Faces (Including 9 Animated & Interactive Dials) ──────────
 
     val items: List<StoreItem> by lazy {
         listOf(
+            // ── INNOVATIVE & ANIMATED INTERACTIVE WATCH FACES ────────────────────
+            digital(
+                id = "quantum_sonar_hud",
+                name = "Quantum Sonar HUD",
+                category = "Cyberpunk",
+                description = "Active 360° tactical sonar radar HUD with phosphor beam sweep, target tracking blips, and tap-to-cycle neon radar palettes.",
+                tags = listOf("Sonar", "Radar", "Animated", "Interactive", "HUD", "Tactical"),
+                downloads = "8.4k",
+                bgType = "gradient_radial",
+                bgColor = "#020B06",
+                bgStart = "#051A0E",
+                bgEnd = "#010503",
+                timeColor = "#00FF66",
+                glowColor = "#00FF66",
+                fontFamily = "monospace",
+                heartColor = "#FF3366",
+                stepColor = "#00FF66",
+                batteryColor = "#10B981",
+                dateColor = "#4ADE80",
+                animation = AnimationConfig(
+                    type = "radar_sweep",
+                    speedRatio = 1.0f,
+                    colorHex = "#00FF66",
+                    secondaryColorHex = "#003311",
+                    scaleRatio = 1.0f
+                ),
+                interactive = InteractiveConfig(
+                    tapEffect = "palette_cycle",
+                    colorPalettes = listOf("#00FF66", "#00F0FF", "#FBBF24", "#F43F5E"),
+                    hapticFeedback = true
+                )
+            ),
+            digital(
+                id = "cyberpunk_pulse_ecg",
+                name = "Cyberpunk Pulse ECG",
+                category = "Cyberpunk",
+                description = "Live dynamic electrocardiogram heartbeat tracer with glowing lead pulse wave. Tap dial anywhere to cycle neon cyberpunk palettes.",
+                tags = listOf("ECG", "Pulse", "Animated", "Interactive", "Neon", "Cyberpunk"),
+                downloads = "9.1k",
+                bgType = "gradient_radial",
+                bgColor = "#080614",
+                bgStart = "#120B2E",
+                bgEnd = "#03020A",
+                timeColor = "#00F0FF",
+                glowColor = "#00F0FF",
+                fontFamily = "monospace",
+                heartColor = "#FF007F",
+                stepColor = "#00F0FF",
+                batteryColor = "#10B981",
+                dateColor = "#C084FC",
+                animation = AnimationConfig(
+                    type = "pulse_ecg",
+                    speedRatio = 1.2f,
+                    colorHex = "#00F0FF",
+                    secondaryColorHex = "#FF007F",
+                    scaleRatio = 1.05f
+                ),
+                interactive = InteractiveConfig(
+                    tapEffect = "palette_cycle",
+                    colorPalettes = listOf("#00F0FF", "#FF007F", "#10B981", "#F59E0B"),
+                    hapticFeedback = true
+                )
+            ),
+            analog(
+                id = "kinetic_tourbillon_haute",
+                name = "Kinetic Tourbillon Haute",
+                category = "Luxury",
+                description = "Haute horlogerie masterpiece featuring a continuously revolving mechanical tourbillon escapement cage with ruby jewels. Tap to toggle dress mode.",
+                tags = listOf("Tourbillon", "Mechanical", "Animated", "Interactive", "Luxury", "Gold"),
+                downloads = "7.8k",
+                bgType = "gradient_radial",
+                bgColor = "#0D0C09",
+                bgStart = "#1F1B12",
+                bgEnd = "#070604",
+                majorTickColor = "#D4AF37",
+                minorTickColor = "#786227",
+                hourColor = "#D4AF37",
+                minColor = "#F5E6C8",
+                secColor = "#E11D48",
+                handShape = "sword",
+                animation = AnimationConfig(
+                    type = "tourbillon_spin",
+                    speedRatio = 1.0f,
+                    colorHex = "#D4AF37",
+                    secondaryColorHex = "#E11D48",
+                    xRatio = 0.5f,
+                    yRatio = 0.70f,
+                    scaleRatio = 0.9f
+                ),
+                interactive = InteractiveConfig(
+                    tapEffect = "mode_toggle",
+                    hapticFeedback = true
+                )
+            ),
+            digital(
+                id = "neon_audio_spectrum",
+                name = "Neon Audio Spectrum VU",
+                category = "Cyberpunk",
+                description = "Dynamic 10-channel audio equalizer with dancing VU meter frequency bars. Tap anywhere to cycle vibrant studio equalizer spectrums.",
+                tags = listOf("Equalizer", "Audio", "Animated", "Interactive", "Spectrum", "Music"),
+                downloads = "6.9k",
+                bgType = "gradient_radial",
+                bgColor = "#0D0717",
+                bgStart = "#200E38",
+                bgEnd = "#05020A",
+                timeColor = "#C084FC",
+                glowColor = "#A855F7",
+                fontFamily = "monospace",
+                heartColor = "#F43F5E",
+                stepColor = "#A855F7",
+                batteryColor = "#10B981",
+                dateColor = "#E879F9",
+                animation = AnimationConfig(
+                    type = "equalizer_bars",
+                    speedRatio = 1.4f,
+                    colorHex = "#A855F7",
+                    secondaryColorHex = "#EC4899",
+                    xRatio = 0.5f,
+                    yRatio = 0.52f,
+                    scaleRatio = 1.1f
+                ),
+                interactive = InteractiveConfig(
+                    tapEffect = "palette_cycle",
+                    colorPalettes = listOf("#A855F7", "#06B6D4", "#F43F5E", "#10B981"),
+                    hapticFeedback = true
+                )
+            ),
+            analog(
+                id = "cosmos_deep_space_orbit",
+                name = "Cosmos Orbital Gravity",
+                category = "Art",
+                description = "Mesmerizing celestial simulation with Earth and Moon revolving in gravitational orbit across starry space. Tap to create gravitational shockwaves.",
+                tags = listOf("Space", "Cosmos", "Orbit", "Animated", "Interactive", "Planets"),
+                downloads = "8.2k",
+                bgType = "gradient_radial",
+                bgColor = "#030712",
+                bgStart = "#0B1528",
+                bgEnd = "#010206",
+                majorTickColor = "#38BDF8",
+                minorTickColor = "#1E293B",
+                hourColor = "#E2E8F0",
+                minColor = "#94A3B8",
+                secColor = "#38BDF8",
+                handShape = "baton",
+                animation = AnimationConfig(
+                    type = "orbital_space",
+                    speedRatio = 0.8f,
+                    colorHex = "#38BDF8",
+                    secondaryColorHex = "#CBD5E1",
+                    scaleRatio = 1.0f
+                ),
+                interactive = InteractiveConfig(
+                    tapEffect = "ripple_burst",
+                    hapticFeedback = true
+                )
+            ),
+            digital(
+                id = "liquid_mercury_chrono",
+                name = "Liquid Mercury Flow",
+                category = "Sports",
+                description = "Fluid dynamic liquid mercury reservoir with undulating wave crests flowing across the dial. Tap to cycle bioluminescent fluid compounds.",
+                tags = listOf("Liquid", "Mercury", "Fluid", "Animated", "Interactive", "Wave"),
+                downloads = "7.5k",
+                bgType = "gradient_radial",
+                bgColor = "#041017",
+                bgStart = "#082638",
+                bgEnd = "#01060A",
+                timeColor = "#22D3EE",
+                glowColor = "#06B6D4",
+                fontFamily = "sans",
+                heartColor = "#F43F5E",
+                stepColor = "#06B6D4",
+                batteryColor = "#10B981",
+                dateColor = "#67E8F9",
+                animation = AnimationConfig(
+                    type = "liquid_wave",
+                    speedRatio = 1.0f,
+                    colorHex = "#06B6D4",
+                    secondaryColorHex = "#0E7490",
+                    scaleRatio = 1.0f
+                ),
+                interactive = InteractiveConfig(
+                    tapEffect = "palette_cycle",
+                    colorPalettes = listOf("#06B6D4", "#6366F1", "#10B981", "#E11D48"),
+                    hapticFeedback = true
+                )
+            ),
+            analog(
+                id = "bioluminescent_aurora",
+                name = "Bioluminescent Aurora",
+                category = "Art",
+                description = "Shimmering northern lights aurora ribbons dancing organically across a deep midnight sky. Tap to morph celestial auroral wavelengths.",
+                tags = listOf("Aurora", "Northern Lights", "Animated", "Interactive", "Art", "Glow"),
+                downloads = "8.7k",
+                bgType = "gradient_radial",
+                bgColor = "#031412",
+                bgStart = "#062C27",
+                bgEnd = "#010807",
+                majorTickColor = "#34D399",
+                minorTickColor = "#064E3B",
+                hourColor = "#A7F3D0",
+                minColor = "#6EE7B7",
+                secColor = "#10B981",
+                handShape = "needle",
+                animation = AnimationConfig(
+                    type = "aurora_shimmer",
+                    speedRatio = 0.9f,
+                    colorHex = "#10B981",
+                    secondaryColorHex = "#06B6D4",
+                    scaleRatio = 1.0f
+                ),
+                interactive = InteractiveConfig(
+                    tapEffect = "palette_cycle",
+                    colorPalettes = listOf("#10B981", "#8B5CF6", "#06B6D4", "#F43F5E"),
+                    hapticFeedback = true
+                )
+            ),
+            minimal(
+                id = "zen_water_ripple",
+                name = "Zen Water Ripple",
+                category = "Minimal",
+                description = "Serene Japanese rock garden basin dial with floating slender batons. Tap anywhere on the sapphire glass to create expanding water ripples.",
+                tags = listOf("Zen", "Water", "Ripple", "Interactive", "Minimal", "Calm"),
+                downloads = "6.4k",
+                bgColor = "#0F172A",
+                tickColor = "#94A3B8",
+                hourColor = "#F8FAFC",
+                minColor = "#CBD5E1",
+                secColor = "#38BDF8",
+                stepColor = "#38BDF8",
+                heartColor = "#F43F5E",
+                animation = AnimationConfig(type = "none"),
+                interactive = InteractiveConfig(
+                    tapEffect = "ripple_burst",
+                    hapticFeedback = true
+                )
+            ),
+            sports(
+                id = "f1_telemetry_velocity",
+                name = "F1 Telemetry Velocity",
+                description = "Cockpit steering telemetry display with high-rev tachometer shift-lights bar. Tap to cycle legendary Formula 1 team racing liveries.",
+                tags = listOf("F1", "Racing", "Tachometer", "Animated", "Interactive", "Telemetry"),
+                downloads = "9.6k",
+                accentColor = "#EF4444",
+                secondaryAccent = "#F59E0B",
+                heartColor = "#EF4444",
+                animation = AnimationConfig(
+                    type = "equalizer_bars",
+                    speedRatio = 1.5f,
+                    colorHex = "#EF4444",
+                    secondaryColorHex = "#F59E0B",
+                    xRatio = 0.5f,
+                    yRatio = 0.72f,
+                    scaleRatio = 0.85f
+                ),
+                interactive = InteractiveConfig(
+                    tapEffect = "palette_cycle",
+                    colorPalettes = listOf("#EF4444", "#10B981", "#06B6D4", "#F97316"),
+                    hapticFeedback = true
+                )
+            ),
+
             // ── LUXURY & CHRONOGRAPH (10 Faces) ──────────────────────────────────
             analog(
                 id = "chrono_prestige",

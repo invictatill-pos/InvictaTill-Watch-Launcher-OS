@@ -8,8 +8,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,6 +56,17 @@ fun DynamicFacePreview(
         } else null
     }
 
+    val infiniteTransition = rememberInfiniteTransition(label = "face_anim")
+    val animProgress by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2400, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "progress"
+    )
+
     Box(
         modifier = modifier
             .aspectRatio(1f)
@@ -74,7 +87,14 @@ fun DynamicFacePreview(
             if (ambientLayout && pkg.aod.hideBackground) drawRect(Color.Black)
             else drawBackgroundLayer(pkg.background, cachedImage, cx, cy, radius, w, h)
 
-            // 2. Draw Dial Ticks & Numbers
+            // 2. Draw Animation Layer (Dynamic effects)
+            pkg.animation?.let {
+                if (!ambientLayout && it.type != "none") {
+                    drawAnimationLayer(it, w, h, cx, cy, radius, animProgress, density)
+                }
+            }
+
+            // 3. Draw Dial Ticks & Numbers
             val previewDial = if (ambientLayout && pkg.aod.hideMinorTicks) pkg.dial.copy(tickCount = 12) else pkg.dial
             drawDialLayer(previewDial, cx, cy, radius, density)
 
@@ -469,3 +489,152 @@ private fun parseColor(hex: String?, fallback: Color): Color {
         fallback
     }
 }
+
+private fun DrawScope.drawAnimationLayer(
+    anim: AnimationConfig,
+    w: Float,
+    h: Float,
+    cx: Float,
+    cy: Float,
+    radius: Float,
+    progress: Float,
+    density: Float
+) {
+    val color = parseColor(anim.colorHex, Color(0xFF00E5FF))
+    val ax = w * anim.xRatio
+    val ay = h * anim.yRatio
+    val scale = anim.scaleRatio.coerceIn(0.2f, 2.5f)
+
+    when (anim.type) {
+        "pulse_ecg" -> {
+            val waveWidth = radius * 0.95f * scale
+            val halfW = waveWidth / 2f
+            val startX = ax - halfW
+            val endX = ax + halfW
+            val waveLen = waveWidth * 0.45f
+            val offset = (progress * (waveWidth + waveLen)) - waveLen
+
+            val path = Path().apply {
+                moveTo(startX, ay)
+                var curX = startX
+                while (curX <= endX) {
+                    val relX = curX - (startX + offset)
+                    val wy = if (relX in 0f..waveLen) {
+                        val p = relX / waveLen
+                        when {
+                            p < 0.2f -> ay
+                            p < 0.35f -> ay - (sin((p - 0.2f) / 0.15f * Math.PI) * 7f * density).toFloat()
+                            p < 0.45f -> ay + (sin((p - 0.35f) / 0.10f * Math.PI) * 6f * density).toFloat()
+                            p < 0.55f -> ay - (sin((p - 0.45f) / 0.10f * Math.PI) * 28f * density).toFloat()
+                            p < 0.65f -> ay + (sin((p - 0.55f) / 0.10f * Math.PI) * 11f * density).toFloat()
+                            p < 0.85f -> ay - (sin((p - 0.65f) / 0.20f * Math.PI) * 10f * density).toFloat()
+                            else -> ay
+                        }
+                    } else ay
+                    lineTo(curX, wy)
+                    curX += 4f * density
+                }
+            }
+            drawPath(path, color, style = Stroke(width = 2.5f * density, cap = StrokeCap.Round))
+            val headX = (startX + offset + waveLen * 0.55f).coerceIn(startX, endX)
+            drawCircle(Color.White, 3f * density, Offset(headX, ay))
+            drawCircle(color.copy(alpha = 0.35f), 6.5f * density, Offset(headX, ay))
+        }
+        "radar_sweep" -> {
+            val r = radius * 0.88f * scale
+            drawCircle(color.copy(alpha = 0.12f), r * 0.33f, Offset(cx, cy), style = Stroke(width = 1.2f * density))
+            drawCircle(color.copy(alpha = 0.12f), r * 0.66f, Offset(cx, cy), style = Stroke(width = 1.2f * density))
+            drawCircle(color.copy(alpha = 0.15f), r, Offset(cx, cy), style = Stroke(width = 1.2f * density))
+
+            val sweepAngle = (progress * 360f) % 360f
+            val rad = Math.toRadians(sweepAngle.toDouble())
+            val bx = cx + (cos(rad) * r).toFloat()
+            val by = cy + (sin(rad) * r).toFloat()
+            drawLine(color, Offset(cx, cy), Offset(bx, by), strokeWidth = 2.5f * density, cap = StrokeCap.Round)
+
+            val blipAlpha = ((sin(progress * 20.0) + 1.0) * 0.5 * 0.8 + 0.2).toFloat()
+            drawCircle(color.copy(alpha = blipAlpha), 3.5f * density, Offset(cx + r * 0.5f, cy - r * 0.35f))
+            drawCircle(color.copy(alpha = blipAlpha), 2.8f * density, Offset(cx - r * 0.4f, cy + r * 0.45f))
+        }
+        "equalizer_bars" -> {
+            val barCount = 10
+            val barW = (radius * 0.75f * scale / barCount) * 0.65f
+            val spacing = (radius * 0.75f * scale / barCount) * 0.35f
+            val startX = ax - (radius * 0.75f * scale) / 2f
+            val maxH = 26f * density
+
+            for (i in 0 until barCount) {
+                val bx = startX + i * (barW + spacing)
+                val hFactor = ((sin(progress * 15.0 + i * 0.85) + 1.0) * 0.5 * 0.85 + 0.15).toFloat()
+                val bh = maxH * hFactor
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(bx, ay - bh / 2f),
+                    size = Size(barW, bh),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(barW / 2f)
+                )
+            }
+        }
+        "tourbillon_spin" -> {
+            val r = radius * 0.35f * scale
+            drawCircle(Color(0xFFD4AF37), r, Offset(ax, ay), style = Stroke(width = 2.5f * density))
+            val rotAngle = (progress * 360f * 1.5f) % 360f
+            withTransform({ rotate(rotAngle, Offset(ax, ay)) }) {
+                drawCircle(color, r * 0.8f, Offset(ax, ay), style = Stroke(width = 2f * density))
+                for (i in 0..2) {
+                    val ang = Math.toRadians((i * 120.0))
+                    val ex = ax + (cos(ang) * r * 0.8f).toFloat()
+                    val ey = ay + (sin(ang) * r * 0.8f).toFloat()
+                    drawLine(color, Offset(ax, ay), Offset(ex, ey), strokeWidth = 1.8f * density)
+                    drawCircle(Color(0xFFD4AF37), 2f * density, Offset(ex, ey))
+                }
+            }
+            drawCircle(Color(0xFFE11D48), 4f * density, Offset(ax, ay))
+        }
+        "orbital_space" -> {
+            val r = radius * 0.8f * scale
+            drawCircle(color.copy(alpha = 0.15f), r * 0.75f, Offset(cx, cy), style = Stroke(width = 1.2f * density))
+            val earthAng = Math.toRadians((progress * 360.0))
+            val ex = cx + (cos(earthAng) * r * 0.75f).toFloat()
+            val ey = cy + (sin(earthAng) * r * 0.75f).toFloat()
+            drawCircle(Color(0xFF38BDF8), 6f * density, Offset(ex, ey))
+
+            val moonAng = Math.toRadians((progress * 360.0 * 4.0))
+            val mx = ex + (cos(moonAng) * 14f * density).toFloat()
+            val my = ey + (sin(moonAng) * 14f * density).toFloat()
+            drawCircle(Color(0xFFE2E8F0), 2.2f * density, Offset(mx, my))
+        }
+        "liquid_wave" -> {
+            val fluidLevel = cy + radius * 0.25f
+            val wavePath = Path().apply {
+                moveTo(cx - radius, cy + radius)
+                lineTo(cx - radius, fluidLevel)
+                val steps = 24
+                val stepW = (radius * 2f) / steps
+                for (i in 0..steps) {
+                    val px = cx - radius + i * stepW
+                    val py = fluidLevel + (sin((i.toFloat() / steps * 2.5 * Math.PI) + progress * 2.0 * Math.PI) * 5f * density).toFloat()
+                    lineTo(px, py)
+                }
+                lineTo(cx + radius, cy + radius)
+                close()
+            }
+            drawPath(wavePath, color.copy(alpha = 0.35f))
+        }
+        "aurora_shimmer" -> {
+            val auroraTop = cy - radius * 0.65f
+            val auroraPath = Path().apply {
+                moveTo(cx - radius * 0.85f, cy)
+                for (i in 0..10) {
+                    val px = cx - radius * 0.85f + i * (radius * 1.7f / 10f)
+                    val py = auroraTop + (sin((i * 0.5) + progress * 2.0 * Math.PI) * 16f * density).toFloat()
+                    lineTo(px, py)
+                }
+                lineTo(cx + radius * 0.85f, cy)
+                close()
+            }
+            drawPath(auroraPath, color.copy(alpha = 0.25f))
+        }
+    }
+}
+

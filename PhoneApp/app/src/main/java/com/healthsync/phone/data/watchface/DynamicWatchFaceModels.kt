@@ -23,7 +23,27 @@ data class HswfPackage(
     @SerializedName("digitalClock") val digitalClock: DigitalClockConfig? = null,
     @SerializedName("date") val date: DateConfig? = DateConfig(),
     @SerializedName("complications") val complications: ComplicationsConfig = ComplicationsConfig(),
-    @SerializedName("aod") val aod: AodConfig = AodConfig()
+    @SerializedName("aod") val aod: AodConfig = AodConfig(),
+    @SerializedName("animation") val animation: AnimationConfig? = null,
+    @SerializedName("interactive") val interactive: InteractiveConfig? = null
+)
+
+@Keep
+data class AnimationConfig(
+    @SerializedName("type") val type: String = "none", // "pulse_ecg", "radar_sweep", "equalizer_bars", "liquid_wave", "tourbillon_spin", "orbital_space", "aurora_shimmer", "zen_ripple"
+    @SerializedName("speedRatio") val speedRatio: Float = 1.0f,
+    @SerializedName("colorHex") val colorHex: String = "#00E5FF",
+    @SerializedName("secondaryColorHex") val secondaryColorHex: String? = null,
+    @SerializedName("xRatio") val xRatio: Float = 0.5f,
+    @SerializedName("yRatio") val yRatio: Float = 0.5f,
+    @SerializedName("scaleRatio") val scaleRatio: Float = 1.0f
+)
+
+@Keep
+data class InteractiveConfig(
+    @SerializedName("tapEffect") val tapEffect: String = "none", // "palette_cycle", "mode_toggle", "ripple_burst", "complication_shortcuts"
+    @SerializedName("colorPalettes") val colorPalettes: List<String> = emptyList(),
+    @SerializedName("hapticFeedback") val hapticFeedback: Boolean = true
 )
 
 @Keep

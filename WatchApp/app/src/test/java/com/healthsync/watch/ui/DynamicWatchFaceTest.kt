@@ -54,9 +54,55 @@ class DynamicWatchFaceTest {
     }
 
     @Test
+    fun testQuantumSonarSampleSerialization() {
+        val sample = DynamicFaceStore.createQuantumSonarSample()
+        assertEquals("quantum_sonar_hud", sample.id)
+        assertNotNull(sample.animation)
+        assertEquals("radar_sweep", sample.animation?.type)
+        assertNotNull(sample.interactive)
+        assertEquals("palette_cycle", sample.interactive?.tapEffect)
+        assertTrue(sample.interactive?.colorPalettes?.isNotEmpty() == true)
+
+        val json = gson.toJson(sample)
+        val restored = gson.fromJson(json, HswfPackage::class.java)
+        assertEquals(sample.id, restored.id)
+        assertEquals("radar_sweep", restored.animation?.type)
+        assertEquals("palette_cycle", restored.interactive?.tapEffect)
+    }
+
+    @Test
+    fun testCyberEcgSampleSerialization() {
+        val sample = DynamicFaceStore.createCyberEcgSample()
+        assertEquals("cyberpunk_pulse_ecg", sample.id)
+        assertNotNull(sample.animation)
+        assertEquals("pulse_ecg", sample.animation?.type)
+
+        val json = gson.toJson(sample)
+        val restored = gson.fromJson(json, HswfPackage::class.java)
+        assertEquals(sample.id, restored.id)
+        assertEquals("pulse_ecg", restored.animation?.type)
+    }
+
+    @Test
+    fun testTourbillonSampleSerialization() {
+        val sample = DynamicFaceStore.createTourbillonSample()
+        assertEquals("kinetic_tourbillon_haute", sample.id)
+        assertNotNull(sample.animation)
+        assertEquals("tourbillon_spin", sample.animation?.type)
+        assertEquals("mode_toggle", sample.interactive?.tapEffect)
+
+        val json = gson.toJson(sample)
+        val restored = gson.fromJson(json, HswfPackage::class.java)
+        assertEquals(sample.id, restored.id)
+        assertEquals("tourbillon_spin", restored.animation?.type)
+        assertEquals("mode_toggle", restored.interactive?.tapEffect)
+    }
+
+    @Test
     fun testCatalogDynamicRecognition() {
         assertTrue(WatchFaceCatalog.isDynamic("dynamic_neon_cyberpunk"))
         assertTrue(WatchFaceCatalog.isDynamic("dynamic_custom_user_dial"))
+        assertTrue(WatchFaceCatalog.isDynamic("dynamic_quantum_sonar_hud"))
         assertFalse(WatchFaceCatalog.isDynamic("orbit"))
         assertFalse(WatchFaceCatalog.isDynamic("chrono"))
         assertFalse(WatchFaceCatalog.isDynamic("classic"))

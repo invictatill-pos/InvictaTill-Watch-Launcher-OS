@@ -5,6 +5,8 @@ import android.graphics.*
 import android.os.SystemClock
 import android.util.AttributeSet
 import android.util.Base64
+import android.view.HapticFeedbackConstants
+import android.view.MotionEvent
 import android.view.View
 import com.healthsync.watch.data.watchface.*
 import com.healthsync.watch.sensor.HeartRatePolicy
@@ -78,12 +80,32 @@ class DynamicWatchFaceView @JvmOverloads constructor(
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.CENTER
     }
+    private val animStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+    }
+    private val animFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+    }
+    private val animPath = Path()
+
+    // Animation & Interactive states
+    private var animProgress = 0f
+    private var lastAnimTime = 0L
+    private var currentPaletteIndex = 0
+    private var isMinimalMode = false
+    private var rippleX = 0f
+    private var rippleY = 0f
+    private var rippleRadius = 0f
+    private var rippleAlpha = 0
 
     private val handPath = Path()
     private val arcRect = RectF()
     private var cachedBgBitmap: Bitmap? = null
 
     init {
+        isClickable = true
+        isFocusable = true
         setLayerType(LAYER_TYPE_HARDWARE, null)
     }
 
@@ -92,6 +114,11 @@ class DynamicWatchFaceView @JvmOverloads constructor(
         activePackage = pkg
         cachedBgBitmap?.recycle()
         cachedBgBitmap = null
+        animProgress = 0f
+        lastAnimTime = 0L
+        currentPaletteIndex = 0
+        isMinimalMode = false
+        rippleAlpha = 0
 
         // Decode background image if supplied
         val b64 = pkg.background.imageBase64
@@ -168,6 +195,16 @@ class DynamicWatchFaceView @JvmOverloads constructor(
         val h = height.toFloat()
         if (w <= 0 || h <= 0) return
 
+        val now = SystemClock.uptimeMillis()
+        val hasAnimation = !isAmbient && pkg.animation != null && pkg.animation.type != "none"
+        if (hasAnimation) {
+            val dt = if (lastAnimTime > 0L) (now - lastAnimTime).coerceIn(0L, 100L) else 16L
+            lastAnimTime = now
+            animProgress = (animProgress + (dt / 1000f) * (pkg.animation?.speedRatio ?: 1f)) % 1000f
+        } else {
+            lastAnimTime = now
+        }
+
         val cx = w / 2f
         val cy = h / 2f
         val radius = min(cx, cy)
@@ -176,20 +213,34 @@ class DynamicWatchFaceView @JvmOverloads constructor(
         // 1. Draw Background
         drawBackground(canvas, pkg.background, w, h, cx, cy, radius)
 
-        // 2. Draw Dial Ticks & Numbers
+        // 2. Draw Animation Layer (Dynamic effects)
+        pkg.animation?.let { if (it.type != "none") drawAnimationLayer(canvas, it, w, h, cx, cy, radius, density) }
+
+        // 3. Draw Dial Ticks & Numbers
         drawDial(canvas, pkg.dial, cx, cy, radius, density)
 
-        // 3. Draw Digital Clock (if configured)
+        // 4. Draw Digital Clock (if configured)
         pkg.digitalClock?.let { if (it.enabled) drawDigitalClock(canvas, it, w, h, density) }
 
-        // 4. Draw Date Window (if configured)
+        // 5. Draw Date Window (if configured)
         pkg.date?.let { if (it.enabled) drawDate(canvas, it, w, h, density) }
 
-        // 5. Draw Complications
-        drawComplications(canvas, pkg.complications, w, h, radius, density)
+        // 6. Draw Complications (hidden in minimal glance mode)
+        if (!isMinimalMode) {
+            drawComplications(canvas, pkg.complications, w, h, radius, density)
+        }
 
-        // 6. Draw Analog Hands (if configured)
+        // 7. Draw Analog Hands (if configured)
         pkg.hands?.let { drawHands(canvas, it, cx, cy, radius, density) }
+
+        // 8. Draw Touch Ripple Layer
+        if (rippleAlpha > 0) {
+            drawRipple(canvas, density)
+        }
+
+        if (hasAnimation || rippleAlpha > 0) {
+            postInvalidateOnAnimation()
+        }
     }
 
     private fun drawBackground(
@@ -601,6 +652,255 @@ class DynamicWatchFaceView @JvmOverloads constructor(
         handPaint.clearShadowLayer()
     }
 
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (event.action == MotionEvent.ACTION_UP) {
+            val pkg = activePackage ?: return super.onTouchEvent(event)
+            val inter = pkg.interactive ?: return super.onTouchEvent(event)
+            if (inter.hapticFeedback) {
+                performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+            }
+            when (inter.tapEffect) {
+                "palette_cycle" -> {
+                    if (inter.colorPalettes.isNotEmpty()) {
+                        currentPaletteIndex = (currentPaletteIndex + 1) % inter.colorPalettes.size
+                        invalidate()
+                        return true
+                    }
+                }
+                "mode_toggle" -> {
+                    isMinimalMode = !isMinimalMode
+                    invalidate()
+                    return true
+                }
+                "ripple_burst" -> {
+                    rippleX = event.x
+                    rippleY = event.y
+                    rippleRadius = 10f
+                    rippleAlpha = 220
+                    postInvalidateOnAnimation()
+                    return true
+                }
+            }
+        }
+        return super.onTouchEvent(event)
+    }
+
+    private fun drawAnimationLayer(
+        canvas: Canvas,
+        anim: AnimationConfig,
+        w: Float,
+        h: Float,
+        cx: Float,
+        cy: Float,
+        radius: Float,
+        density: Float
+    ) {
+        if (isAmbient) return
+        val activeHex = activePackage?.interactive?.colorPalettes?.getOrNull(currentPaletteIndex)
+        val animColor = parseHex(activeHex ?: anim.colorHex, Color.CYAN)
+        val animX = w * anim.xRatio
+        val animY = h * anim.yRatio
+        val scale = anim.scaleRatio.coerceIn(0.2f, 2.5f)
+
+        when (anim.type) {
+            "pulse_ecg" -> drawEcgWave(canvas, animX, animY, radius * 0.95f * scale, animColor, density)
+            "radar_sweep" -> drawRadarSweep(canvas, cx, cy, radius * 0.88f * scale, animColor, density)
+            "equalizer_bars" -> drawEqualizerBars(canvas, animX, animY, radius * 0.75f * scale, animColor, density)
+            "liquid_wave" -> drawLiquidWave(canvas, cx, cy, radius * 0.85f * scale, animColor, density)
+            "tourbillon_spin" -> drawTourbillon(canvas, animX, animY, radius * 0.35f * scale, animColor, density)
+            "orbital_space" -> drawOrbitalSpace(canvas, cx, cy, radius * 0.8f * scale, animColor, density)
+            "aurora_shimmer" -> drawAuroraShimmer(canvas, cx, cy, radius * 0.9f * scale, animColor, density)
+        }
+    }
+
+    private fun drawEcgWave(canvas: Canvas, x: Float, y: Float, width: Float, color: Int, density: Float) {
+        animStrokePaint.color = color
+        animStrokePaint.strokeWidth = 2.5f * density
+        animPath.reset()
+
+        val halfW = width / 2f
+        val startX = x - halfW
+        val endX = x + halfW
+        val baseline = y
+        val waveLen = width * 0.45f
+        val offset = (animProgress * 150f) % (width + waveLen) - waveLen
+
+        animPath.moveTo(startX, baseline)
+
+        var curX = startX
+        while (curX <= endX) {
+            val relX = curX - (startX + offset)
+            val waveY = if (relX in 0f..waveLen) {
+                val p = relX / waveLen
+                when {
+                    p < 0.2f -> baseline
+                    p < 0.35f -> baseline - (sin((p - 0.2f) / 0.15f * Math.PI) * 7f * density).toFloat()
+                    p < 0.45f -> baseline + (sin((p - 0.35f) / 0.10f * Math.PI) * 6f * density).toFloat()
+                    p < 0.55f -> baseline - (sin((p - 0.45f) / 0.10f * Math.PI) * 30f * density).toFloat()
+                    p < 0.65f -> baseline + (sin((p - 0.55f) / 0.10f * Math.PI) * 11f * density).toFloat()
+                    p < 0.85f -> baseline - (sin((p - 0.65f) / 0.20f * Math.PI) * 10f * density).toFloat()
+                    else -> baseline
+                }
+            } else baseline
+
+            animPath.lineTo(curX, waveY)
+            curX += 4f * density
+        }
+
+        canvas.drawPath(animPath, animStrokePaint)
+
+        // Glowing pulse head
+        val headX = (startX + offset + waveLen * 0.55f).coerceIn(startX, endX)
+        animFillPaint.color = Color.WHITE
+        canvas.drawCircle(headX, baseline, 3f * density, animFillPaint)
+        animFillPaint.color = (color and 0x00FFFFFF) or 0x55000000
+        canvas.drawCircle(headX, baseline, 6.5f * density, animFillPaint)
+    }
+
+    private fun drawRadarSweep(canvas: Canvas, cx: Float, cy: Float, radius: Float, color: Int, density: Float) {
+        val sweepAngle = (animProgress * 90f) % 360f
+
+        animStrokePaint.color = (color and 0x00FFFFFF) or 0x22000000
+        animStrokePaint.strokeWidth = 1.2f * density
+        canvas.drawCircle(cx, cy, radius * 0.33f, animStrokePaint)
+        canvas.drawCircle(cx, cy, radius * 0.66f, animStrokePaint)
+        canvas.drawCircle(cx, cy, radius, animStrokePaint)
+
+        canvas.save()
+        canvas.rotate(sweepAngle, cx, cy)
+        animStrokePaint.color = color
+        animStrokePaint.strokeWidth = 2.5f * density
+        canvas.drawLine(cx, cy, cx, cy - radius, animStrokePaint)
+
+        arcRect.set(cx - radius, cy - radius, cx + radius, cy + radius)
+        animFillPaint.shader = SweepGradient(cx, cy, intArrayOf(Color.TRANSPARENT, (color and 0x00FFFFFF) or 0x40000000), floatArrayOf(0.75f, 1f))
+        canvas.drawArc(arcRect, -90f, 90f, true, animFillPaint)
+        animFillPaint.shader = null
+        canvas.restore()
+
+        val blipAlpha = ((sin(animProgress * 6f) + 1f) * 0.5f * 255).toInt().coerceIn(40, 255)
+        animFillPaint.color = (color and 0x00FFFFFF) or (blipAlpha shl 24)
+        val blip1X = cx + radius * 0.52f
+        val blip1Y = cy - radius * 0.38f
+        canvas.drawCircle(blip1X, blip1Y, 3.5f * density, animFillPaint)
+        val blip2X = cx - radius * 0.42f
+        val blip2Y = cy + radius * 0.48f
+        canvas.drawCircle(blip2X, blip2Y, 2.8f * density, animFillPaint)
+    }
+
+    private fun drawEqualizerBars(canvas: Canvas, x: Float, y: Float, width: Float, color: Int, density: Float) {
+        val barCount = 10
+        val barWidth = (width / barCount) * 0.65f
+        val spacing = (width / barCount) * 0.35f
+        val startX = x - width / 2f
+        val maxH = 26f * density
+
+        animFillPaint.color = color
+        for (i in 0 until barCount) {
+            val bx = startX + i * (barWidth + spacing)
+            val hFactor = ((sin(animProgress * 7f + i * 0.85f) + 1f) * 0.5f * 0.85f + 0.15f).toFloat()
+            val barH = maxH * hFactor
+            val top = y - barH / 2f
+            val bottom = y + barH / 2f
+            canvas.drawRoundRect(RectF(bx, top, bx + barWidth, bottom), barWidth / 2f, barWidth / 2f, animFillPaint)
+        }
+    }
+
+    private fun drawLiquidWave(canvas: Canvas, cx: Float, cy: Float, radius: Float, color: Int, density: Float) {
+        val fluidLevel = cy + radius * 0.25f
+        animPath.reset()
+        animPath.moveTo(cx - radius, cy + radius)
+        animPath.lineTo(cx - radius, fluidLevel)
+
+        val steps = 24
+        val stepW = (radius * 2f) / steps
+        for (i in 0..steps) {
+            val px = cx - radius + i * stepW
+            val py = fluidLevel + (sin((i.toFloat() / steps * 2.5 * Math.PI) + animProgress * 5f) * 5f * density).toFloat()
+            animPath.lineTo(px, py)
+        }
+        animPath.lineTo(cx + radius, cy + radius)
+        animPath.close()
+
+        canvas.save()
+        val clipP = Path().apply { addCircle(cx, cy, radius * 0.95f, Path.Direction.CW) }
+        canvas.clipPath(clipP)
+        animFillPaint.color = (color and 0x00FFFFFF) or 0x45000000
+        canvas.drawPath(animPath, animFillPaint)
+        canvas.restore()
+    }
+
+    private fun drawTourbillon(canvas: Canvas, x: Float, y: Float, radius: Float, color: Int, density: Float) {
+        val rotAngle = (animProgress * 150f) % 360f
+
+        animStrokePaint.color = 0xFFD4AF37.toInt()
+        animStrokePaint.strokeWidth = 2.5f * density
+        canvas.drawCircle(x, y, radius, animStrokePaint)
+
+        canvas.save()
+        canvas.rotate(rotAngle, x, y)
+        animStrokePaint.color = color
+        animStrokePaint.strokeWidth = 2f * density
+        canvas.drawCircle(x, y, radius * 0.8f, animStrokePaint)
+
+        for (i in 0..2) {
+            val ang = i * 120.0
+            val rad = Math.toRadians(ang)
+            val ex = (x + cos(rad) * radius * 0.8f).toFloat()
+            val ey = (y + sin(rad) * radius * 0.8f).toFloat()
+            canvas.drawLine(x, y, ex, ey, animStrokePaint)
+            animFillPaint.color = 0xFFD4AF37.toInt()
+            canvas.drawCircle(ex, ey, 2.2f * density, animFillPaint)
+        }
+        canvas.restore()
+
+        animFillPaint.color = 0xFFE11D48.toInt()
+        canvas.drawCircle(x, y, 4f * density, animFillPaint)
+    }
+
+    private fun drawOrbitalSpace(canvas: Canvas, cx: Float, cy: Float, radius: Float, color: Int, density: Float) {
+        animStrokePaint.color = (color and 0x00FFFFFF) or 0x22000000
+        animStrokePaint.strokeWidth = 1.2f * density
+        canvas.drawCircle(cx, cy, radius * 0.75f, animStrokePaint)
+
+        val earthAngle = Math.toRadians((animProgress * 25.0) % 360.0)
+        val earthX = (cx + cos(earthAngle) * radius * 0.75f).toFloat()
+        val earthY = (cy + sin(earthAngle) * radius * 0.75f).toFloat()
+
+        animFillPaint.color = 0xFF38BDF8.toInt()
+        canvas.drawCircle(earthX, earthY, 6f * density, animFillPaint)
+
+        val moonAngle = Math.toRadians((animProgress * 100.0) % 360.0)
+        val moonX = (earthX + cos(moonAngle) * 14f * density).toFloat()
+        val moonY = (earthY + sin(moonAngle) * 14f * density).toFloat()
+        animFillPaint.color = 0xFFE2E8F0.toInt()
+        canvas.drawCircle(moonX, moonY, 2.2f * density, animFillPaint)
+    }
+
+    private fun drawAuroraShimmer(canvas: Canvas, cx: Float, cy: Float, radius: Float, color: Int, density: Float) {
+        val auroraTop = cy - radius * 0.75f
+        animPath.reset()
+        animPath.moveTo(cx - radius * 0.8f, cy)
+        for (i in 0..10) {
+            val px = cx - radius * 0.8f + i * (radius * 1.6f / 10f)
+            val py = auroraTop + (sin((i * 0.5) + animProgress * 2.5) * 18f * density).toFloat()
+            animPath.lineTo(px, py)
+        }
+        animPath.lineTo(cx + radius * 0.8f, cy)
+        animPath.close()
+
+        animFillPaint.color = (color and 0x00FFFFFF) or 0x30000000
+        canvas.drawPath(animPath, animFillPaint)
+    }
+
+    private fun drawRipple(canvas: Canvas, density: Float) {
+        animStrokePaint.color = (0x00FFFFFF) or (rippleAlpha shl 24)
+        animStrokePaint.strokeWidth = 2.5f * density
+        canvas.drawCircle(rippleX, rippleY, rippleRadius, animStrokePaint)
+        rippleRadius += 4.5f * density
+        rippleAlpha = (rippleAlpha - 14).coerceAtLeast(0)
+    }
+
     private fun parseHex(hex: String?, fallback: Int): Int {
         if (hex.isNullOrBlank()) return fallback
         return try {
@@ -610,3 +910,4 @@ class DynamicWatchFaceView @JvmOverloads constructor(
         }
     }
 }
+

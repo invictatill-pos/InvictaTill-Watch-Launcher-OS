@@ -1,18 +1,18 @@
 {
-  "phone": {
-    "versionCode": 21,
-    "versionName": "2.7.1",
-    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.7.1/HealthSync-Phone.apk",
-    "changelog": "Heart rate and oxygen can import timestamped readings shared by installed watch health apps. Displays the source app and original capture time; preserves existing history and archives. Install both 2.7.1 apps for sensor retries, app fallback and workout location recovery.",
-    "forceUpdate": false,
-    "sha256": "b1203adf24b19a5803b3ca561d6e0ca0b009745fe8638acaf2971c3894a743dc"
-  },
-  "watch": {
-    "versionCode": 27,
-    "versionName": "2.7.1",
-    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.7.1/HealthSync-Watch.apk",
-    "changelog": "Retries compatible heart rate and oxygen sensors when the preferred sensor does not deliver a usable sample. Shows accuracy-zero sensor feedback as unverified; checks shared health-app exports on failed capture. Adds original health-app opening, immediate export checks, passive workout locations and stalled GPS recovery. Imported readings retain their original app/time. Private app data and unavailable hardware remain explicitly unavailable.",
-    "forceUpdate": false,
-    "sha256": "2164a8bcdf3091f69e68927862e8ed14c9968a75daaf6c79e75f925388e89d4c"
-  }
+    "phone":  {
+                  "versionCode":  22,
+                  "versionName":  "2.8.0",
+                  "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.8.0/HealthSync-Phone.apk",
+                  "changelog":  "Introduces 60 FPS animated watch faces & live touch interactivity. Adds 9 innovative dials to Store (Quantum Sonar Radar HUD, Cyberpunk Pulse ECG, Kinetic Tourbillon Haute, Neon Audio Spectrum VU, Cosmos Orbital Gravity, Liquid Mercury Flow, Bioluminescent Aurora, Zen Water Ripple, F1 Telemetry Velocity) with Animated & Interactive filter chips and live preview badges.",
+                  "forceUpdate":  false,
+                  "sha256":  "2f889b804c3b6da0a6a3b208ce8d05b3abfd4d790ab24cfcee8ce804874f0a28"
+              },
+    "watch":  {
+                  "versionCode":  28,
+                  "versionName":  "2.8.0",
+                  "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.8.0/HealthSync-Watch.apk",
+                  "changelog":  "Adds real-time 60 FPS animation canvas engine and interactive touch controller (tap-to-cycle neon palettes, mode toggles, water ripples). Pre-installs Quantum Sonar Radar HUD, Cyberpunk Pulse ECG, and Kinetic Tourbillon Haute out of the box with zero idle battery drain in ambient/AOD mode.",
+                  "forceUpdate":  false,
+                  "sha256":  "7d3a85508b1fbbdd2f21817cf25b1660fb1e45c10cdb7f199ae250f0444e767d"
+              }
 }
