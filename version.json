@@ -1,18 +1,18 @@
 {
     "phone":  {
-                  "versionCode":  26,
-                  "versionName":  "2.8.4",
-                  "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.8.4/HealthSync-Phone.apk",
-                  "changelog":  "v2.8.4: Live Watch hardware \u0026 battery diagnostics with charging indicator, two-way hydration sync \u0026 wellness settings, offline HR \u0026 SpO2 batched sync with ACK confirmation.",
+                  "versionCode":  27,
+                  "versionName":  "2.8.5",
+                  "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.8.5/HealthSync-Phone.apk",
+                  "changelog":  "v2.8.5: Fixed Heart Rate sync from watch, normalized uncalibrated sensor HAL accuracy, live HR dashboard card display, and offline batch sync safeguards.",
                   "forceUpdate":  false,
-                  "sha256":  "782ab2c3ba204afdeb5a00690100dc6597731b3417a50ae03e0a2c597a46208e"
+                  "sha256":  "5d94a80ac77666f3f54e2e3a88194aa9bdfc1f3e080e510d9042e1031ca5d9ff"
               },
     "watch":  {
-                  "versionCode":  32,
-                  "versionName":  "2.8.4",
-                  "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.8.4/HealthSync-Watch.apk",
-                  "changelog":  "v2.8.4: Precise battery percentage \u0026 hardware telemetry reporting, offline SQLite storage for HR \u0026 SpO2 with batched sync, two-way hydration logging \u0026 wellness goal synchronization.",
+                  "versionCode":  33,
+                  "versionName":  "2.8.5",
+                  "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.8.5/HealthSync-Watch.apk",
+                  "changelog":  "v2.8.5: Normalized optical sensor HAL accuracy for Kolabee U8 Ultra, fixed live Heart Rate transmission to phone, and verified SQLite offline storage.",
                   "forceUpdate":  false,
-                  "sha256":  "031ef3e916c23b52cefb70f517731863aab321eefe402e0cd3ed6b773aace2e2"
+                  "sha256":  "7d66bebc8cacee9743e0978f863dcb917197fc9bdb46c6e9a626bed78addf5ec"
               }
 }
