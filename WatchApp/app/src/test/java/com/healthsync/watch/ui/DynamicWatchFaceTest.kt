@@ -54,48 +54,34 @@ class DynamicWatchFaceTest {
     }
 
     @Test
-    fun testQuantumSonarSampleSerialization() {
-        val sample = DynamicFaceStore.createQuantumSonarSample()
-        assertEquals("quantum_sonar_hud", sample.id)
-        assertNotNull(sample.animation)
-        assertEquals("radar_sweep", sample.animation?.type)
-        assertNotNull(sample.interactive)
-        assertEquals("palette_cycle", sample.interactive?.tapEffect)
-        assertTrue(sample.interactive?.colorPalettes?.isNotEmpty() == true)
+    fun testAnimationAndInteractiveSchemaSerialization() {
+        val dynamicPkg = HswfPackage(
+            id = "test_animated_face",
+            name = "Test Animated Face",
+            author = "Online Store",
+            type = "digital",
+            background = com.healthsync.watch.data.watchface.BackgroundConfig(type = "solid", colorHex = "#000000"),
+            dial = com.healthsync.watch.data.watchface.DialConfig(showTicks = false),
+            animation = com.healthsync.watch.data.watchface.AnimationConfig(
+                type = "radar_sweep",
+                speedRatio = 1.0f,
+                colorHex = "#00FF66"
+            ),
+            interactive = com.healthsync.watch.data.watchface.InteractiveConfig(
+                tapEffect = "palette_cycle",
+                colorPalettes = listOf("#00FF66", "#00F0FF"),
+                hapticFeedback = true
+            )
+        )
 
-        val json = gson.toJson(sample)
+        val json = gson.toJson(dynamicPkg)
         val restored = gson.fromJson(json, HswfPackage::class.java)
-        assertEquals(sample.id, restored.id)
+        assertEquals("test_animated_face", restored.id)
+        assertNotNull(restored.animation)
         assertEquals("radar_sweep", restored.animation?.type)
+        assertNotNull(restored.interactive)
         assertEquals("palette_cycle", restored.interactive?.tapEffect)
-    }
-
-    @Test
-    fun testCyberEcgSampleSerialization() {
-        val sample = DynamicFaceStore.createCyberEcgSample()
-        assertEquals("cyberpunk_pulse_ecg", sample.id)
-        assertNotNull(sample.animation)
-        assertEquals("pulse_ecg", sample.animation?.type)
-
-        val json = gson.toJson(sample)
-        val restored = gson.fromJson(json, HswfPackage::class.java)
-        assertEquals(sample.id, restored.id)
-        assertEquals("pulse_ecg", restored.animation?.type)
-    }
-
-    @Test
-    fun testTourbillonSampleSerialization() {
-        val sample = DynamicFaceStore.createTourbillonSample()
-        assertEquals("kinetic_tourbillon_haute", sample.id)
-        assertNotNull(sample.animation)
-        assertEquals("tourbillon_spin", sample.animation?.type)
-        assertEquals("mode_toggle", sample.interactive?.tapEffect)
-
-        val json = gson.toJson(sample)
-        val restored = gson.fromJson(json, HswfPackage::class.java)
-        assertEquals(sample.id, restored.id)
-        assertEquals("tourbillon_spin", restored.animation?.type)
-        assertEquals("mode_toggle", restored.interactive?.tapEffect)
+        assertEquals(2, restored.interactive?.colorPalettes?.size)
     }
 
     @Test

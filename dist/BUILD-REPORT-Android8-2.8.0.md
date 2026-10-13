@@ -34,8 +34,8 @@ Both packages use the existing Android development certificate. Signature verifi
   - Dynamic Face Preview engine updated with Compose continuous transitions to render animations directly inside Phone Store and Studio previews.
   - Expanded dial detail sheets with Animation (60 FPS) and Touch Control specification indicators.
 
-- **Watch On-Device Starter Faces**:
-  - First-boot initialization upgraded (`starter_faces_v2`) to seed *Quantum Sonar HUD*, *Cyberpunk Pulse ECG*, and *Kinetic Tourbillon Haute* directly onto Kolabee U8 Ultra watch storage out of the box.
+- **Exclusive Phone App Online Store Installation**:
+  - All 9 innovative & animated watch faces reside exclusively in the Phone App Online Store catalog. WatchApp maintains a lean footprint with 60 FPS animation/touch rendering capabilities enabled on-demand upon 1-tap beam from the phone.
 
 ## Validation completed
 
