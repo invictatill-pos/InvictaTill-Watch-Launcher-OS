@@ -38,7 +38,7 @@ class WorkoutLocationRulesTest {
         assertTrue(workoutLocationSourceAllowed("oem_fused", setOf("passive")))
         assertFalse(workoutLocationSourceAllowed("oem_fused", setOf("network")))
         assertFalse(workoutLocationSourceAllowed(null, setOf("passive")))
-        assertFalse(workoutLocationSourceAllowed("passive", setOf("passive")))
+        assertTrue(workoutLocationSourceAllowed("passive", setOf("passive")))
         assertFalse(workoutLocationSourceAllowed("gps", setOf("passive", "gps"), enabled = false))
         // An actual accepted shared fix is usable even when its OEM source is not enumerated.
         assertEquals(WorkoutLocationState.LOCATION_FIX, state(available = emptySet(), enabled = emptySet(),
@@ -57,10 +57,10 @@ class WorkoutLocationRulesTest {
 
     @Test fun stalledLocationRecoveryWaitsForColdStartAndDoesNotInterruptRecentFixes() {
         assertFalse(shouldRecoverWorkoutLocation(-1, -1, -1, 200_000))
-        assertFalse(shouldRecoverWorkoutLocation(1_000, -1, -1, 120_999))
-        assertTrue(shouldRecoverWorkoutLocation(1_000, -1, -1, 121_000))
-        assertFalse(shouldRecoverWorkoutLocation(1_000, 120_000, -1, 121_000))
-        assertFalse(shouldRecoverWorkoutLocation(1_000, -1, 120_000, 121_000))
+        assertFalse(shouldRecoverWorkoutLocation(1_000, -1, -1, 900_999))
+        assertTrue(shouldRecoverWorkoutLocation(1_000, -1, -1, 901_000))
+        assertFalse(shouldRecoverWorkoutLocation(1_000, 900_000, -1, 901_000))
+        assertFalse(shouldRecoverWorkoutLocation(1_000, -1, 900_000, 901_000))
         assertFalse(shouldRecoverWorkoutLocation(10_000, -1, -1, 9_000))
     }
 

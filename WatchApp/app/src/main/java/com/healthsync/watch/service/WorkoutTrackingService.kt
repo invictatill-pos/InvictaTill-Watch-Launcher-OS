@@ -18,6 +18,7 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
@@ -110,6 +111,7 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
     private var lastLocationSignalElapsed = -1L
     private var locationCaptureStartElapsed = -1L
     private var lastLocationRecoveryElapsed = -1L
+    private var gnssCallback: android.location.GnssStatus.Callback? = null
     private val availableLocationProviders = mutableSetOf<String>()
     private val registeredLocationProviders = mutableSetOf<String>()
     private val locationProviderStart = mutableMapOf<String, Long>()
@@ -257,6 +259,13 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
         if (!bestProvider.isNullOrBlank() && fine) {
             providers.add(bestProvider)
         }
+        if (fine) {
+            providers.add(LocationManager.GPS_PROVIDER)
+            providers.add(LocationManager.PASSIVE_PROVIDER)
+            if (LocationManager.NETWORK_PROVIDER in availableProviders) {
+                providers.add(LocationManager.NETWORK_PROVIDER)
+            }
+        }
         val nowElapsed = SystemClock.elapsedRealtime()
         val stalled = shouldRecoverWorkoutLocation(locationProviderStart.values.minOrNull() ?: -1L,
             lastFixElapsed, lastLocationRecoveryElapsed, nowElapsed)
@@ -265,6 +274,32 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
             runCatching { locationManager.removeUpdates(this) }
             registeredLocationProviders.clear(); locationProviderStart.clear(); lastLocation = null
             lastLocationRecoveryElapsed = nowElapsed
+        }
+        if (fine) {
+            runCatching { locationManager.sendExtraCommand(LocationManager.GPS_PROVIDER, "force_time_injection", null) }
+            runCatching { locationManager.sendExtraCommand(LocationManager.GPS_PROVIDER, "force_xtra_injection", null) }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && gnssCallback == null) {
+                try {
+                    gnssCallback = object : android.location.GnssStatus.Callback() {
+                        override fun onSatelliteStatusChanged(status: android.location.GnssStatus) {
+                            var visible = 0
+                            var used = 0
+                            for (i in 0 until status.satelliteCount) {
+                                visible++
+                                if (status.usedInFix(i)) used++
+                            }
+                            val count = if (used > 0) used else visible
+                            if (count != gpsSatCount) {
+                                gpsSatCount = count
+                                broadcastGpsStatus()
+                            }
+                        }
+                    }
+                    locationManager.registerGnssStatusCallback(gnssCallback!!, Handler(Looper.getMainLooper()))
+                } catch (e: Exception) {
+                    Log.w(TAG, "GnssStatus callback could not be registered: ${e.message}")
+                }
+            }
         }
         providers.distinct().filterNot { it in registeredLocationProviders }.forEach { provider ->
             try {
@@ -458,7 +493,7 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
         if (!tracking || paused || !workoutUsesLocation(activityType) ||
             ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return
         val nowElapsed = SystemClock.elapsedRealtime()
-        val fixElapsed = workoutFixElapsedTime(location.elapsedRealtimeNanos, location.time, nowElapsed, System.currentTimeMillis())
+        val fixElapsed = workoutFixElapsedTime(location.elapsedRealtimeNanos, location.time, nowElapsed, System.currentTimeMillis(), maxForwardSkewMs = 60_000L) ?: nowElapsed
         val accuracy = if (location.hasAccuracy()) location.accuracy else 25f
         val providerEnabled = location.provider !in availableLocationProviders ||
             runCatching { locationManager.isProviderEnabled(location.provider.orEmpty()) }.getOrDefault(false)
@@ -467,24 +502,28 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
             @Suppress("DEPRECATION")
             location.isFromMockProvider
         }
-        if (fixElapsed != null && validWorkoutFixOrder(fixElapsed, locationCaptureStartElapsed, lastFixElapsed) &&
+        val isInitialFix = lastFixElapsed < 0
+        val maxAgeMs = if (isInitialFix) 120_000L else 60_000L
+        if (validWorkoutFixOrder(fixElapsed, locationCaptureStartElapsed, lastFixElapsed, allowRecentOrigin = isInitialFix) &&
             !mock && location.latitude.isFinite() && location.latitude in -90.0..90.0 &&
             location.longitude.isFinite() && location.longitude in -180.0..180.0 &&
-            nowElapsed - fixElapsed in 0L..30_000L && accuracy.isFinite() && accuracy >= 0f) {
+            nowElapsed - fixElapsed in 0L..maxAgeMs && accuracy.isFinite() && accuracy >= 0f) {
             lastLocationSignalElapsed = fixElapsed
-            if (lastFixElapsed < 0 || nowElapsed - lastFixElapsed > 30_000L) lastReportedAccuracy = accuracy
+            if (lastFixElapsed < 0 || nowElapsed - lastFixElapsed > maxAgeMs) lastReportedAccuracy = accuracy
         }
-        if (fixElapsed == null || !validWorkoutLocation(location.latitude, location.longitude, accuracy, fixElapsed, nowElapsed, mock)) {
+        if (!validWorkoutLocation(location.latitude, location.longitude, accuracy, fixElapsed, nowElapsed, mock, maxAgeMs = maxAgeMs)) {
             // A discarded new fix breaks continuity; a secondary network callback does not break GPS.
             if (shouldBreakDiscardedWorkoutRoute(location.provider, lastLocation?.provider, fixElapsed, lastFixElapsed)) lastLocation = null
             broadcastGpsStatus(); return
         }
         val acceptedAccuracy = accuracy
-        val isGps = location.provider == LocationManager.GPS_PROVIDER
+        val isGps = location.provider == LocationManager.GPS_PROVIDER ||
+            (location.provider == LocationManager.PASSIVE_PROVIDER && location.hasAccuracy() && location.accuracy <= 60f) ||
+            (location.provider == "fused" && location.hasAccuracy() && location.accuracy <= 60f)
         // Avoid alternating network/GPS points and drawing a false zigzag while GPS is fresh.
         if (!isGps && lastGpsFixElapsed >= 0 && nowElapsed - lastGpsFixElapsed in 0L..15_000L) return
-        if (!validWorkoutFixOrder(fixElapsed, locationCaptureStartElapsed, lastFixElapsed)) return
-        val routeTime = workoutRouteWallTime(fixElapsed, nowElapsed, System.currentTimeMillis()) ?: run { lastLocation = null; return }
+        if (!validWorkoutFixOrder(fixElapsed, locationCaptureStartElapsed, lastFixElapsed, allowRecentOrigin = isInitialFix)) return
+        val routeTime = workoutRouteWallTime(fixElapsed, nowElapsed, System.currentTimeMillis(), maxAgeMs = maxAgeMs) ?: run { lastLocation = null; return }
         val previous = lastLocation
         val dt = if (previous == null) 0.0 else (fixElapsed - lastLocationAnchorElapsed) / 1000.0
         val segment = previous?.distanceTo(location) ?: 0f
@@ -511,10 +550,11 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
     private fun markLocationFix(location: Location, nowElapsed: Long, gps: Boolean) {
         lastFixElapsed = nowElapsed
         if (gps) lastGpsFixElapsed = nowElapsed
-        lastLocationProvider = location.provider.orEmpty()
+        lastLocationProvider = if (gps) LocationManager.GPS_PROVIDER else location.provider.orEmpty()
         gpsLocked = gps
         lastReportedAccuracy = if (location.hasAccuracy()) location.accuracy else 25f
-        gpsSatCount = (location.extras?.getInt("satellites", 0) ?: 0).coerceAtLeast(0)
+        val sat = (location.extras?.getInt("satellites", 0) ?: 0).coerceAtLeast(0)
+        if (sat > 0) gpsSatCount = sat
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
@@ -583,6 +623,10 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
     }
     private fun unregisterTrackingSensors() {
         try { locationManager.removeUpdates(this) } catch (_: Exception) {}
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && gnssCallback != null) {
+            runCatching { locationManager.unregisterGnssStatusCallback(gnssCallback!!) }
+            gnssCallback = null
+        }
         registeredLocationProviders.clear()
         locationProviderStart.clear(); lastAccelMs = -1L; lastGyroMs = -1L
         gyroX = 0f; gyroY = 0f; gyroZ = 0f

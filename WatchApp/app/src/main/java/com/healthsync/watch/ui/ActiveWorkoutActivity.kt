@@ -70,6 +70,7 @@ class ActiveWorkoutActivity : AppCompatActivity() {
     private var gpsLocked = false
     private var gpsState = WorkoutLocationState.SEARCHING
     private var gpsAccuracy = -1f
+    private var gpsSatCount = 0
     private var locationPermissionChecked = false
     private var locationPermissionPending = false
     private var workoutStartRequested = false
@@ -84,6 +85,7 @@ class ActiveWorkoutActivity : AppCompatActivity() {
             intent ?: return
             if (intent.action == WorkoutTrackingService.ACTION_GPS_STATUS) {
                 gpsLocked = intent.getBooleanExtra(WorkoutTrackingService.EXTRA_GPS_LOCKED, false)
+                gpsSatCount = intent.getIntExtra(WorkoutTrackingService.EXTRA_GPS_SATS, gpsSatCount)
                 gpsState = runCatching { WorkoutLocationState.valueOf(intent.getStringExtra(WorkoutTrackingService.EXTRA_GPS_STATE).orEmpty()) }
                     .getOrDefault(if (gpsLocked) WorkoutLocationState.GPS_FIX else WorkoutLocationState.SEARCHING)
                 gpsAccuracy = intent.getFloatExtra(WorkoutTrackingService.EXTRA_GPS_ACCURACY, -1f)
@@ -267,6 +269,10 @@ class ActiveWorkoutActivity : AppCompatActivity() {
             WorkoutLocationState.UNAVAILABLE -> "Location unavailable • tap to retry"
             WorkoutLocationState.WEAK_FIX -> "Location signal weak$accuracy • go outdoors$estimate"
             WorkoutLocationState.STALE -> "GPS signal lost • go outdoors$estimate"
+            WorkoutLocationState.SEARCHING -> {
+                if (gpsSatCount > 0) "GPS acquiring ($gpsSatCount sats) • wait for lock$estimate"
+                else "GPS searching • go outdoors$estimate"
+            }
             else -> "GPS searching • go outdoors$estimate"
         }
         val fixed = state == WorkoutLocationState.GPS_FIX || state == WorkoutLocationState.LOCATION_FIX

@@ -21,12 +21,12 @@ internal fun workoutLocationProviders(available: Collection<String>, fine: Boole
     available.filter { it.isNotBlank() && (fine || it == "network") }.toSet()
 
 internal fun workoutLocationSourceAllowed(provider: String?, registered: Set<String>, enabled: Boolean = true): Boolean =
-    enabled && !provider.isNullOrBlank() && provider != "passive" && (provider in registered || "passive" in registered)
+    enabled && !provider.isNullOrBlank() && (provider in registered || "passive" in registered)
 
-/** Give a cold GNSS receiver time to acquire satellites, then recover a stalled subscription. */
+/** Give a cold GNSS receiver time to acquire satellites; do not disrupt ongoing tracking. */
 internal fun shouldRecoverWorkoutLocation(registeredAt: Long, lastFixElapsed: Long, lastRecoveryElapsed: Long, nowElapsed: Long): Boolean {
     val latestProgress = maxOf(registeredAt, lastFixElapsed, lastRecoveryElapsed)
-    return registeredAt >= 0 && nowElapsed - latestProgress >= 120_000L
+    return registeredAt >= 0 && nowElapsed - latestProgress >= 900_000L
 }
 
 const val MAX_WORKOUT_ACCURACY_METERS = 120f
@@ -55,30 +55,39 @@ internal fun workoutLocationState(
 
 internal fun validWorkoutLocation(
     latitude: Double, longitude: Double, accuracy: Float?, fixElapsed: Long, nowElapsed: Long,
-    mock: Boolean = false, maxAccuracy: Float = MAX_WORKOUT_ACCURACY_METERS
+    mock: Boolean = false, maxAccuracy: Float = MAX_WORKOUT_ACCURACY_METERS,
+    maxAgeMs: Long = 30_000L
 ): Boolean =
     !mock &&
     latitude.isFinite() && longitude.isFinite() && latitude in -90.0..90.0 && longitude in -180.0..180.0 &&
         accuracy != null && accuracy.isFinite() && accuracy in 0f..maxAccuracy &&
-        fixElapsed > 0 && nowElapsed - fixElapsed in 0L..30_000L
+        fixElapsed > 0 && (nowElapsed - fixElapsed) in 0L..maxAgeMs
 
 internal fun workoutFixElapsedTime(
     elapsedNanos: Long, wallTime: Long, nowElapsed: Long, nowWall: Long,
     maxForwardSkewMs: Long = 15_000L
 ): Long? {
     if (elapsedNanos < 0) return null
-    if (elapsedNanos > 0) return elapsedNanos / 1_000_000L
+    if (elapsedNanos > 0) {
+        val elapsedMs = elapsedNanos / 1_000_000L
+        if (elapsedMs > nowElapsed + maxForwardSkewMs) return null
+        return elapsedMs.coerceAtMost(nowElapsed)
+    }
     if (wallTime <= 0 || wallTime > nowWall + maxForwardSkewMs) return null
     if (wallTime > nowWall) return nowElapsed
     return nowElapsed - (nowWall - wallTime)
 }
 
-internal fun validWorkoutFixOrder(fixElapsed: Long, registeredAt: Long, previousAccepted: Long): Boolean =
-    fixElapsed >= registeredAt && (previousAccepted < 0 || fixElapsed > previousAccepted)
+internal fun validWorkoutFixOrder(
+    fixElapsed: Long, registeredAt: Long, previousAccepted: Long,
+    allowRecentOrigin: Boolean = false
+): Boolean =
+    (fixElapsed >= registeredAt || (allowRecentOrigin && fixElapsed >= registeredAt - 120_000L)) &&
+    (previousAccepted < 0 || fixElapsed > previousAccepted)
 
-internal fun workoutRouteWallTime(fixElapsed: Long, nowElapsed: Long, nowWall: Long): Long? {
+internal fun workoutRouteWallTime(fixElapsed: Long, nowElapsed: Long, nowWall: Long, maxAgeMs: Long = 30_000L): Long? {
     val age = nowElapsed - fixElapsed
-    if (fixElapsed <= 0 || age !in 0L..30_000L) return null
+    if (fixElapsed <= 0 || age !in 0L..maxAgeMs) return null
     return (nowWall - age).takeIf { it > 0 }
 }
 

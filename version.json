@@ -1,18 +1,18 @@
 {
     "phone":  {
-                  "versionCode":  29,
-                  "versionName":  "2.9.1",
-                  "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.9.1/HealthSync-Phone.apk",
-                  "changelog":  "v2.9.1: Companion update with workout GPS sync improvements, Face Studio stability, and refined watch connectivity.",
+                  "versionCode":  30,
+                  "versionName":  "2.9.2",
+                  "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.9.2/HealthSync-Phone.apk",
+                  "changelog":  "v2.9.2: Companion update for continuous GNSS satellite tracking and passive location sharing.",
                   "forceUpdate":  false,
-                  "sha256":  "cd6cfaa49ec73ff830c1084135d02e0fc6ae28c022b8f84674bd36b999db1e8e"
+                  "sha256":  "4666a00ec231f8099c77e380ebe791daf3d896d454dcf1eed9d75ff4beddb819"
               },
     "watch":  {
-                  "versionCode":  35,
-                  "versionName":  "2.9.1",
-                  "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.9.1/HealthSync-Watch.apk",
-                  "changelog":  "v2.9.1: High-level workout walk GPS updates with adaptive 120m accuracy for smartwatch antennas, clock drift tolerance for offline tracking, and high-priority GNSS hardware requests.",
+                  "versionCode":  36,
+                  "versionName":  "2.9.2",
+                  "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.9.2/HealthSync-Watch.apk",
+                  "changelog":  "v2.9.2: Fix outdoor workout walk GPS locking: enable passive Maps GPS sharing, remove the 2-minute GNSS listener reset loop, display live visible satellite counts, and add clock skew resilience for standalone watch GPS.",
                   "forceUpdate":  false,
-                  "sha256":  "a53b99055b571b1d497ccddcb4670543c1126fb515f25ddf91f0cf2de570e541"
+                  "sha256":  "d9320bf94e6e5d196eeb271339e845257a705843fc35adef116db4b81ee67c06"
               }
 }
