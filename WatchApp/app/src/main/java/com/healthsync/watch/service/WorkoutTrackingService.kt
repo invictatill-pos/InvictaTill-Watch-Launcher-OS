@@ -247,9 +247,16 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
             return
         }
         availableLocationProviders.clear(); availableLocationProviders.addAll(availableProviders)
-        // Passive updates include fixes requested by an installed watch application or OEM service.
-        // They retain the underlying GPS/network/fused provider, not the name "passive".
-        val providers = workoutLocationProviders(availableProviders, fine)
+        // High-level criteria: request fine accuracy and high power
+        val fineCriteria = android.location.Criteria().apply {
+            accuracy = android.location.Criteria.ACCURACY_FINE
+            powerRequirement = android.location.Criteria.POWER_HIGH
+        }
+        val bestProvider = runCatching { locationManager.getBestProvider(fineCriteria, true) }.getOrNull()
+        val providers = workoutLocationProviders(availableProviders, fine).toMutableSet()
+        if (!bestProvider.isNullOrBlank() && fine) {
+            providers.add(bestProvider)
+        }
         val nowElapsed = SystemClock.elapsedRealtime()
         val stalled = shouldRecoverWorkoutLocation(locationProviderStart.values.minOrNull() ?: -1L,
             lastFixElapsed, lastLocationRecoveryElapsed, nowElapsed)
@@ -261,6 +268,22 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
         }
         providers.distinct().filterNot { it in registeredLocationProviders }.forEach { provider ->
             try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    try {
+                        val req = android.location.LocationRequest.Builder(1000L)
+                            .setQuality(android.location.LocationRequest.QUALITY_HIGH_ACCURACY)
+                            .setMinUpdateIntervalMillis(500L)
+                            .setMinUpdateDistanceMeters(0f)
+                            .build()
+                        locationManager.requestLocationUpdates(provider, req, ContextCompat.getMainExecutor(this), this)
+                        registeredLocationProviders.add(provider)
+                        locationProviderStart[provider] = SystemClock.elapsedRealtime()
+                        Log.d(TAG, "Tracking high-accuracy location on provider: $provider")
+                        return@forEach
+                    } catch (e: Exception) {
+                        Log.w(TAG, "LocationRequest failed for $provider, fallback to legacy: ${e.message}")
+                    }
+                }
                 locationManager.requestLocationUpdates(provider, 1000L, 0f, this, Looper.getMainLooper())
                 registeredLocationProviders.add(provider)
                 locationProviderStart[provider] = SystemClock.elapsedRealtime()
@@ -436,7 +459,7 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
             ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return
         val nowElapsed = SystemClock.elapsedRealtime()
         val fixElapsed = workoutFixElapsedTime(location.elapsedRealtimeNanos, location.time, nowElapsed, System.currentTimeMillis())
-        val accuracy = location.accuracy.takeIf { location.hasAccuracy() }
+        val accuracy = if (location.hasAccuracy()) location.accuracy else 25f
         val providerEnabled = location.provider !in availableLocationProviders ||
             runCatching { locationManager.isProviderEnabled(location.provider.orEmpty()) }.getOrDefault(false)
         if (!workoutLocationSourceAllowed(location.provider, registeredLocationProviders, providerEnabled)) return
@@ -447,7 +470,7 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
         if (fixElapsed != null && validWorkoutFixOrder(fixElapsed, locationCaptureStartElapsed, lastFixElapsed) &&
             !mock && location.latitude.isFinite() && location.latitude in -90.0..90.0 &&
             location.longitude.isFinite() && location.longitude in -180.0..180.0 &&
-            nowElapsed - fixElapsed in 0L..30_000L && accuracy != null && accuracy.isFinite() && accuracy >= 0f) {
+            nowElapsed - fixElapsed in 0L..30_000L && accuracy.isFinite() && accuracy >= 0f) {
             lastLocationSignalElapsed = fixElapsed
             if (lastFixElapsed < 0 || nowElapsed - lastFixElapsed > 30_000L) lastReportedAccuracy = accuracy
         }
@@ -456,7 +479,7 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
             if (shouldBreakDiscardedWorkoutRoute(location.provider, lastLocation?.provider, fixElapsed, lastFixElapsed)) lastLocation = null
             broadcastGpsStatus(); return
         }
-        val acceptedAccuracy = accuracy ?: return
+        val acceptedAccuracy = accuracy
         val isGps = location.provider == LocationManager.GPS_PROVIDER
         // Avoid alternating network/GPS points and drawing a false zigzag while GPS is fresh.
         if (!isGps && lastGpsFixElapsed >= 0 && nowElapsed - lastGpsFixElapsed in 0L..15_000L) return
@@ -490,7 +513,7 @@ class WorkoutTrackingService : Service(), LocationListener, SensorEventListener 
         if (gps) lastGpsFixElapsed = nowElapsed
         lastLocationProvider = location.provider.orEmpty()
         gpsLocked = gps
-        lastReportedAccuracy = location.accuracy
+        lastReportedAccuracy = if (location.hasAccuracy()) location.accuracy else 25f
         gpsSatCount = (location.extras?.getInt("satellites", 0) ?: 0).coerceAtLeast(0)
     }
 

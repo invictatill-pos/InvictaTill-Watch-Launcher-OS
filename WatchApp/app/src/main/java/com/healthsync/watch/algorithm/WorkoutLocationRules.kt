@@ -29,6 +29,8 @@ internal fun shouldRecoverWorkoutLocation(registeredAt: Long, lastFixElapsed: Lo
     return registeredAt >= 0 && nowElapsed - latestProgress >= 120_000L
 }
 
+const val MAX_WORKOUT_ACCURACY_METERS = 120f
+
 internal fun workoutLocationState(
     usesLocation: Boolean, paused: Boolean, fine: Boolean, coarse: Boolean,
     availableProviders: Set<String>, enabledProviders: Set<String>, registeredProviders: Set<String>,
@@ -46,20 +48,28 @@ internal fun workoutLocationState(
     enabledProviders.isEmpty() -> WorkoutLocationState.DISABLED
     registeredProviders.intersect(enabledProviders).isEmpty() -> WorkoutLocationState.UNAVAILABLE
     "gps" in availableProviders && "gps" !in enabledProviders -> WorkoutLocationState.GPS_DISABLED
-    lastSignalElapsed > 0 && nowElapsed - lastSignalElapsed in 0L..30_000L && reportedAccuracy.isFinite() && reportedAccuracy > 50f -> WorkoutLocationState.WEAK_FIX
+    lastSignalElapsed > 0 && nowElapsed - lastSignalElapsed in 0L..30_000L && reportedAccuracy.isFinite() && reportedAccuracy > MAX_WORKOUT_ACCURACY_METERS -> WorkoutLocationState.WEAK_FIX
     lastFixElapsed < 0 -> WorkoutLocationState.SEARCHING
     else -> WorkoutLocationState.STALE
 }
 
-internal fun validWorkoutLocation(latitude: Double, longitude: Double, accuracy: Float?, fixElapsed: Long, nowElapsed: Long, mock: Boolean = false): Boolean =
+internal fun validWorkoutLocation(
+    latitude: Double, longitude: Double, accuracy: Float?, fixElapsed: Long, nowElapsed: Long,
+    mock: Boolean = false, maxAccuracy: Float = MAX_WORKOUT_ACCURACY_METERS
+): Boolean =
     !mock &&
     latitude.isFinite() && longitude.isFinite() && latitude in -90.0..90.0 && longitude in -180.0..180.0 &&
-        accuracy != null && accuracy.isFinite() && accuracy in 0f..50f && fixElapsed > 0 && nowElapsed - fixElapsed in 0L..30_000L
+        accuracy != null && accuracy.isFinite() && accuracy in 0f..maxAccuracy &&
+        fixElapsed > 0 && nowElapsed - fixElapsed in 0L..30_000L
 
-internal fun workoutFixElapsedTime(elapsedNanos: Long, wallTime: Long, nowElapsed: Long, nowWall: Long): Long? {
+internal fun workoutFixElapsedTime(
+    elapsedNanos: Long, wallTime: Long, nowElapsed: Long, nowWall: Long,
+    maxForwardSkewMs: Long = 15_000L
+): Long? {
     if (elapsedNanos < 0) return null
     if (elapsedNanos > 0) return elapsedNanos / 1_000_000L
-    if (wallTime <= 0 || wallTime > nowWall) return null
+    if (wallTime <= 0 || wallTime > nowWall + maxForwardSkewMs) return null
+    if (wallTime > nowWall) return nowElapsed
     return nowElapsed - (nowWall - wallTime)
 }
 
@@ -87,13 +97,17 @@ internal fun validWorkoutMotionSample(values: FloatArray, maximumRange: Float, t
 
 internal enum class RouteSegmentDecision { REJECT, ORIGIN, STATIONARY, MOVE }
 
-internal fun workoutRouteSegmentDecision(deltaSeconds: Double, distanceMeters: Float, previousAccuracy: Float, accuracy: Float, cycling: Boolean): RouteSegmentDecision {
+internal fun workoutRouteSegmentDecision(
+    deltaSeconds: Double, distanceMeters: Float, previousAccuracy: Float, accuracy: Float,
+    cycling: Boolean, maxAccuracy: Float = MAX_WORKOUT_ACCURACY_METERS
+): RouteSegmentDecision {
     if (!deltaSeconds.isFinite() || deltaSeconds <= 0 || !distanceMeters.isFinite() || distanceMeters < 0f ||
-        !previousAccuracy.isFinite() || previousAccuracy !in 0f..50f || !accuracy.isFinite() || accuracy !in 0f..50f) return RouteSegmentDecision.REJECT
+        !previousAccuracy.isFinite() || previousAccuracy !in 0f..maxAccuracy ||
+        !accuracy.isFinite() || accuracy !in 0f..maxAccuracy) return RouteSegmentDecision.REJECT
     if (deltaSeconds > 30.0) return RouteSegmentDecision.ORIGIN
     val maximumSpeed = if (cycling) 45.0 else 25.0
     if (distanceMeters / deltaSeconds > maximumSpeed) return RouteSegmentDecision.REJECT
-    val threshold = maxOf(2f, minOf(previousAccuracy, accuracy) * .25f)
+    val threshold = minOf(12f, maxOf(2f, minOf(previousAccuracy, accuracy) * .25f))
     return if (distanceMeters >= threshold) RouteSegmentDecision.MOVE else RouteSegmentDecision.STATIONARY
 }
 

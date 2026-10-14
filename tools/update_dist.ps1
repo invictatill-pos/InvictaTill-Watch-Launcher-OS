@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
-    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$WatchVersion = '2.9.0',
-    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$PhoneVersion = '2.9.0'
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$WatchVersion = '2.9.1',
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$PhoneVersion = '2.9.1'
 )
 
 Set-StrictMode -Version Latest

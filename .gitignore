@@ -10,3 +10,4 @@ build/
 .cxx
 *.log
 .vscode/
+.kotlin/

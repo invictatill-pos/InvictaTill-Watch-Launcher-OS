@@ -65,11 +65,12 @@ class WorkoutLocationRulesTest {
     }
 
     @Test fun aFreshPoorAccuracyFixShowsAWeakSignalButNeverEntersTheRoute() {
-        assertEquals(WorkoutLocationState.WEAK_FIX, state(signal = 9_000, accuracy = 120f))
-        assertEquals(WorkoutLocationState.SEARCHING, state(signal = 9_000, now = 39_001, accuracy = 120f))
+        assertEquals(WorkoutLocationState.WEAK_FIX, state(signal = 9_000, accuracy = 150f))
+        assertEquals(WorkoutLocationState.SEARCHING, state(signal = 9_000, now = 39_001, accuracy = 150f))
         assertEquals(WorkoutLocationState.SEARCHING, state(signal = 9_000, accuracy = Float.NaN))
-        assertEquals(WorkoutLocationState.GPS_FIX, state(fix = 8_000, signal = 9_000, accuracy = 120f))
-        assertFalse(validWorkoutLocation(12.0, 77.0, 120f, 9_000, 10_000))
+        assertEquals(WorkoutLocationState.GPS_FIX, state(fix = 8_000, signal = 9_000, accuracy = 150f))
+        assertFalse(validWorkoutLocation(12.0, 77.0, 150f, 9_000, 10_000))
+        assertTrue(validWorkoutLocation(12.0, 77.0, 120f, 9_000, 10_000))
         assertFalse(validWorkoutLocation(12.0, 77.0, 8f, 9_000, 10_000, mock = true))
     }
 
@@ -104,7 +105,8 @@ class WorkoutLocationRulesTest {
     }
 
     @Test fun cachedPreResumeFutureAndOutOfOrderTimestampsCannotBecomeFreshOrigins() {
-        assertNull(workoutFixElapsedTime(0, 20_001, 10_000, 20_000))
+        assertNull(workoutFixElapsedTime(0, 40_000, 10_000, 20_000))
+        assertEquals(10_000L, workoutFixElapsedTime(0, 20_001, 10_000, 20_000))
         assertNull(workoutFixElapsedTime(-1, 20_000, 10_000, 20_000))
         assertNull(workoutFixElapsedTime(0, 0, 10_000, 20_000))
         assertEquals(9_000L, workoutFixElapsedTime(0, 19_000, 10_000, 20_000))

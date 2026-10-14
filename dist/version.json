@@ -1,18 +1,18 @@
 {
-  "phone": {
-    "versionCode": 28,
-    "versionName": "2.9.0",
-    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.9.0/HealthSync-Phone.apk",
-    "changelog": "v2.9.0: Professional Face Studio with blank projects, editable text and shape layers, canvas selection and dragging, precision controls, undo/redo, project draft recovery, portable .hswf import/export, eight animations, ambient styling, simulation testing, and improved creation library.",
-    "forceUpdate": false,
-    "sha256": "63757166a3330fb24780a01bb66f057bc97d3e367aa2bc5afe1dfa1108c587ae"
-  },
-  "watch": {
-    "versionCode": 34,
-    "versionName": "2.9.0",
-    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.9.0/HealthSync-Watch.apk",
-    "changelog": "v2.9.0: Custom text and shape layer rendering in the shared 320-unit design space, photo dimming, complete ambient modes, eight configurable animations, bounded image decoding, and corrected 24-hour digital time.",
-    "forceUpdate": false,
-    "sha256": "8eb75b286d98e8b2e2caf20efd2148e8a797971a623d51062ddb04aa1661c00d"
-  }
+    "phone":  {
+                  "versionCode":  29,
+                  "versionName":  "2.9.1",
+                  "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.9.1/HealthSync-Phone.apk",
+                  "changelog":  "v2.9.1: Companion update with workout GPS sync improvements, Face Studio stability, and refined watch connectivity.",
+                  "forceUpdate":  false,
+                  "sha256":  "cd6cfaa49ec73ff830c1084135d02e0fc6ae28c022b8f84674bd36b999db1e8e"
+              },
+    "watch":  {
+                  "versionCode":  35,
+                  "versionName":  "2.9.1",
+                  "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.9.1/HealthSync-Watch.apk",
+                  "changelog":  "v2.9.1: High-level workout walk GPS updates with adaptive 120m accuracy for smartwatch antennas, clock drift tolerance for offline tracking, and high-priority GNSS hardware requests.",
+                  "forceUpdate":  false,
+                  "sha256":  "a53b99055b571b1d497ccddcb4670543c1126fb515f25ddf91f0cf2de570e541"
+              }
 }
