@@ -100,6 +100,17 @@ class BluetoothSyncService : android.app.Service() {
             return activeInstance?.sendRaw(msg) ?: false
         }
 
+        /** One screen frame is acknowledged before another can be queued. */
+        fun sendPhoneScreen(payload: PhoneScreenPayload): Boolean {
+            val service = activeInstance ?: return false
+            if (!_connectionState.value.isConnected || !_connectionState.value.supportsPhoneScreenShare) return false
+            if (!(PhoneScreenProtocol.validControl(payload) || PhoneScreenProtocol.validFrame(payload))) return false
+            return service.sendRaw(
+                SyncMessage(MessageType.PHONE_SCREEN, payload = service.gson.toJson(payload)),
+                screenSessionId = if (payload.kind == "start" || payload.kind == "frame") payload.sessionId else null
+            )
+        }
+
         suspend fun sendStreamingSyncMessage(msg: SyncMessage): Boolean {
             val inst = activeInstance ?: return false
             val writer = sharedWriter ?: return false
@@ -287,11 +298,14 @@ class BluetoothSyncService : android.app.Service() {
     private var clientSocket: BluetoothSocket? = null
     private var serverJob: Job? = null
     private var wakeLock: PowerManager.WakeLock? = null
-    private data class OutgoingFrame(val writer: PrintWriter, val message: SyncMessage)
+    private data class OutgoingFrame(
+        val writer: PrintWriter, val message: SyncMessage,
+        val socket: BluetoothSocket?, val screenSessionId: String? = null
+    )
     private val outbound = Channel<OutgoingFrame>(256)
 
     internal suspend fun sendStreamingMessage(writer: PrintWriter, message: SyncMessage) {
-        outbound.send(OutgoingFrame(writer, message))
+        outbound.send(OutgoingFrame(writer, message, clientSocket))
     }
     private val preferences by lazy { PhonePreferences(this) }
     private data class CachedReply(val signature: String, val result: ReplyResultPayload)
@@ -319,10 +333,12 @@ class BluetoothSyncService : android.app.Service() {
             scope.launch {
                 for (frame in outbound) {
                     if (sharedWriter !== frame.writer) continue
+                    if (frame.screenSessionId != null && !PhoneScreenShareService.isSessionActive(frame.screenSessionId)) continue
                     val writer = frame.writer
                     try {
                         wakeLock?.acquire(10_000)
                         writer.println(gson.toJson(frame.message))
+                        if (writer.checkError()) frame.socket?.close()
                     } catch (e: Exception) {
                         Log.w(TAG, "Send failed", e)
                     } finally {
@@ -746,7 +762,8 @@ class BluetoothSyncService : android.app.Service() {
                             hasStepSensor = info.hasStepSensor,
                             lastUpdated = if (info.lastUpdated > 0) info.lastUpdated else System.currentTimeMillis(),
                             watchInternetStatus = info.internetStatus,
-                            watchInternetReceivedAt = if (info.internetStatus != null) SystemClock.elapsedRealtime() else 0L
+                            watchInternetReceivedAt = if (info.internetStatus != null) SystemClock.elapsedRealtime() else 0L,
+                            supportsPhoneScreenShare = info.supportsPhoneScreenShare
                         )
                         updateState(updated)
                         Log.i(TAG, "Connected Watch Info: ${info.model} v${info.versionName} (build ${info.versionCode}, battery ${info.batteryPercent}%, charging=${info.isCharging}, powerSave=${info.powerSaveMode}, storage=${info.storageFreeMb}/${info.storageTotalMb}MB)")
@@ -766,6 +783,14 @@ class BluetoothSyncService : android.app.Service() {
                         Log.i(TAG, "Watch Face ACK received: ${ack.id} - ${ack.message} (success=${ack.success})")
                     } catch (e: Exception) { Log.w(TAG, "Error parsing WATCH_FACE_ACK: ${e.message}") }
                 }
+                MessageType.PHONE_SCREEN -> {
+                    // The watch sends only small control messages, never captured images.
+                    if (msg.payload.length <= 2048) {
+                        val screen = gson.fromJson(msg.payload, PhoneScreenPayload::class.java)
+                        if (PhoneScreenProtocol.validControl(screen) && screen.kind in setOf("ack", "stop", "request"))
+                            PhoneScreenShareService.handleWatchMessage(screen)
+                    }
+                }
                 // Phone Telecom callbacks are the authority for call state.
                 MessageType.PING         -> sendRaw(SyncMessage(MessageType.ACK, payload = "{}"))
                 else -> Unit
@@ -780,9 +805,9 @@ class BluetoothSyncService : android.app.Service() {
         }
     }
 
-    private fun sendRaw(msg: SyncMessage): Boolean {
+    private fun sendRaw(msg: SyncMessage, screenSessionId: String? = null): Boolean {
         val writer = sharedWriter ?: return false
-        return outbound.trySend(OutgoingFrame(writer, msg)).isSuccess
+        return outbound.trySend(OutgoingFrame(writer, msg, clientSocket, screenSessionId)).isSuccess
     }
 
     private fun postFallAlert(payload: FallDetectedPayload) {
@@ -824,6 +849,7 @@ class BluetoothSyncService : android.app.Service() {
             if (newConnection) null else currentHeartRateFeedback(it, state.isConnected, System.currentTimeMillis())
         }
         _connectionState.tryEmit(state)
+        if (!state.isConnected) PhoneScreenShareService.connectionChanged(applicationContext, false)
     }
 
     private fun createNotificationChannel() {

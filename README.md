@@ -1,6 +1,8 @@
-# HealthSync 2.9.4
+# HealthSync 2.10.0
 
-Phone 2.9.4 adds a visible **Bluetooth tethering** button under **Device → Internet for watch apps**. One tap opens Android's tethering controls where supported; turn on Bluetooth tethering there. Watch 2.9.3 remains current and compatible. See the [Bluetooth internet guide](docs/BLUETOOTH-INTERNET.md) for setup, fallback settings screens, and device checks.
+Phone and watch 2.10.0 add **Live phone map**: view the actual Google Maps phone screen over the existing Bluetooth connection. Start from phone **Device → Google Maps on watch → Share Google Maps**, approve Android screen sharing, then open **Apps → Live phone map** on the watch. The watch has a full-screen view, round-safe controls, Fit, pinch zoom and pan. Both apps need this update; keep the phone unlocked with Maps visible. Images refresh about every 1.5 seconds or slower. See the [live map guide](docs/LIVE-PHONE-MAP.md).
+
+The visible **Bluetooth tethering** shortcut remains under **Device → Internet for watch apps**. One tap opens Android controls where supported; turn on tethering there. See the [Bluetooth internet guide](docs/BLUETOOTH-INTERNET.md) for setup and firmware requirements.
 
 HealthSync is an Android watch launcher and Android phone companion with sensor capture, local workout history, Bluetooth sync, notifications, calls, watch faces, and watch utilities. The 13 October 2026 Face Studio update adds blank projects, custom text and shape layers, direct canvas editing, precise styling, undo/redo, draft recovery, portable project import/export, ambient controls, and design testing. See the [Face Studio guide](docs/FACE-STUDIO.md).
 
@@ -8,8 +10,8 @@ HealthSync is an Android watch launcher and Android phone companion with sensor 
 
 | Device | APK | App version | Android version | Build code |
 | --- | --- | --- | --- | --- |
-| Watch | [HealthSync-Watch.apk](dist/HealthSync-Watch.apk) | 2.9.3 | Android 6 / API 23 or newer | 37 |
-| Phone | [HealthSync-Phone.apk](dist/HealthSync-Phone.apk) | 2.9.4 | Android 8 / API 26 or newer | 32 |
+| Watch | [HealthSync-Watch.apk](dist/HealthSync-Watch.apk) | 2.10.0 | Android 6 / API 23 or newer | 38 |
+| Phone | [HealthSync-Phone.apk](dist/HealthSync-Phone.apk) | 2.10.0 | Android 8 / API 26 or newer | 33 |
 
 Install both apps over the existing packages. The apps retain the existing development signing certificate. The phone APK is an optimized release build; the watch APK retains the compatible v1/v2-signed debug format used by earlier watch deliveries. The [installation guide](dist/ANDROID8-INSTALL.md) explains Bluetooth pairing, permissions, updates, and Home recovery. Published APKs are available in [GitHub Releases](https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases).
 
@@ -60,7 +62,7 @@ Use JDK 17 or newer and Android SDK platform/build-tools 34. Set `sdk.dir` in lo
 ```powershell
 .\gradlew.bat :PhoneApp:app:testDebugUnitTest :WatchApp:app:testDebugUnitTest :PhoneApp:app:lintDebug :WatchApp:app:lintDebug
 .\gradlew.bat :PhoneApp:app:assembleRelease :WatchApp:app:assembleDebug
-.\tools\update_dist.ps1 -WatchVersion 2.9.3 -PhoneVersion 2.9.4 -ReleaseVersion 2.9.4
+.\tools\update_dist.ps1 -WatchVersion 2.10.0 -PhoneVersion 2.10.0 -ReleaseVersion 2.10.0
 ```
 
-The [2.9.4 build report](dist/BUILD-REPORT-Android8-2.9.4.md) records validation. No physical watch or phone was connected during this update. Automated tests and static checks do not establish physical sensor accuracy, GPS reception, overnight battery use, circular-display fit, call audio, or OEM permission behavior; these require device checks.
+The [2.10.0 build report](dist/BUILD-REPORT-Android8-2.10.0.md) records 402 passing tests, successful builds and signature verification. No physical watch or phone was connected during this update. Automated tests and static checks do not establish capture quality, map readability, Bluetooth throughput, physical sensor accuracy, GPS reception, overnight battery use, circular-display fit, call audio, or OEM permission behavior; these require device checks.

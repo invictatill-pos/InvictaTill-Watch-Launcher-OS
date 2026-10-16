@@ -49,7 +49,8 @@ enum class MessageType {
     DEVICE_INFO,
     FETCH_DEVICE_INFO,
     HYDRATION_UPDATE,
-    WELLNESS_SETTINGS
+    WELLNESS_SETTINGS,
+    PHONE_SCREEN
 }
 
 data class DeviceInfoPayload(
@@ -67,7 +68,8 @@ data class DeviceInfoPayload(
     val hasSpO2Sensor: Boolean = false,
     val hasStepSensor: Boolean = true,
     val lastUpdated: Long = System.currentTimeMillis(),
-    val internetStatus: InternetStatusPayload? = null
+    val internetStatus: InternetStatusPayload? = null,
+    val supportsPhoneScreenShare: Boolean = false
 )
 
 data class WatchFaceInstallPayload(

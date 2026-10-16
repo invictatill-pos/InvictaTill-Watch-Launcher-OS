@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
-    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$WatchVersion = '2.9.3',
-    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$PhoneVersion = '2.9.4',
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$WatchVersion = '2.10.0',
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$PhoneVersion = '2.10.0',
     [ValidatePattern('^\d+\.\d+\.\d+$')][string]$ReleaseVersion = $PhoneVersion
 )
 
@@ -31,6 +31,7 @@ Copy-Item -LiteralPath (Join-Path $workspaceDirectory 'docs/HEALTH-DATA-CONTRACT
 Copy-Item -LiteralPath (Join-Path $workspaceDirectory 'docs/WATCH-HEALTH-FALLBACK.md') -Destination $distDirectory -Force
 Copy-Item -LiteralPath (Join-Path $workspaceDirectory 'docs/FACE-STUDIO.md') -Destination $distDirectory -Force
 Copy-Item -LiteralPath (Join-Path $workspaceDirectory 'docs/BLUETOOTH-INTERNET.md') -Destination $distDirectory -Force
+Copy-Item -LiteralPath (Join-Path $workspaceDirectory 'docs/LIVE-PHONE-MAP.md') -Destination $distDirectory -Force
 Copy-Item -LiteralPath $sourceApk -Destination $watchApk -Force
 Copy-Item -LiteralPath $watchApk -Destination (Join-Path $distDirectory 'HealthSync-Watch.apk') -Force
 Copy-Item -LiteralPath $phoneApk -Destination (Join-Path $distDirectory 'HealthSync-Phone.apk') -Force
@@ -68,6 +69,7 @@ $bundleFiles = @(
     (Join-Path $distDirectory 'WATCH-HEALTH-FALLBACK.md'),
     (Join-Path $distDirectory 'FACE-STUDIO.md'),
     (Join-Path $distDirectory 'BLUETOOTH-INTERNET.md'),
+    (Join-Path $distDirectory 'LIVE-PHONE-MAP.md'),
     (Join-Path $distDirectory "BUILD-REPORT-Android8-$ReleaseVersion.md"),
     (Join-Path $distDirectory 'LAUNCHER-ROADMAP.md'),
     (Join-Path $PSScriptRoot 'Install-Watch-Diagnostic.ps1'),

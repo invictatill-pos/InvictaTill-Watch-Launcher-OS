@@ -121,6 +121,8 @@ fun DeviceScreen(
 
         item { InternetSharingCard(state = state, onRefresh = { viewModel.refreshWatchDetails() }) }
 
+        item { PhoneScreenShareCard(connection = state) }
+
         if (!hasPermission || !bluetoothEnabled) {
             item {
                 Surface(shape = RoundedCornerShape(20.dp), color = StatusWarning.copy(alpha = 0.1f), border = BorderStroke(1.dp, StatusWarning.copy(alpha = 0.3f))) {

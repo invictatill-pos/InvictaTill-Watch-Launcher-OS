@@ -21,5 +21,6 @@ data class ConnectionInfo(
     val lastUpdated: Long = 0L,
     val watchInternetStatus: InternetStatusPayload? = null,
     // Local monotonic receipt time, independent of the watch's clock.
-    val watchInternetReceivedAt: Long = 0L
+    val watchInternetReceivedAt: Long = 0L,
+    val supportsPhoneScreenShare: Boolean = false
 )

@@ -94,6 +94,7 @@ object WatchDeviceInfoCollector {
             hasSpO2Sensor = hasOxygen,
             hasStepSensor = hasStep,
             internetStatus = WatchInternetSharing.readStatus(appContext),
+            supportsPhoneScreenShare = true,
             lastUpdated = System.currentTimeMillis()
         )
     }

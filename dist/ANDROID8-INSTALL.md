@@ -1,6 +1,6 @@
-# HealthSync 2.9.4 installation
+# HealthSync 2.10.0 installation
 
-Prepared 16 October 2026. Install **HealthSync-Phone-2.9.4.apk** (phone code 32). The compatible watch build remains **HealthSync-Watch-2.9.3-Android8.apk** (watch code 37); watches already on 2.9.3 need no update. Watch requires Android 6/API 23 or newer; phone requires Android 8/API 26 or newer. Bluetooth Classic RFCOMM must be exposed by both devices. The phone adds a visible Bluetooth tethering button that opens Android controls; internet sharing requires firmware with Bluetooth tethering/PAN support.
+Prepared 16 October 2026. Install **HealthSync-Phone-2.10.0.apk** (phone code 33) and **HealthSync-Watch-2.10.0-Android8.apk** (watch code 38). Both apps need this update for live phone maps. Watch requires Android 6/API 23 or newer; phone requires Android 8/API 26 or newer. Bluetooth Classic RFCOMM must be exposed by both devices. Live map sharing uses Android-approved screen capture over that connection. Separate internet sharing requires firmware with Bluetooth tethering/PAN support.
 
 1. Transfer each APK to its device. Open it in a file manager and allow that source to install apps when Android asks.
 2. Install over the existing app with its matching certificate. Both packages retain this project's development signing certificate. Avoid uninstalling if you need saved history.
@@ -12,6 +12,7 @@ Prepared 16 October 2026. Install **HealthSync-Phone-2.9.4.apk** (phone code 32)
 7. Configure calls using [COMMUNICATION-SETUP.md](COMMUNICATION-SETUP.md). Android 12+ phones require companion association for full call controls. Talking through the watch requires firmware Bluetooth call-audio support.
 8. Set profile and step goal in phone Settings, then Apply to Watch while connected. Calories and stride distance are estimates.
 9. For internet on watch apps, open phone **Device → Internet for watch apps → Bluetooth tethering**. Turn on Bluetooth tethering in Android, then enable the watch's paired-phone **Internet access** option. See [BLUETOOTH-INTERNET.md](BLUETOOTH-INTERNET.md) for setup and supported status checks.
+10. For live Google Maps, open phone **Device → Google Maps on watch → Share Google Maps** and approve Android capture. Choose Google Maps under single-app sharing when available. Open watch **Apps → Live phone map**; tap for controls, pinch/drag to zoom/pan, or Fit for the full image. Keep the phone unlocked with Maps visible. Whole-screen sharing can include other apps/notifications. See [LIVE-PHONE-MAP.md](LIVE-PHONE-MAP.md).
 
 For the Kolabee U8 Ultra, use **Health readings → Open watch health app** to measure in the original **Heart rate** or **Blood oxygen** app, then return and choose **Check watch app data**. HealthSync also checks shared app data automatically after a sensor fails. Imports require a readable export and retain their original capture time/app label. Private records cannot be imported merely because the app is installed. See [WATCH-HEALTH-FALLBACK.md](WATCH-HEALTH-FALLBACK.md).
 
@@ -31,14 +32,14 @@ If Android asks to allow HealthSync as an installation source, enable it, return
 
 ## Verification
 
-`SHA256SUMS-Android8.txt` covers the versioned APKs; `SHA256SUMS.txt` covers the stable aliases. `HealthSync-Android8-2.9.4-Both-APKs.zip` bundles phone 2.9.4, watch 2.9.3, manifest, hashes, guides, report, and diagnostic helpers.
+`SHA256SUMS-Android8.txt` covers the versioned APKs; `SHA256SUMS.txt` covers the stable aliases. `HealthSync-Android8-2.10.0-Both-APKs.zip` bundles both 2.10.0 apps, manifest, hashes, guides, report, and diagnostic helpers.
 
-Read `BUILD-REPORT-Android8-2.9.4.md` and `HEALTH-DATA-CONTRACT.md` for software evidence and required hardware checks. No physical phone/watch was connected during this update. Bluetooth internet traffic, real sensor accuracy, circular layout, call audio, OEM permissions, and battery use need device testing.
+Read `BUILD-REPORT-Android8-2.10.0.md` and `HEALTH-DATA-CONTRACT.md` for software evidence and required hardware checks. No physical phone/watch was connected during this update. Live capture quality, map readability, Bluetooth throughput, internet traffic, real sensor accuracy, circular layout, call audio, OEM permissions, and battery use need device testing.
 
 For USB installation diagnostics, explicitly choose the current APK:
 
 ```powershell
-.\tools\Install-Watch-Diagnostic.ps1 -Serial 'WATCH_SERIAL' -ApkPath '.\dist\HealthSync-Watch-2.9.3-Android8.apk' -CheckStartup
+.\tools\Install-Watch-Diagnostic.ps1 -Serial 'WATCH_SERIAL' -ApkPath '.\dist\HealthSync-Watch-2.10.0-Android8.apk' -CheckStartup
 ```
 
 From an extracted bundle, use `Install-Watch-Diagnostic.ps1` with the local versioned APK. See the included diagnostic guides. The helper preserves app data and does not select Home.
