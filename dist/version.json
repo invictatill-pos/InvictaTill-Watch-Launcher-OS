@@ -1,16 +1,16 @@
 {
   "phone": {
-    "versionCode": 31,
-    "versionName": "2.9.3",
-    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.9.3/HealthSync-Phone.apk",
-    "changelog": "v2.9.3: Add Bluetooth internet setup for watch apps, a phone network settings shortcut, and watch-reported internet status with refresh and stale-report handling. Sharing requires device Bluetooth tethering/PAN support.",
+    "versionCode": 32,
+    "versionName": "2.9.4",
+    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.9.4/HealthSync-Phone.apk",
+    "changelog": "v2.9.4: Add a visible Bluetooth tethering button in Device. One tap opens Android tethering controls where supported, with network/settings fallbacks. Turn on the Android switch to enable sharing. Watch 2.9.3 remains compatible.",
     "forceUpdate": false,
-    "sha256": "d67432efc58414c7d22095a46ac39267fd515587905c184d1701f7e9fb1aae6a"
+    "sha256": "28f9570c4e33e0361b8375408e148d4f3cb0bf1a9f3aa3534016993fef2f9fc9"
   },
   "watch": {
     "versionCode": 37,
     "versionName": "2.9.3",
-    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.9.3/HealthSync-Watch.apk",
+    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.9.4/HealthSync-Watch.apk",
     "changelog": "v2.9.3: Add Internet from phone setup, live verified Bluetooth internet status, and Bluetooth/Wi-Fi settings shortcuts. Enable Android Bluetooth tethering and paired-phone Internet access on supported firmware.",
     "forceUpdate": false,
     "sha256": "dba3592b522c711b98d7578f0bd0780e5e0b10cbc4665c9e0a7582990ba0be41"

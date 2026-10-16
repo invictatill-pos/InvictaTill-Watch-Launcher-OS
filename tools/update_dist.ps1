@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [ValidatePattern('^\d+\.\d+\.\d+$')][string]$WatchVersion = '2.9.3',
-    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$PhoneVersion = '2.9.3'
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$PhoneVersion = '2.9.4',
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$ReleaseVersion = $PhoneVersion
 )
 
 Set-StrictMode -Version Latest
@@ -38,7 +39,7 @@ Copy-Item -LiteralPath $phoneApk -Destination (Join-Path $distDirectory 'HealthS
 # keep older clients from downloading a newer APK against a cached checksum.
 $manifestPath = Join-Path $workspaceDirectory 'version.json'
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-$releaseBase = "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v$WatchVersion"
+$releaseBase = "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v$ReleaseVersion"
 $manifest.phone.versionCode = $phoneMetadata.elements[0].versionCode
 $manifest.phone.versionName = $PhoneVersion
 $manifest.phone.apkUrl = "$releaseBase/HealthSync-Phone.apk"
@@ -67,16 +68,16 @@ $bundleFiles = @(
     (Join-Path $distDirectory 'WATCH-HEALTH-FALLBACK.md'),
     (Join-Path $distDirectory 'FACE-STUDIO.md'),
     (Join-Path $distDirectory 'BLUETOOTH-INTERNET.md'),
-    (Join-Path $distDirectory "BUILD-REPORT-Android8-$WatchVersion.md"),
+    (Join-Path $distDirectory "BUILD-REPORT-Android8-$ReleaseVersion.md"),
     (Join-Path $distDirectory 'LAUNCHER-ROADMAP.md'),
     (Join-Path $PSScriptRoot 'Install-Watch-Diagnostic.ps1'),
     (Join-Path $PSScriptRoot 'Install-Watch-Diagnostic.md'),
     (Join-Path $PSScriptRoot 'Collect-Watch-Sensor-Diagnostic.ps1'),
     (Join-Path $PSScriptRoot 'Collect-Watch-Sensor-Diagnostic.md')
 )
-$versionedZip = Join-Path $distDirectory "HealthSync-Android8-$WatchVersion-Both-APKs.zip"
+$versionedZip = Join-Path $distDirectory "HealthSync-Android8-$ReleaseVersion-Both-APKs.zip"
 Compress-Archive -LiteralPath $bundleFiles -DestinationPath $versionedZip -Force
 Copy-Item -LiteralPath $versionedZip -Destination (Join-Path $distDirectory 'HealthSync-Android8-Both-APKs.zip') -Force
-Write-Output "Watch $WatchVersion (code $($metadata.elements[0].versionCode)) packaged."
+Write-Output "Release $ReleaseVersion packaged: phone $PhoneVersion (code $($phoneMetadata.elements[0].versionCode)), watch $WatchVersion (code $($metadata.elements[0].versionCode))."
 $checksums | Write-Output
 Get-Item -LiteralPath $watchApk, $versionedZip | Select-Object Name, Length

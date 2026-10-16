@@ -1,6 +1,6 @@
-# Install HealthSync 2.9.3
+# Install HealthSync 2.9.4
 
-Install `HealthSync-Phone-2.9.3.apk` on the phone and `HealthSync-Watch-2.9.3-Android8.apk` on the watch as updates over the existing apps. Phone requires Android 8/API 26; watch requires Android 6/API 23. Both retain the development signing certificate used by earlier deliveries.
+Install `HealthSync-Phone-2.9.4.apk` on the phone. The watch remains on `HealthSync-Watch-2.9.3-Android8.apk`; watches already running 2.9.3 need no update. Phone requires Android 8/API 26; watch requires Android 6/API 23. Both retain the development signing certificate used by earlier deliveries.
 
 Pair in Android Bluetooth settings, open both apps, grant permissions for the features you use, and choose Connect in the phone Device tab. Update both apps to use real sensor provenance consistently.
 

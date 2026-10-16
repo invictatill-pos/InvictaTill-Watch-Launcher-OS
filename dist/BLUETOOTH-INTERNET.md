@@ -8,7 +8,7 @@ Android's Bluetooth tethering can provide internet to watch apps through the exi
 
 1. Install both updated apps and pair the phone and watch as usual.
 2. In phone HealthSync, open **Device → Internet for watch apps → Set up Bluetooth internet**. Enable mobile data or another connection the phone supports sharing.
-3. Tap **Phone network settings**, then find **Hotspot & tethering** or **Mobile Hotspot and Tethering** and enable **Bluetooth tethering**. Settings names vary by device. HealthSync opens public Android network settings; enabling sharing remains a system setting.
+3. In phone version 2.9.4 or newer, tap the visible **Bluetooth tethering** button to open Android's tethering controls directly where the phone supports that shortcut. Turn on **Bluetooth tethering** there. If a manufacturer does not expose that screen, the button opens network settings or main Settings; find **Hotspot & tethering** or **Mobile Hotspot and Tethering**. Version 2.9.3 offers **Phone network settings** inside setup instead. Enabling sharing remains an Android system setting; the button does not silently turn it on.
 4. In watch HealthSync, open **Settings → Phone connection → Internet from phone → Watch Bluetooth settings**. Select the same paired phone used for HealthSync and enable **Internet access**, if available.
 5. Return to the watch's Internet from phone screen, or tap **Refresh watch status** on the phone. **Internet via Bluetooth** means Android has verified internet on the watch's current default Bluetooth network. Watch apps that use Android's default connection can use it.
 6. To stop sharing, turn off **Bluetooth tethering** in the phone's system settings. HealthSync's **Disconnect** button pauses app sync; it does not turn off Android tethering.
@@ -37,3 +37,4 @@ On your devices, enable Bluetooth tethering and the paired phone's Internet acce
 - [Android default network state and validated internet capabilities](https://developer.android.com/develop/connectivity/network-ops/reading-network-state)
 - [Public Android network settings action](https://developer.android.com/reference/android/provider/Settings#ACTION_WIRELESS_SETTINGS)
 - [Public Android Bluetooth settings action](https://developer.android.com/reference/android/provider/Settings#ACTION_BLUETOOTH_SETTINGS)
+- [Android Settings tethering shortcut implementation](https://android.googlesource.com/platform/packages/apps/Settings/+/refs/heads/android14-release/AndroidManifest.xml) — the direct tethering action is device-dependent, so the phone button falls back to network settings and main Settings.

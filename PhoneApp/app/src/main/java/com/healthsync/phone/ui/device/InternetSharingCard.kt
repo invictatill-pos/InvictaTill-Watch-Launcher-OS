@@ -1,19 +1,20 @@
 package com.healthsync.phone.ui.device
 
-import android.content.Intent
 import android.os.SystemClock
-import android.provider.Settings
-import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Router
+import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -30,12 +31,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.healthsync.phone.data.InternetSharingPolicy
+import com.healthsync.phone.R
 import com.healthsync.phone.data.WatchInternetReport
 import com.healthsync.phone.data.model.ConnectionInfo
 import com.healthsync.phone.service.PhoneInternetSharing
@@ -51,6 +54,10 @@ internal fun InternetSharingCard(state: ConnectionInfo, onRefresh: () -> Boolean
     var showSetup by rememberSaveable { mutableStateOf(false) }
     var requestedAt by remember { mutableLongStateOf(0L) }
     var requestFailed by remember { mutableStateOf(false) }
+    var settingsMessage by rememberSaveable { mutableStateOf<PhoneInternetSharing.SettingsDestination?>(null) }
+    val openTetheringSettings = {
+        settingsMessage = PhoneInternetSharing.openTetheringSettings(context)
+    }
     LaunchedEffect(owner) {
         owner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (true) {
@@ -78,6 +85,30 @@ internal fun InternetSharingCard(state: ConnectionInfo, onRefresh: () -> Boolean
                 Text("Internet for watch apps", color = TextWhite, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
             Text("Share your phone's internet using the existing Bluetooth pairing.", color = TextSecondary, fontSize = 13.sp)
+            Button(
+                onClick = openTetheringSettings,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = AccentCyan, contentColor = BgDeep)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Bluetooth, null, modifier = Modifier.size(20.dp))
+                    Text(stringResource(R.string.bluetooth_tethering_button), fontWeight = FontWeight.Bold)
+                }
+            }
+            Text(stringResource(R.string.bluetooth_tethering_button_hint), color = TextDim, fontSize = 12.sp)
+            settingsMessage?.let { destination ->
+                Text(
+                    stringResource(when (destination) {
+                        PhoneInternetSharing.SettingsDestination.TETHERING -> R.string.bluetooth_tethering_opened
+                        PhoneInternetSharing.SettingsDestination.NETWORK -> R.string.bluetooth_tethering_network_fallback
+                        PhoneInternetSharing.SettingsDestination.SETTINGS -> R.string.bluetooth_tethering_settings_fallback
+                        PhoneInternetSharing.SettingsDestination.UNAVAILABLE -> R.string.bluetooth_tethering_unavailable
+                    }),
+                    color = if (destination == PhoneInternetSharing.SettingsDestination.UNAVAILABLE) StatusWarning else TextSecondary,
+                    fontSize = 12.sp
+                )
+            }
             Text("Phone: ${InternetSharingPolicy.statusText(phoneStatus)}", color = TextDim, fontSize = 12.sp)
             Text(
                 "Watch: " + WatchInternetReport.statusText(state.isConnected, state.watchInternetStatus, state.watchInternetReceivedAt, currentNow),
@@ -92,12 +123,7 @@ internal fun InternetSharingCard(state: ConnectionInfo, onRefresh: () -> Boolean
             }
             if (showSetup) {
                 Text("1. Turn on mobile data (or a shareable Wi-Fi connection) on this phone.", color = TextSecondary, fontSize = 13.sp)
-                Text("2. Open phone network settings → Hotspot & tethering / Mobile Hotspot and Tethering → Bluetooth tethering, then turn it on.", color = TextSecondary, fontSize = 13.sp)
-                TextButton(onClick = {
-                    val opened = runCatching { context.startActivity(Intent(Settings.ACTION_WIRELESS_SETTINGS)); true }.getOrDefault(false)
-                    if (!opened) runCatching { context.startActivity(Intent(Settings.ACTION_SETTINGS)) }
-                        .onFailure { Toast.makeText(context, "Android network settings could not open.", Toast.LENGTH_LONG).show() }
-                }) { Text("Phone network settings", color = AccentCyan) }
+                Text("2. Tap Bluetooth tethering above, then turn on Bluetooth tethering in Android. If your phone opens general settings, look for Hotspot & tethering / Mobile Hotspot and Tethering.", color = TextSecondary, fontSize = 13.sp)
                 Text("3. On the watch, open HealthSync Settings → Phone connection → Internet from phone. In watch Bluetooth settings, select this same paired phone and enable Internet access.", color = TextSecondary, fontSize = 13.sp)
                 Text("4. Return here and refresh. Internet via Bluetooth means Android verified the watch's Bluetooth internet connection. Apps can then use that connection.", color = TextSecondary, fontSize = 13.sp)
                 Text("If Bluetooth tethering or Internet access is missing, the device firmware may not support it. Use your phone's Wi-Fi hotspot instead. Android and your carrier control sharing availability.", color = TextDim, fontSize = 12.sp)

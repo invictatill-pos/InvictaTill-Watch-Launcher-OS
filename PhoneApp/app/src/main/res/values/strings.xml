@@ -1,4 +1,10 @@
 <resources>
     <string name="app_name">HealthSync</string>
     <string name="notification_listener_label">Notification Sync to Watch</string>
+    <string name="bluetooth_tethering_button">Bluetooth tethering</string>
+    <string name="bluetooth_tethering_button_hint">Opens Android controls. Turn on Bluetooth tethering there, then return here.</string>
+    <string name="bluetooth_tethering_opened">Use the Bluetooth tethering switch in Android. Opening settings does not turn sharing on.</string>
+    <string name="bluetooth_tethering_network_fallback">Direct tethering controls are unavailable on this phone. In network settings, open Hotspot &amp; tethering → Bluetooth tethering.</string>
+    <string name="bluetooth_tethering_settings_fallback">Open Hotspot &amp; tethering or Mobile Hotspot and Tethering in Android Settings, then enable Bluetooth tethering.</string>
+    <string name="bluetooth_tethering_unavailable">Android settings could not open. Open phone Settings manually and look for Bluetooth tethering.</string>
 </resources>
