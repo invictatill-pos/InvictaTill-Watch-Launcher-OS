@@ -45,7 +45,9 @@ import com.healthsync.watch.R
 import com.healthsync.watch.data.PowerSaveManager
 import com.healthsync.watch.data.PowerSaveMode
 import com.healthsync.watch.data.WatchPreferences
+import com.healthsync.watch.data.InternetSharingPolicy
 import com.healthsync.watch.service.BluetoothClientService
+import com.healthsync.watch.service.WatchInternetSharing
 import com.healthsync.watch.service.SensorCollectorService
 import com.healthsync.watch.notification.NotificationsInboxActivity
 import com.healthsync.watch.ui.launcher.AppDrawerActivity
@@ -63,6 +65,7 @@ class WatchOptionsActivity : AppCompatActivity() {
         const val SCREEN_DISPLAY = "display"
         const val SCREEN_SENSORS = "sensors"
         const val SCREEN_PHONE = "phone"
+        const val SCREEN_INTERNET = "internet"
         const val SCREEN_PROFILE = "profile"
         const val SCREEN_BEZEL = "bezel"
         const val SCREEN_NOTIFICATIONS = "notifications"
@@ -128,6 +131,7 @@ class WatchOptionsActivity : AppCompatActivity() {
                     SCREEN_MENU -> finish()
                     SCREEN_HR_INTERVAL, SCREEN_OXYGEN_INTERVAL -> showScreen(SCREEN_SENSORS)
                     SCREEN_HR_DETAILS -> showScreen(SCREEN_HEALTH)
+                    SCREEN_INTERNET -> showScreen(SCREEN_PHONE)
                     else -> showScreen(SCREEN_MENU)
                 }
             }
@@ -229,6 +233,7 @@ class WatchOptionsActivity : AppCompatActivity() {
             SCREEN_DISPLAY -> displayScreen()
             SCREEN_SENSORS -> sensorScreen()
             SCREEN_PHONE -> phoneScreen()
+            SCREEN_INTERNET -> internetScreen()
             SCREEN_PROFILE -> profileScreen()
             SCREEN_BEZEL -> bezelScreen()
             SCREEN_NOTIFICATIONS -> notificationScreen()
@@ -628,10 +633,40 @@ class WatchOptionsActivity : AppCompatActivity() {
         liveUpdate = { connection.text = if (BluetoothClientService.isConnected) "Phone connected" else "Phone offline" }
         label("Pair this watch and your phone in Bluetooth settings. Keep HealthSync open on your phone while reconnecting. Saved workouts sync when the connection returns.")
         action("Reconnect / Bluetooth") { requestOperation("reconnect") }
+        action("Internet from phone") { showScreen(SCREEN_INTERNET) }
         label("For answer, decline, mute and end controls, open HealthSync Settings → Watch Calls on your phone and select Enable watch call controls. Grant Contacts to show saved caller names.")
         label("To talk through the watch, enable Calls for this watch in your phone's Bluetooth device settings. During a call, Use watch audio becomes available only when Android detects its call connection.")
         action("Call & message alerts") { showScreen(SCREEN_NOTIFICATIONS) }
         backToMenu()
+    }
+
+    private fun internetScreen() {
+        heading("Internet from phone", "Use your existing Bluetooth pairing")
+        val internet = label("", 17f, bold = true)
+        val sync = label("", 12f)
+        liveUpdate = {
+            val status = WatchInternetSharing.readStatus(this)
+            internet.text = InternetSharingPolicy.statusText(status)
+            internet.setTextColor(if (InternetSharingPolicy.isBluetoothInternet(status)) ACCENT else Color.WHITE)
+            sync.text = if (BluetoothClientService.isConnected) "HealthSync sync: connected" else "HealthSync sync: offline"
+        }
+        label("Share the phone's internet with watch apps. Internet sharing and HealthSync sync have separate status.")
+        label("1. On your phone, open Settings → Hotspot & tethering (or Mobile Hotspot and Tethering), then turn on Bluetooth tethering.")
+        label("2. On this watch, open Bluetooth settings, choose your paired phone, then enable Internet access if available.")
+        action("Watch Bluetooth settings") { openInternetSettings(Settings.ACTION_BLUETOOTH_SETTINGS) }
+        label("3. Return here to check the watch's default connection. Internet via Bluetooth confirms Android has verified that connection. Wi-Fi or mobile data status means the watch is using that network.")
+        label("If Internet access is missing, the watch firmware may not support Bluetooth internet. You can connect the watch to your phone's Wi-Fi hotspot instead.")
+        action("Watch Wi-Fi settings") { openInternetSettings(Settings.ACTION_WIFI_SETTINGS) }
+        label("Keep the devices nearby. The same pairing can be used for sync and internet when both devices support it.")
+        action("Back to phone connection") { showScreen(SCREEN_PHONE) }
+    }
+
+    private fun openInternetSettings(settingsAction: String) {
+        val opened = runCatching { startActivity(Intent(settingsAction)); true }.getOrDefault(false)
+        if (!opened) {
+            runCatching { startActivity(Intent(Settings.ACTION_SETTINGS)) }
+                .onFailure { Toast.makeText(this, "Android settings are unavailable on this watch.", Toast.LENGTH_LONG).show() }
+        }
     }
 
     private fun profileScreen() {

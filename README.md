@@ -1,4 +1,6 @@
-# HealthSync 2.9.0
+# HealthSync 2.9.3
+
+HealthSync 2.9.3 adds **Bluetooth internet setup and watch connection status** for watch apps on supported firmware. Open **Device → Internet for watch apps** on the phone and **Settings → Phone connection → Internet from phone** on the watch. Enable Bluetooth tethering and the watch's paired-phone Internet access option in Android settings. See the [Bluetooth internet guide](docs/BLUETOOTH-INTERNET.md) for setup, limitations, and device checks.
 
 HealthSync is an Android watch launcher and Android phone companion with sensor capture, local workout history, Bluetooth sync, notifications, calls, watch faces, and watch utilities. The 13 October 2026 Face Studio update adds blank projects, custom text and shape layers, direct canvas editing, precise styling, undo/redo, draft recovery, portable project import/export, ambient controls, and design testing. See the [Face Studio guide](docs/FACE-STUDIO.md).
 
@@ -6,8 +8,8 @@ HealthSync is an Android watch launcher and Android phone companion with sensor 
 
 | Device | APK | Android version | Build code |
 | --- | --- | --- | --- |
-| Watch | [HealthSync-Watch.apk](dist/HealthSync-Watch.apk) | Android 6 / API 23 or newer | 34 |
-| Phone | [HealthSync-Phone.apk](dist/HealthSync-Phone.apk) | Android 8 / API 26 or newer | 28 |
+| Watch | [HealthSync-Watch.apk](dist/HealthSync-Watch.apk) | Android 6 / API 23 or newer | 37 |
+| Phone | [HealthSync-Phone.apk](dist/HealthSync-Phone.apk) | Android 8 / API 26 or newer | 31 |
 
 Install both apps over the existing packages. The apps retain the existing development signing certificate. The phone APK is an optimized release build; the watch APK retains the compatible v1/v2-signed debug format used by earlier watch deliveries. The [installation guide](dist/ANDROID8-INSTALL.md) explains Bluetooth pairing, permissions, updates, and Home recovery. Published APKs are available in [GitHub Releases](https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases).
 
@@ -58,7 +60,7 @@ Use JDK 17 or newer and Android SDK platform/build-tools 34. Set `sdk.dir` in lo
 ```powershell
 .\gradlew.bat :PhoneApp:app:testDebugUnitTest :WatchApp:app:testDebugUnitTest :PhoneApp:app:lintDebug :WatchApp:app:lintDebug
 .\gradlew.bat :PhoneApp:app:assembleRelease :WatchApp:app:assembleDebug
-.\tools\update_dist.ps1 -WatchVersion 2.9.0 -PhoneVersion 2.9.0
+.\tools\update_dist.ps1 -WatchVersion 2.9.3 -PhoneVersion 2.9.3
 ```
 
-The [2.9.0 build report](dist/BUILD-REPORT-Android8-2.9.0.md) records validation. No physical watch or phone was connected during this update. Automated tests and static checks do not establish physical sensor accuracy, GPS reception, overnight battery use, circular-display fit, call audio, or OEM permission behavior; these require device checks.
+The [2.9.3 build report](dist/BUILD-REPORT-Android8-2.9.3.md) records validation. No physical watch or phone was connected during this update. Automated tests and static checks do not establish physical sensor accuracy, GPS reception, overnight battery use, circular-display fit, call audio, or OEM permission behavior; these require device checks.

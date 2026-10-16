@@ -1,18 +1,18 @@
 {
-    "phone":  {
-                  "versionCode":  30,
-                  "versionName":  "2.9.2",
-                  "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.9.2/HealthSync-Phone.apk",
-                  "changelog":  "v2.9.2: Companion update for continuous GNSS satellite tracking and passive location sharing.",
-                  "forceUpdate":  false,
-                  "sha256":  "4666a00ec231f8099c77e380ebe791daf3d896d454dcf1eed9d75ff4beddb819"
-              },
-    "watch":  {
-                  "versionCode":  36,
-                  "versionName":  "2.9.2",
-                  "apkUrl":  "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.9.2/HealthSync-Watch.apk",
-                  "changelog":  "v2.9.2: Fix outdoor workout walk GPS locking: enable passive Maps GPS sharing, remove the 2-minute GNSS listener reset loop, display live visible satellite counts, and add clock skew resilience for standalone watch GPS.",
-                  "forceUpdate":  false,
-                  "sha256":  "d9320bf94e6e5d196eeb271339e845257a705843fc35adef116db4b81ee67c06"
-              }
+  "phone": {
+    "versionCode": 31,
+    "versionName": "2.9.3",
+    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.9.3/HealthSync-Phone.apk",
+    "changelog": "v2.9.3: Add Bluetooth internet setup for watch apps, a phone network settings shortcut, and watch-reported internet status with refresh and stale-report handling. Sharing requires device Bluetooth tethering/PAN support.",
+    "forceUpdate": false,
+    "sha256": "d67432efc58414c7d22095a46ac39267fd515587905c184d1701f7e9fb1aae6a"
+  },
+  "watch": {
+    "versionCode": 37,
+    "versionName": "2.9.3",
+    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.9.3/HealthSync-Watch.apk",
+    "changelog": "v2.9.3: Add Internet from phone setup, live verified Bluetooth internet status, and Bluetooth/Wi-Fi settings shortcuts. Enable Android Bluetooth tethering and paired-phone Internet access on supported firmware.",
+    "forceUpdate": false,
+    "sha256": "dba3592b522c711b98d7578f0bd0780e5e0b10cbc4665c9e0a7582990ba0be41"
+  }
 }

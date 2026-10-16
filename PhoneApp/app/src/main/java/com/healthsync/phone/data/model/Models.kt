@@ -3,6 +3,7 @@ package com.healthsync.phone.data.model
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import androidx.room.ColumnInfo
+import com.healthsync.phone.data.InternetStatusPayload
 
 // ── Shared sync message protocol ──────────────────────────────────────────────
 
@@ -65,7 +66,8 @@ data class DeviceInfoPayload(
     val hasHeartRateSensor: Boolean = true,
     val hasSpO2Sensor: Boolean = false,
     val hasStepSensor: Boolean = true,
-    val lastUpdated: Long = System.currentTimeMillis()
+    val lastUpdated: Long = System.currentTimeMillis(),
+    val internetStatus: InternetStatusPayload? = null
 )
 
 data class WatchFaceInstallPayload(

@@ -95,7 +95,10 @@ fun DeviceScreen(
     val errorMessage by viewModel.errorMessage.collectAsState()
     val context = LocalContext.current
     var refreshVersion by remember { mutableIntStateOf(0) }
-    ResumeEffect { refreshVersion++ }
+    ResumeEffect {
+        refreshVersion++
+        viewModel.refreshWatchDetails()
+    }
     val pairedDevices = remember(refreshVersion, state.isConnected) { viewModel.pairedDevices }
     val phoneName = remember(refreshVersion) { viewModel.phoneName }
     val hasPermission = remember(refreshVersion) { viewModel.hasBluetoothPermission }
@@ -115,6 +118,8 @@ fun DeviceScreen(
         }
 
         item { ConnectionStatusCard(state = state, phoneName = phoneName) }
+
+        item { InternetSharingCard(state = state, onRefresh = { viewModel.refreshWatchDetails() }) }
 
         if (!hasPermission || !bluetoothEnabled) {
             item {

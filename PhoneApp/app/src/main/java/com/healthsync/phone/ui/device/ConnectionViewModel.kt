@@ -107,7 +107,5 @@ class ConnectionViewModel @Inject constructor(
     }
 
     /** Request fresh watch telemetry (battery, storage, hardware sensors) */
-    fun refreshWatchDetails() {
-        BluetoothSyncService.fetchWatchDeviceInfo(context)
-    }
+    fun refreshWatchDetails(): Boolean = BluetoothSyncService.fetchWatchDeviceInfo()
 }

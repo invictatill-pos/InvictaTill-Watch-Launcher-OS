@@ -744,7 +744,9 @@ class BluetoothSyncService : android.app.Service() {
                             hasHeartRateSensor = info.hasHeartRateSensor,
                             hasSpO2Sensor = info.hasSpO2Sensor,
                             hasStepSensor = info.hasStepSensor,
-                            lastUpdated = if (info.lastUpdated > 0) info.lastUpdated else System.currentTimeMillis()
+                            lastUpdated = if (info.lastUpdated > 0) info.lastUpdated else System.currentTimeMillis(),
+                            watchInternetStatus = info.internetStatus,
+                            watchInternetReceivedAt = if (info.internetStatus != null) SystemClock.elapsedRealtime() else 0L
                         )
                         updateState(updated)
                         Log.i(TAG, "Connected Watch Info: ${info.model} v${info.versionName} (build ${info.versionCode}, battery ${info.batteryPercent}%, charging=${info.isCharging}, powerSave=${info.powerSaveMode}, storage=${info.storageFreeMb}/${info.storageTotalMb}MB)")

@@ -54,7 +54,8 @@ data class DeviceInfoPayload(
     val hasHeartRateSensor: Boolean = true,
     val hasSpO2Sensor: Boolean = false,
     val hasStepSensor: Boolean = true,
-    val lastUpdated: Long = System.currentTimeMillis()
+    val lastUpdated: Long = System.currentTimeMillis(),
+    val internetStatus: InternetStatusPayload? = null
 )
 
 data class WatchFaceInstallPayload(

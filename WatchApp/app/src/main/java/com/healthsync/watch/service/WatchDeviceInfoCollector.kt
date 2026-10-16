@@ -93,6 +93,7 @@ object WatchDeviceInfoCollector {
             hasHeartRateSensor = hasHr,
             hasSpO2Sensor = hasOxygen,
             hasStepSensor = hasStep,
+            internetStatus = WatchInternetSharing.readStatus(appContext),
             lastUpdated = System.currentTimeMillis()
         )
     }

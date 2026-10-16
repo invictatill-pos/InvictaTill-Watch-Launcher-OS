@@ -1,5 +1,7 @@
 package com.healthsync.phone.data.model
 
+import com.healthsync.phone.data.InternetStatusPayload
+
 /** Live connection state shared between the service and UI via StateFlow */
 data class ConnectionInfo(
     val isConnected: Boolean = false,
@@ -16,5 +18,8 @@ data class ConnectionInfo(
     val hasHeartRateSensor: Boolean = true,
     val hasSpO2Sensor: Boolean = false,
     val hasStepSensor: Boolean = true,
-    val lastUpdated: Long = 0L
+    val lastUpdated: Long = 0L,
+    val watchInternetStatus: InternetStatusPayload? = null,
+    // Local monotonic receipt time, independent of the watch's clock.
+    val watchInternetReceivedAt: Long = 0L
 )

@@ -299,6 +299,7 @@ class BluetoothClientService : Service() {
                     var ticks = 0
                     var lastBatteryPct = -1
                     var lastCharging = false
+                    var lastInternetStatus: InternetStatusPayload? = null
                     while (isActive) {
                         delay(20_000)
                         if (SystemClock.elapsedRealtime() - lastReceivedAt.get() > 75_000) {
@@ -307,12 +308,14 @@ class BluetoothClientService : Service() {
                         }
                         sendRawMsg(SyncMessage(MessageType.PING, payload = "{}"), gson)
                         if (++ticks % 3 == 0) syncBatchedPayloads(applicationContext)
-                        // Send periodic device info if battery or charging changed
+                        // Report route changes, with a fresh snapshot at least once a minute.
                         try {
                             val info = WatchDeviceInfoCollector.collect(applicationContext)
-                            if (info.batteryPercent != lastBatteryPct || info.isCharging != lastCharging) {
+                            if (info.batteryPercent != lastBatteryPct || info.isCharging != lastCharging ||
+                                info.internetStatus != lastInternetStatus || ticks % 3 == 0) {
                                 lastBatteryPct = info.batteryPercent
                                 lastCharging = info.isCharging
+                                lastInternetStatus = info.internetStatus
                                 sendRawMsg(SyncMessage(MessageType.DEVICE_INFO, payload = gson.toJson(info)), gson)
                             }
                         } catch (_: Exception) {}
