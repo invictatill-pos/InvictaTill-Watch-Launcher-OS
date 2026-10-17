@@ -1,6 +1,6 @@
-# HealthSync 2.10.0
+# HealthSync 2.11.0
 
-Phone and watch 2.10.0 add **Live phone map**: view the actual Google Maps phone screen over the existing Bluetooth connection. Start from phone **Device → Google Maps on watch → Share Google Maps**, approve Android screen sharing, then open **Apps → Live phone map** on the watch. The watch has a full-screen view, round-safe controls, Fit, pinch zoom and pan. Both apps need this update; keep the phone unlocked with Maps visible. Images refresh about every 1.5 seconds or slower. See the [live map guide](docs/LIVE-PHONE-MAP.md).
+Phone and watch 2.11.0 add **Watch navigation**: large Google Maps turn directions, next-turn distance, supplied maneuver icon and available trip details in a dedicated watch view. Enable **Device → Watch navigation**, allow notification access, start a Google Maps route on the phone, then open **Apps → Navigation** on the watch. It uses route notification updates over Bluetooth and can continue with the phone locked. Both apps need this update. See the [navigation guide](docs/WATCH-NAVIGATION.md). **Live phone map** remains a separately labeled optional screen viewer.
 
 The visible **Bluetooth tethering** shortcut remains under **Device → Internet for watch apps**. One tap opens Android controls where supported; turn on tethering there. See the [Bluetooth internet guide](docs/BLUETOOTH-INTERNET.md) for setup and firmware requirements.
 
@@ -10,10 +10,10 @@ HealthSync is an Android watch launcher and Android phone companion with sensor 
 
 | Device | APK | App version | Android version | Build code |
 | --- | --- | --- | --- | --- |
-| Watch | [HealthSync-Watch.apk](dist/HealthSync-Watch.apk) | 2.10.0 | Android 6 / API 23 or newer | 38 |
-| Phone | [HealthSync-Phone.apk](dist/HealthSync-Phone.apk) | 2.10.0 | Android 8 / API 26 or newer | 33 |
+| Watch | [HealthSync-Watch-2.11.0-Android8.apk](dist/HealthSync-Watch-2.11.0-Android8.apk) | 2.11.0 | Android 6 / API 23 or newer | 39 |
+| Phone | [HealthSync-Phone-2.11.0.apk](dist/HealthSync-Phone-2.11.0.apk) | 2.11.0 | Android 8 / API 26 or newer | 34 |
 
-Install both apps over the existing packages. The apps retain the existing development signing certificate. The phone APK is an optimized release build; the watch APK retains the compatible v1/v2-signed debug format used by earlier watch deliveries. The [installation guide](dist/ANDROID8-INSTALL.md) explains Bluetooth pairing, permissions, updates, and Home recovery. Published APKs are available in [GitHub Releases](https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases).
+Install both apps over the existing packages. The apps retain the existing development signing certificate. The phone APK is an optimized release build; the watch APK retains the compatible v1/v2-signed debug format used by earlier watch deliveries. Use the [navigation setup guide](docs/WATCH-NAVIGATION.md) for this update. Download both apps and guides from the [2.11.0 release](https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/tag/v2.11.0), or use the apps' update controls. Android still requires installation confirmation on each device.
 
 HealthSync 2.7.0 removes unverifiable oxygen and sleep records from active history and retains them in a local unverified archive. Saved workouts, step history, and accepted heart-rate records remain. The unverifiable old watch live step cache is archived and restarted; stored historical steps remain. A missing reading stays empty until a real capture is available.
 
@@ -62,7 +62,7 @@ Use JDK 17 or newer and Android SDK platform/build-tools 34. Set `sdk.dir` in lo
 ```powershell
 .\gradlew.bat :PhoneApp:app:testDebugUnitTest :WatchApp:app:testDebugUnitTest :PhoneApp:app:lintDebug :WatchApp:app:lintDebug
 .\gradlew.bat :PhoneApp:app:assembleRelease :WatchApp:app:assembleDebug
-.\tools\update_dist.ps1 -WatchVersion 2.10.0 -PhoneVersion 2.10.0 -ReleaseVersion 2.10.0
+.\tools\update_dist.ps1 -WatchVersion 2.11.0 -PhoneVersion 2.11.0 -ReleaseVersion 2.11.0
 ```
 
-The [2.10.0 build report](dist/BUILD-REPORT-Android8-2.10.0.md) records 402 passing tests, successful builds and signature verification. No physical watch or phone was connected during this update. Automated tests and static checks do not establish capture quality, map readability, Bluetooth throughput, physical sensor accuracy, GPS reception, overnight battery use, circular-display fit, call audio, or OEM permission behavior; these require device checks.
+The [2.11.0 build report](dist/BUILD-REPORT-Android8-2.11.0.md) records verification for the navigation update. No physical watch or phone was connected during this update. Automated tests and static checks do not establish actual Maps notification fields, navigation readability, Bluetooth timing, sensor accuracy, GPS reception, battery use, call audio, or OEM permission behavior; these require device checks.

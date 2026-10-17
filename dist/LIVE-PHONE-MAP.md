@@ -1,12 +1,14 @@
 # Live Google Maps view on the watch
 
+For readable turn-by-turn directions in HealthSync 2.11.0, use **Device → Watch navigation** on the phone and **Apps → Navigation** on the watch. See [watch navigation setup](WATCH-NAVIGATION.md). This guide covers the separate optional phone screen viewer.
+
 HealthSync 2.10.0 adds a live phone-screen view over the existing Bluetooth connection. It shows the actual Google Maps screen rendered by your phone, including the visible map and navigation instructions. Google Maps continues to run navigation on the phone. The watch displays images of that view; watch zoom and pan do not control Google Maps on the phone.
 
 ## Start
 
 1. Install phone 2.10.0 and watch 2.10.0 and connect them in HealthSync. Older watches cannot receive screen frames and must be updated first.
 2. On the watch, open **Live phone map** from Apps or **Settings → Phone connection**.
-3. On the phone, open **Device → Google Maps on watch → Share Google Maps**, then **Start sharing**. Review the sharing instructions and approve Android's screen-capture request. Every session requires new approval.
+3. On the phone, open **Device → Phone screen viewer (optional) → Share phone screen**, then **Start sharing**. Review the sharing instructions and approve Android's screen-capture request. Every session requires new approval.
 4. When Android offers **A single app**, select **Google Maps**. On older Android versions, or if you select the entire screen, everything visible on the phone can be shared, including other apps and notifications. Keep this in mind before switching apps.
 5. Open Google Maps on the phone, select a destination, and start navigation. Keep the phone unlocked and Maps visible so Android can keep providing images.
 6. View the map on the watch. The image uses the full watch screen by default. Pinch or double-tap to zoom, drag to pan, and use **Fit** to show the complete phone image inside the watch's round boundary. Tap once to show or hide the controls; they hide automatically while fresh images arrive, leaving a small freshness indicator. **Help** explains the gestures. For a larger map, use landscape orientation on the phone where supported. Route changes and map controls remain on the phone.

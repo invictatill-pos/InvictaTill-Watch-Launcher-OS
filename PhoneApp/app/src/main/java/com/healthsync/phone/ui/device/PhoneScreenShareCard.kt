@@ -39,8 +39,8 @@ internal fun PhoneScreenShareCard(connection: ConnectionInfo) {
         border = BorderStroke(1.dp, if (share.active) StatusSuccess.copy(alpha = .3f) else BorderSubtle)
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Google Maps on watch", color = TextWhite, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            Text("Share the live Google Maps screen from your phone over Bluetooth.", color = TextSecondary, fontSize = 13.sp)
+            Text("Phone screen viewer (optional)", color = TextWhite, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text("View a copy of your phone screen. Use Watch navigation above for readable turn directions.", color = TextSecondary, fontSize = 13.sp)
             Text(share.message, color = if (share.active && share.acknowledgedFrame > 0) StatusSuccess else TextSecondary, fontSize = 13.sp)
             if (!connection.isConnected) Text("Connect your watch to start sharing.", color = TextDim, fontSize = 12.sp)
             else if (!connection.supportsPhoneScreenShare) Text("Update HealthSync on your watch to enable live phone maps.", color = StatusWarning, fontSize = 12.sp)
@@ -54,7 +54,7 @@ internal fun PhoneScreenShareCard(connection: ConnectionInfo) {
                     enabled = connection.isConnected && connection.supportsPhoneScreenShare,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = AccentCyan)
-                ) { Text("Share Google Maps") }
+                ) { Text("Share phone screen") }
             }
             TextButton(onClick = {
                 openMessage = if (PhoneScreenShareActivity.openGoogleMaps(context)) "" else "Google Maps could not be opened. Open or install it on your phone."

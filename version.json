@@ -1,18 +1,18 @@
 {
   "phone": {
-    "versionCode": 33,
-    "versionName": "2.10.0",
-    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.10.0/HealthSync-Phone.apk",
-    "changelog": "v2.10.0: Share the actual Google Maps phone screen to your watch over Bluetooth. Open Device > Google Maps on watch and approve Android screen sharing each time. Keep the phone unlocked with Maps visible. Update both apps to 2.10.0; images refresh about every 1.5 seconds or slower.",
+    "versionCode": 34,
+    "versionName": "2.11.0",
+    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.11.0/HealthSync-Phone.apk",
+    "changelog": "v2.11.0: Readable turn-by-turn watch navigation. Enable Device > Watch navigation and allow notification access, start a Google Maps route on the phone, then open Apps > Navigation on the watch. Large directions and next-turn distance replace the need to read phone screenshots. Update both apps; trip details depend on Maps notifications.",
     "forceUpdate": false,
-    "sha256": "393f516a041619eaa2526b1cd7d1ccf5621a5e853c448cd97f8e203e9824eb74"
+    "sha256": "108493d69f40de09b4e4f36d0198e19e22bf2766700cbe894e05f5612b46650c"
   },
   "watch": {
-    "versionCode": 38,
-    "versionName": "2.10.0",
-    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.10.0/HealthSync-Watch.apk",
-    "changelog": "v2.10.0: Open Apps > Live phone map for the real Google Maps phone view. Full-screen layout with round-safe controls, Fit, pinch zoom, pan and Help. Share from the updated phone app first. Stale images are hidden; stopping, locking the phone or disconnecting ends sharing.",
+    "versionCode": 39,
+    "versionName": "2.11.0",
+    "apkUrl": "https://github.com/invictatill-pos/InvictaTill-Watch-Launcher-OS/releases/download/v2.11.0/HealthSync-Watch.apk",
+    "changelog": "v2.11.0: New Apps > Navigation shows large Google Maps directions, next-turn distance, available maneuver arrows and trip details. Enable Watch navigation in the updated phone app and allow notification access. Directions clear when disconnected or updates expire. Phone screen sharing remains optional; no capture prompt is needed for directions.",
     "forceUpdate": false,
-    "sha256": "7de94dc98b4fed72caf13c122b02bb6f03220c9335bc64cb53291462b59c6d2f"
+    "sha256": "4309f7ab0953e0f932b48e94667bdcab572f704c8d3c2b1f8516ebd9ba371b15"
   }
 }

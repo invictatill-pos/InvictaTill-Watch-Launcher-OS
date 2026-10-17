@@ -98,6 +98,7 @@ class HealthNotificationListenerService : NotificationListenerService() {
 
     override fun onListenerConnected() {
         instance = this
+        PhoneNavigationBridge.onListenerConnected(applicationContext)
         runCatching { phonePreferences.recordNotificationSources(
             activeNotifications.orEmpty().map { it.packageName }.filter { it != packageName }.toSet()) }
             .onFailure { Log.w(TAG, "Could not discover active notification sources", it) }
@@ -107,6 +108,7 @@ class HealthNotificationListenerService : NotificationListenerService() {
 
     override fun onListenerDisconnected() {
         if (instance == this) instance = null
+        PhoneNavigationBridge.onListenerDisconnected(applicationContext)
         if (BluetoothSyncService.connectionState.value.isConnected)
             BluetoothSyncService.sendNotificationSnapshotToWatch(applicationContext, emptyList())
         Log.w(TAG, "Notification listener disconnected")
@@ -116,6 +118,7 @@ class HealthNotificationListenerService : NotificationListenerService() {
 
     override fun onDestroy() {
         if (instance == this) instance = null
+        PhoneNavigationBridge.onListenerDisconnected(applicationContext)
         filterPreferences.unregisterOnSharedPreferenceChangeListener(filterListener)
         mainHandler.removeCallbacksAndMessages(null)
         historyScope.cancel()
@@ -159,6 +162,7 @@ class HealthNotificationListenerService : NotificationListenerService() {
         sbn ?: return
         runCatching {
             if (sbn.packageName == packageName) return
+            PhoneNavigationBridge.onNotificationPosted(applicationContext, sbn)
             phonePreferences.recordNotificationSources(setOf(sbn.packageName))
             runCatching { enrichCaller(sbn) }.onFailure { Log.w(TAG, "Caller notification metadata unavailable", it) }
             if (phonePreferences.syncCalls && isDialerCall(sbn)) deferDialerCall(sbn)
@@ -169,6 +173,7 @@ class HealthNotificationListenerService : NotificationListenerService() {
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         sbn ?: return
         if (sbn.packageName == packageName) return
+        PhoneNavigationBridge.onNotificationRemoved(applicationContext, sbn)
         pendingDialerCalls.remove(sbn.key)?.let(mainHandler::removeCallbacks)
         runCatching { CallMonitorService.clearNotificationCaller(applicationContext, sbn.key) }
         removeMirrored(sbn.key)
@@ -181,6 +186,7 @@ class HealthNotificationListenerService : NotificationListenerService() {
             // Caller enrichment follows call sync even when this dialer's ordinary alerts are filtered.
             active.forEach { runCatching { enrichCaller(it) } }
             val allowed = active.asSequence().filter { it.packageName != packageName && phonePreferences.isAppAllowed(it.packageName) }
+                .filterNot { PhoneNavigationBridge.replacesOrdinaryNotification(applicationContext, it) }
                 .filter { shouldMirrorCallNotification(it) }
                 .filter { runCatching { extractContent(it) }.getOrNull() != null }.sortedByDescending { it.postTime }
                 .take(1_000).toList()
@@ -196,6 +202,10 @@ class HealthNotificationListenerService : NotificationListenerService() {
     }
 
     private fun mirror(sbn: StatusBarNotification, replay: Boolean) {
+        if (PhoneNavigationBridge.replacesOrdinaryNotification(applicationContext, sbn)) {
+            removeMirrored(sbn.key)
+            return
+        }
         if (!phonePreferences.isAppAllowed(sbn.packageName) || !shouldMirrorCallNotification(sbn)) {
             removeMirrored(sbn.key)
             return

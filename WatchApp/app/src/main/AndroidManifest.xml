@@ -116,6 +116,9 @@
         <activity android:name=".ui.navigation.PhoneMapActivity"
             android:exported="false" android:screenOrientation="portrait"
             android:launchMode="singleTop" />
+        <activity android:name=".ui.navigation.NavigationActivity"
+            android:exported="false"
+            android:launchMode="singleTop" />
         <service android:name=".service.WatchTimerService" android:exported="false"
             android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"

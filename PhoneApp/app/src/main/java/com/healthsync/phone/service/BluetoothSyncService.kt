@@ -100,6 +100,15 @@ class BluetoothSyncService : android.app.Service() {
             return activeInstance?.sendRaw(msg) ?: false
         }
 
+        fun sendNavigationToWatch(payload: NavigationPayload): Boolean {
+            val service = activeInstance ?: return false
+            val connection = _connectionState.value
+            if (!connection.isConnected || !connection.supportsNavigation || !NavigationProtocol.validState(payload)) return false
+            val message = SyncMessage(MessageType.NAVIGATION, payload = service.gson.toJson(payload))
+            service.latestNavigationMessage = message
+            return service.sendRaw(message)
+        }
+
         /** One screen frame is acknowledged before another can be queued. */
         fun sendPhoneScreen(payload: PhoneScreenPayload): Boolean {
             val service = activeInstance ?: return false
@@ -300,8 +309,10 @@ class BluetoothSyncService : android.app.Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private data class OutgoingFrame(
         val writer: PrintWriter, val message: SyncMessage,
-        val socket: BluetoothSocket?, val screenSessionId: String? = null
+        val socket: BluetoothSocket?, val screenSessionId: String? = null,
+        val queuedAt: Long = SystemClock.elapsedRealtime()
     )
+    @Volatile private var latestNavigationMessage: SyncMessage? = null
     private val outbound = Channel<OutgoingFrame>(256)
 
     internal suspend fun sendStreamingMessage(writer: PrintWriter, message: SyncMessage) {
@@ -334,6 +345,10 @@ class BluetoothSyncService : android.app.Service() {
                 for (frame in outbound) {
                     if (sharedWriter !== frame.writer) continue
                     if (frame.screenSessionId != null && !PhoneScreenShareService.isSessionActive(frame.screenSessionId)) continue
+                    // A busy transfer must not replay a queue of obsolete turn instructions.
+                    if (frame.message.type == MessageType.NAVIGATION &&
+                        !navigationSnapshotCanSend(frame.message, latestNavigationMessage,
+                            frame.queuedAt, SystemClock.elapsedRealtime())) continue
                     val writer = frame.writer
                     try {
                         wakeLock?.acquire(10_000)
@@ -763,9 +778,11 @@ class BluetoothSyncService : android.app.Service() {
                             lastUpdated = if (info.lastUpdated > 0) info.lastUpdated else System.currentTimeMillis(),
                             watchInternetStatus = info.internetStatus,
                             watchInternetReceivedAt = if (info.internetStatus != null) SystemClock.elapsedRealtime() else 0L,
-                            supportsPhoneScreenShare = info.supportsPhoneScreenShare
+                            supportsPhoneScreenShare = info.supportsPhoneScreenShare,
+                            supportsNavigation = info.supportsNavigation
                         )
                         updateState(updated)
+                        if (info.supportsNavigation) PhoneNavigationBridge.refresh(applicationContext)
                         Log.i(TAG, "Connected Watch Info: ${info.model} v${info.versionName} (build ${info.versionCode}, battery ${info.batteryPercent}%, charging=${info.isCharging}, powerSave=${info.powerSaveMode}, storage=${info.storageFreeMb}/${info.storageTotalMb}MB)")
                     } catch (e: Exception) { Log.w(TAG, "Error parsing DEVICE_INFO: ${e.message}") }
                 }
@@ -782,6 +799,12 @@ class BluetoothSyncService : android.app.Service() {
                         _watchFaceAck.value = ack
                         Log.i(TAG, "Watch Face ACK received: ${ack.id} - ${ack.message} (success=${ack.success})")
                     } catch (e: Exception) { Log.w(TAG, "Error parsing WATCH_FACE_ACK: ${e.message}") }
+                }
+                MessageType.NAVIGATION -> {
+                    if (msg.payload.length <= 2048 && _connectionState.value.supportsNavigation) {
+                        val request = gson.fromJson(msg.payload, NavigationPayload::class.java)
+                        if (request.status == "REQUEST") PhoneNavigationBridge.refresh(applicationContext)
+                    }
                 }
                 MessageType.PHONE_SCREEN -> {
                     // The watch sends only small control messages, never captured images.

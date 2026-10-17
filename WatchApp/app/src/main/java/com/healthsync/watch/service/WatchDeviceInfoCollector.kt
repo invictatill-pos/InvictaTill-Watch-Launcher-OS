@@ -95,6 +95,7 @@ object WatchDeviceInfoCollector {
             hasStepSensor = hasStep,
             internetStatus = WatchInternetSharing.readStatus(appContext),
             supportsPhoneScreenShare = true,
+            supportsNavigation = true,
             lastUpdated = System.currentTimeMillis()
         )
     }

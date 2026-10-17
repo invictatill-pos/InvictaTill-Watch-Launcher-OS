@@ -253,6 +253,7 @@ class WatchOptionsActivity : AppCompatActivity() {
         action("Phone notifications") { openShell("notifications") }
         action("Watch tools") { startActivity(Intent(this, com.healthsync.watch.ui.shell.WatchUtilitiesActivity::class.java)) }
         action("Phone controls") { openShell("media") }
+        action("Navigation") { startActivity(com.healthsync.watch.ui.navigation.NavigationActivity.intentFor(this)) }
         action("Live phone map") { startActivity(com.healthsync.watch.ui.navigation.PhoneMapActivity.intentFor(this)) }
         action("Home setup & recovery") {
             startActivity(Intent(this, QuickSettingsActivity::class.java)
@@ -634,8 +635,10 @@ class WatchOptionsActivity : AppCompatActivity() {
         liveUpdate = { connection.text = if (BluetoothClientService.isConnected) "Phone connected" else "Phone offline" }
         label("Pair this watch and your phone in Bluetooth settings. Keep HealthSync open on your phone while reconnecting. Saved workouts sync when the connection returns.")
         action("Reconnect / Bluetooth") { requestOperation("reconnect") }
+        action("Navigation") { startActivity(com.healthsync.watch.ui.navigation.NavigationActivity.intentFor(this)) }
+        label("Enable Watch navigation in HealthSync on your phone and allow notification access. Start a Google Maps route on the phone, then open Navigation here for large turn directions and distance.")
         action("Live phone map") { startActivity(com.healthsync.watch.ui.navigation.PhoneMapActivity.intentFor(this)) }
-        label("Share the actual Google Maps screen from HealthSync on your phone. On the watch, pinch to zoom and drag to read it. Phone screen sharing needs your approval each time.")
+        label("Live phone map is an optional phone screen viewer. Sharing the screen needs your approval each time.")
         action("Internet from phone") { showScreen(SCREEN_INTERNET) }
         label("For answer, decline, mute and end controls, open HealthSync Settings → Watch Calls on your phone and select Enable watch call controls. Grant Contacts to show saved caller names.")
         label("To talk through the watch, enable Calls for this watch in your phone's Bluetooth device settings. During a call, Use watch audio becomes available only when Android detects its call connection.")

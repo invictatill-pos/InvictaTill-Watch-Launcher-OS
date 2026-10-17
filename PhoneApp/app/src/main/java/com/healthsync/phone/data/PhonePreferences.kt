@@ -97,6 +97,11 @@ class PhonePreferences(context: Context) {
         get() = prefs.getBoolean("sync_calls", true)
         set(v) { prefs.edit().putBoolean("sync_calls", v).apply() }
 
+    /** Explicit opt-in, separate from generic notification mirroring and app filters. */
+    var navigationEnabled: Boolean
+        get() = prefs.getBoolean("navigation_enabled", false)
+        set(v) { prefs.edit().putBoolean("navigation_enabled", v).apply() }
+
     var connectionPaused: Boolean
         get() = prefs.getBoolean("connection_paused", false)
         set(v) { prefs.edit().putBoolean("connection_paused", v).apply() }

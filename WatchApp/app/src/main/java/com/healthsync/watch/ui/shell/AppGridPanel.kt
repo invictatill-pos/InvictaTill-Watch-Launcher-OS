@@ -78,6 +78,7 @@ class AppGridPanel(
         Entry("@faces", "Watch faces", icon = android.R.drawable.ic_menu_gallery),
         Entry("@music", "Music", icon = android.R.drawable.ic_media_play),
         Entry("@phone_map", "Live phone map", icon = android.R.drawable.ic_menu_mapmode),
+        Entry("@navigation", "Navigation", icon = android.R.drawable.ic_menu_directions),
         Entry("@notifications", "Notifications", icon = android.R.drawable.ic_dialog_email),
         Entry("@tools", "Tools", icon = android.R.drawable.ic_menu_recent_history),
         Entry("@settings", "Settings", icon = android.R.drawable.ic_menu_manage)
@@ -230,6 +231,7 @@ class AppGridPanel(
             "@faces" -> { remember(entry); onNavigate("faces") }
             "@music" -> { remember(entry); onNavigate("media") }
             "@phone_map" -> { remember(entry); activity.startActivity(com.healthsync.watch.ui.navigation.PhoneMapActivity.intentFor(activity)) }
+            "@navigation" -> { remember(entry); activity.startActivity(com.healthsync.watch.ui.navigation.NavigationActivity.intentFor(activity)) }
             "@notifications" -> { remember(entry); onNavigate("notifications") }
             "@tools" -> { remember(entry); onUtilities() }
             "@settings" -> { remember(entry); onSettings() }

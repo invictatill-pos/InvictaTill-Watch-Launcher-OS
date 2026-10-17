@@ -64,6 +64,7 @@ class BluetoothClientService : Service() {
             WatchCallBridge.connectionChanged(context, connected)
             WatchNotificationAlerts.connectionChanged(context, connected)
             com.healthsync.watch.ui.navigation.PhoneScreenBridge.connectionChanged(context, connected)
+            com.healthsync.watch.ui.navigation.NavigationBridge.connectionChanged(context, connected)
             context.sendBroadcast(
                 Intent(WatchFaceActivity.ACTION_BT_STATUS).setPackage(context.packageName).apply {
                     putExtra(WatchFaceActivity.EXTRA_CONNECTED, connected)
@@ -505,6 +506,13 @@ class BluetoothClientService : Service() {
                         }
                     }
                 }
+                MessageType.NAVIGATION -> {
+                    if (msg.payload.length <= NavigationProtocol.MAX_ICON_BASE64 + 10_240) {
+                        val navigation = gson.fromJson(msg.payload, NavigationPayload::class.java)
+                        if (NavigationProtocol.validState(navigation))
+                            com.healthsync.watch.ui.navigation.NavigationBridge.receive(applicationContext, navigation)
+                    }
+                }
                 MessageType.PHONE_SCREEN -> {
                     if (msg.payload.length <= PhoneScreenProtocol.MAX_BASE64_CHARS + 2048) {
                         val screen = gson.fromJson(msg.payload, PhoneScreenPayload::class.java)
@@ -533,6 +541,7 @@ class BluetoothClientService : Service() {
             WatchNotificationAlerts.connectionChanged(this, false)
             WatchCallBridge.connectionChanged(this, false)
             com.healthsync.watch.ui.navigation.PhoneScreenBridge.connectionChanged(this, false)
+            com.healthsync.watch.ui.navigation.NavigationBridge.connectionChanged(this, false)
         }
         outbound.close()
         serviceScope.cancel()

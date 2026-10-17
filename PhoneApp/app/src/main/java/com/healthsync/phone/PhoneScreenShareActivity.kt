@@ -87,7 +87,8 @@ class PhoneScreenShareActivity : ComponentActivity() {
                         Modifier.verticalScroll(rememberScrollState()).padding(24.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Text("Google Maps on your watch", style = MaterialTheme.typography.headlineMedium)
+                        Text("Phone screen viewer", style = MaterialTheme.typography.headlineMedium)
+                        Text("For large turn directions, enable Watch navigation from the Device screen instead.")
                         Text("Show the real Google Maps screen from this phone on your watch through your existing Bluetooth connection.")
                         if (Build.VERSION.SDK_INT >= 34) {
                             Text("1. Tap Start sharing. In Android's prompt, choose A single app and select Google Maps. You can also choose the entire screen.")
